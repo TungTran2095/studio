@@ -236,7 +236,6 @@ export async function fetchBinanceTradeHistory(
             // Alternatively, fetch symbols from user's balance (requires another call or passing from asset fetch)
             // For now, let's fetch pairs based on common quote assets USDT and BTC - this is an assumption
             // A better approach would be to pass owned symbols from the asset fetch result.
-            // Let's assume `fetchBinanceAssets` is called first and `ownedSymbols` are passed.
             // **MODIFICATION**: Expect `symbols` to be passed (e.g., from asset fetch result).
             // If `symbols` is empty/undefined, maybe default to BTCUSDT or return error.
             // For this implementation, we require `symbols` to be passed if not specified in input.
@@ -286,65 +285,81 @@ export async function fetchBinanceTradeHistory(
 
 
         let allTrades: Trade[] = [];
-        const fetchPromises = symbolsToFetch.map(symbol =>
-            binance.myTrades(symbol, { limit: limit }) // Fetch trades for each symbol
-                .then((trades: any) => {
-                     if (Array.isArray(trades)) {
-                        console.log(`Fetched ${trades.length} trades for ${symbol}`);
-                        // Ensure trades have the expected structure
-                        return trades.map((trade: any) => ({
-                            symbol: trade.symbol,
-                            id: trade.id,
-                            orderId: trade.orderId,
-                            price: trade.price,
-                            qty: trade.qty,
-                            quoteQty: trade.quoteQty,
-                            commission: trade.commission,
-                            commissionAsset: trade.commissionAsset,
-                            time: trade.time,
-                            isBuyer: trade.isBuyer,
-                            isMaker: trade.isMaker,
-                        } as Trade));
-                    }
-                    console.warn(`Received non-array response for ${symbol} trades:`, trades);
-                    return []; // Return empty array if response is not as expected
+        // Check if the myTrades function exists on the binance instance
+         if (typeof binance.myTrades !== 'function') {
+           console.error('binance.myTrades is not a function. The Binance API library might have changed or not initialized correctly.');
+           return { success: false, data: [], error: 'Internal Server Error: Could not access trade history function.' };
+         }
 
-                })
-                .catch((error: any) => {
-                     // Handle specific errors, e.g., "Invalid symbol"
-                    if (error?.message?.includes('Invalid symbol') || error?.body?.includes('-1121')) {
-                        console.warn(`Skipping invalid symbol for trade history: ${symbol}`);
-                        return []; // Ignore errors for invalid symbols
-                    }
-                    if(error?.message?.includes('Duplicate') || error?.body?.includes('-1104')) {
-                        // Sometimes happens with concurrent requests, maybe retry or ignore
-                        console.warn(`Duplicate request warning for ${symbol}, skipping: ${error.message}`);
-                        return [];
-                    }
-                     if(error?.message?.includes('Too many requests') || error?.body?.includes('-1003')) {
-                        console.warn(`Rate limited fetching trades for ${symbol}, skipping.`);
-                        // Implement backoff/retry later if needed
-                        return [];
-                    }
-                    console.error(`Error fetching trades for ${symbol}:`, error);
-                    throw new Error(`Failed to fetch trades for ${symbol}: ${error.message || 'Unknown error'}`); // Re-throw other errors
-                })
-        );
-
-        const results = await Promise.all(fetchPromises);
-        results.forEach(trades => {
-            if (trades) { // Check if trades is defined (handles ignored errors)
-                 allTrades = allTrades.concat(trades);
-            }
-
+        const fetchPromises = symbolsToFetch.map(symbol => {
+            // Explicitly wrap the call in a promise and handle potential errors
+            return new Promise<Trade[]>((resolve, reject) => {
+                binance.myTrades(symbol, { limit: limit })
+                    .then((trades: any) => {
+                        if (Array.isArray(trades)) {
+                            console.log(`Fetched ${trades.length} trades for ${symbol}`);
+                            // Ensure trades have the expected structure
+                            resolve(trades.map((trade: any) => ({
+                                symbol: trade.symbol,
+                                id: trade.id,
+                                orderId: trade.orderId,
+                                price: trade.price,
+                                qty: trade.qty,
+                                quoteQty: trade.quoteQty,
+                                commission: trade.commission,
+                                commissionAsset: trade.commissionAsset,
+                                time: trade.time,
+                                isBuyer: trade.isBuyer,
+                                isMaker: trade.isMaker,
+                            } as Trade)));
+                        } else {
+                            console.warn(`Received non-array response for ${symbol} trades:`, trades);
+                            resolve([]); // Return empty array if response is not as expected
+                        }
+                    })
+                    .catch((error: any) => {
+                         // Handle specific errors, e.g., "Invalid symbol"
+                        if (error?.message?.includes('Invalid symbol') || error?.body?.includes('-1121')) {
+                            console.warn(`Skipping invalid symbol for trade history: ${symbol}`);
+                            resolve([]); // Resolve with empty array for ignored errors
+                        } else if(error?.message?.includes('Duplicate') || error?.body?.includes('-1104')) {
+                            // Sometimes happens with concurrent requests, maybe retry or ignore
+                            console.warn(`Duplicate request warning for ${symbol}, skipping: ${error.message}`);
+                            resolve([]);
+                        } else if(error?.message?.includes('Too many requests') || error?.body?.includes('-1003')) {
+                            console.warn(`Rate limited fetching trades for ${symbol}, skipping.`);
+                            // Implement backoff/retry later if needed
+                            resolve([]);
+                        } else {
+                            console.error(`Error fetching trades for ${symbol}:`, error);
+                             // Reject other errors so Promise.allSettled can catch them
+                             reject(new Error(`Failed to fetch trades for ${symbol}: ${error.message || 'Unknown error'}`));
+                        }
+                    });
+            });
         });
+
+
+        // Use Promise.allSettled to handle individual promise failures without stopping the whole process
+        const results = await Promise.allSettled(fetchPromises);
+
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                allTrades = allTrades.concat(result.value);
+            } else {
+                // Log the error for the specific symbol that failed
+                console.error(`Failed to fetch trades for symbol ${symbolsToFetch[index]}:`, result.reason);
+                // Optionally, you could add a partial error message to the final result
+            }
+        });
+
 
         // Sort trades by time, descending (most recent first)
         allTrades.sort((a, b) => b.time - a.time);
 
-        console.log(`Fetched a total of ${allTrades.length} trades.`);
+        console.log(`Fetched a total of ${allTrades.length} trades. Some symbols might have failed.`);
 
-        return { success: true, data: allTrades };
+        return { success: true, data: allTrades }; // Still return success=true, but maybe add a note about partial data if errors occurred
 
     } catch (error: any) {
         console.error('Binance Trade History Fetch Error:', error);
@@ -356,7 +371,10 @@ export async function fetchBinanceTradeHistory(
                 errorMessage = 'Invalid API key or secret.';
             } else if (error.message.includes('permissions') || error.message.includes('permission')) {
                 errorMessage = 'API key lacks permissions (requires trade history access).';
-            } else {
+            } else if (error.message.includes('binance.myTrades is not a function')) { // Catch the specific error
+                 errorMessage = 'Internal Server Error: Trade history feature unavailable.';
+            }
+            else {
                  errorMessage = `API Error: ${error.message}`;
             }
 
