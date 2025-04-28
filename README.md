@@ -22,15 +22,27 @@ To run this project, you will need to add the following environment variables to
     *   Add the following columns:
         *   `id`: `int8` (BigInt), **Is Identity**, **Primary Key**.
         *   `created_at`: `timestamptz` (Timestamp with Time Zone), Default Value: `now()`.
-        *   `role`: `text`, **Is Nullable**: `false`.
+        *   `role`: `text`, **Is Nullable**: `false`. Allowed values: `user`, `bot`.
         *   `content`: `text`, **Is Nullable**: `false`.
     *   Click **Save**.
-5.  **Set up RLS Policies**: Go to **Authentication** > **Policies**.
+5.  **Set up RLS Policies**: Go to **Authentication** > **Policies** in your Supabase dashboard.
     *   Select the `message_history` table.
     *   Click **New Policy**.
     *   Choose **Enable read access for all users** template. Review and save.
     *   Click **New Policy** again.
-    *   Choose **Enable insert for authenticated users only** template. If you don't have authentication set up, you might initially use **Enable insert for all users** for testing, but **secure this properly for production**. Review and save.
+    *   Choose **Enable insert for all users** template. **IMPORTANT:** This is suitable for development without user authentication. For production, you MUST implement authentication and use a stricter policy like **Enable insert for authenticated users only**. Review the policy SQL to understand it, then save.
+
+    **Example SQL for Insert Policy (Allow ALL):**
+    ```sql
+    -- Policy name: Allow public insert access
+    -- Target roles: public
+    -- USING expression: true
+    -- WITH CHECK expression: true
+    CREATE POLICY "Allow public insert access" ON "public"."message_history"
+    AS PERMISSIVE FOR INSERT
+    TO public
+    WITH CHECK (true);
+    ```
 
 ### Google AI (Optional for Genkit/AI Features)
 
@@ -70,3 +82,4 @@ To use the Binance asset summary and trading features:
 *   **Binance Account Panel**: Allows users to input Binance API keys to view asset summaries (BTC/USDT) and recent trade history (BTC/USDT).
 *   **YINSEN Chatbot**: An AI assistant integrated with Binance (using provided keys) to answer questions and potentially execute trades (Buy/Sell Market/Limit orders for BTC/USDT). Chat history is stored in Supabase.
 *   **Analysis Panel**: Placeholder panel for future analysis tools.
+```
