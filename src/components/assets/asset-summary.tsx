@@ -537,9 +537,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                   {isLoadingAssets ? "Loading..." : "Load Assets"}
                 </Button>
               </div>
-              <FormDescription className="text-xs text-muted-foreground pt-1">
-                  Enter your Binance API credentials. Ensure keys have read-only access for viewing assets/trades and trading permissions if using the chatbot trade feature. Credentials are used for API calls and **not stored persistently by this demo application** (state is temporary).
-              </FormDescription>
+              {/* Removed the FormDescription component */}
             </form>
           </Form>
 
@@ -671,5 +669,3 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     </div>
   );
 };
-
-    
