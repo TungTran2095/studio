@@ -7,6 +7,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ChevronDown, ChevronUp } from 'lucide-react'; // Import icons
+import { fetchBinanceAssets } from "@/actions/binance"; // Import the Server Action
+import type { Asset } from "@/actions/binance"; // Import the Asset type from the action
 import {
   Table,
   TableBody,
@@ -35,20 +37,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
-// Define Asset type
-interface Asset {
-  asset: string;
-  symbol: string;
-  quantity: number;
-  totalValue: number; // Assuming value is already calculated in USD
-}
+// Placeholder data for initial state
+const initialAssets: Asset[] = [];
 
-// Placeholder data for initial state or when not connected
-const initialAssets: Asset[] = [
- // Keep empty initially, or show placeholder message
-];
-
-// Schema for form validation
+// Schema for form validation - remains the same
 const formSchema = z.object({
   apiKey: z.string().min(1, { message: "API Key is required." }),
   apiSecret: z.string().min(1, { message: "API Secret is required." }),
@@ -76,49 +68,50 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     },
   });
 
-  // Placeholder function to simulate fetching assets
+  // Function to fetch assets using the Server Action
   const handleFetchAssets = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
     setIsConnected(false);
-    setAssets([]);
-    console.log("Fetching assets with (DO NOT LOG IN PRODUCTION):", {
-      apiKey: values.apiKey.substring(0, 5) + "...",
-      isTestnet: values.isTestnet,
-    });
-
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    setAssets([]); // Clear previous assets
 
     try {
-        // Simulate API response based on isTestnet
-        const fetchedAssets: Asset[] = values.isTestnet
-          ? [
-              { asset: "Test BTC", symbol: "BTC", quantity: 0.2, totalValue: 6000 },
-              { asset: "Test ETH", symbol: "ETH", quantity: 5, totalValue: 10000 },
-              { asset: "Test USDT", symbol: "USDT", quantity: 2000, totalValue: 2000 },
-            ]
-          : [
-              { asset: "Bitcoin", symbol: "BTC", quantity: 0.5, totalValue: 30000 },
-              { asset: "Ethereum", symbol: "ETH", quantity: 10, totalValue: 20000 },
-              { asset: "USD Tether", symbol: "USDT", quantity: 5000, totalValue: 5000 },
-            ];
+      // Call the Server Action
+      const result = await fetchBinanceAssets({
+        apiKey: values.apiKey,
+        apiSecret: values.apiSecret,
+        isTestnet: values.isTestnet,
+      });
 
-        setAssets(fetchedAssets);
+      if (result.success) {
+        setAssets(result.data);
         setIsConnected(true);
-         toast({
-            title: "Success",
-            description: "Successfully fetched assets.", // Simplified message
-         });
-    } catch (error) {
-        console.error("Error fetching assets:", error);
+        toast({
+          title: "Success",
+          description: "Successfully fetched assets from Binance.",
+        });
+      } else {
+        // Handle errors reported by the Server Action
+        console.error("Error fetching assets from action:", result.error);
         setAssets(initialAssets);
         setIsConnected(false);
         toast({
-            title: "Error",
-            description: "Failed to fetch assets. Please check your API keys and network connection.",
-            variant: "destructive",
+          title: "Error",
+          description: `Failed to fetch assets: ${result.error}. Check credentials and permissions.`,
+          variant: "destructive",
         });
+      }
+    } catch (error) {
+      // Handle unexpected errors during the action call
+      console.error("Error calling fetchBinanceAssets action:", error);
+      setAssets(initialAssets);
+      setIsConnected(false);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while fetching assets. Please try again.",
+        variant: "destructive",
+      });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -127,7 +120,6 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
   return (
     // Ensure the container takes full height of its parent div and uses flex column layout
-    // Removed bg-card, text-card-foreground, as these are now on the parent container div in page.tsx
     <div className="flex flex-col h-full w-full overflow-hidden">
       {/* Header remains, adjust padding and border */}
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
@@ -150,7 +142,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 name="apiKey"
                 render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-xs text-foreground">API Key</FormLabel> {/* Explicitly set text color */}
+                    <FormLabel className="text-xs text-foreground">API Key</FormLabel>
                     <FormControl>
                       <Input
                       placeholder="Binance API Key"
@@ -169,7 +161,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 name="apiSecret"
                 render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-xs text-foreground">API Secret</FormLabel> {/* Explicitly set text color */}
+                    <FormLabel className="text-xs text-foreground">API Secret</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="Binance API Secret"
@@ -198,38 +190,38 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                           className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground" // Theme colors
                         />
                       </FormControl>
-                      <FormLabel htmlFor="testnet" className="text-xs font-normal text-foreground"> {/* Explicitly set text color */}
+                      <FormLabel htmlFor="testnet" className="text-xs font-normal text-foreground">
                         Use Testnet
                       </FormLabel>
                     </FormItem>
                   )}
                 />
-                <Button type="submit" size="sm" disabled={isLoading} className="text-xs h-8"> {/* Default button styling */}
+                <Button type="submit" size="sm" disabled={isLoading} className="text-xs h-8">
                   {isLoading ? "Loading..." : "Load Assets"}
                 </Button>
               </div>
               <FormDescription className="text-xs text-muted-foreground pt-1">
-                  Enter your Binance API credentials. Handled client-side. **Not securely stored**.
+                  Enter your Binance API credentials. Ensure keys have read-only access. Keys are sent to the server for processing and **not stored**.
               </FormDescription>
             </form>
           </Form>
 
           {/* Asset Table Area */}
-          {/* Add top border for separation */}
           <div className="flex-1 overflow-hidden border-t border-border pt-3">
             <ScrollArea className="h-full">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border">
+                    {/* Update headers slightly if needed */}
                     <TableHead className="w-[100px] text-muted-foreground">Asset</TableHead>
                     <TableHead className="text-muted-foreground">Symbol</TableHead>
                     <TableHead className="text-right text-muted-foreground">Quantity</TableHead>
-                    <TableHead className="text-right text-muted-foreground">Total Value (USD)</TableHead>
+                    <TableHead className="text-right text-muted-foreground">Value (USD)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    // Loading Skeletons
+                    // Loading Skeletons - remain the same
                     Array.from({ length: 3 }).map((_, index) => (
                       <TableRow key={index} className="border-border">
                         <TableCell><Skeleton className="h-4 w-20 bg-muted" /></TableCell>
@@ -242,9 +234,9 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                     // Display Fetched Assets
                     assets.map((asset) => (
                       <TableRow key={asset.symbol} className="border-border">
-                        <TableCell className="font-medium text-foreground">{asset.asset}</TableCell>
+                        <TableCell className="font-medium text-foreground">{asset.asset || asset.symbol}</TableCell> {/* Use symbol as fallback */}
                         <TableCell className="text-foreground">{asset.symbol}</TableCell>
-                        <TableCell className="text-right text-foreground">{asset.quantity.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-foreground">{asset.quantity.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell> {/* Show more precision for crypto */}
                         <TableCell className="text-right text-foreground">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                       </TableRow>
                     ))
@@ -252,15 +244,16 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                     // Initial or No Data Message
                     <TableRow className="border-border">
                       <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                          {isConnected ? "No assets found." : "Enter API keys to load assets."}
+                          {isConnected && !isLoading ? "No assets with a balance found or API key lacks permissions." : "Enter API keys to load assets."}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
-                {/* Ensure caption background matches container */}
                 {isConnected && assets.length > 0 && !isLoading && (
                   <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border">
                       Total Portfolio Value: ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <br />
+                      <span className="text-xs">Value calculated based on current market prices.</span>
                   </TableCaption>
                 )}
               </Table>
