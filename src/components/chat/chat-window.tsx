@@ -33,29 +33,26 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  // Access credentials from Zustand store
+  // Access credentials from Zustand store using a selector
   const { apiKey, apiSecret, isTestnet } = useAssetStore(state => ({
     apiKey: state.apiKey,
     apiSecret: state.apiSecret,
     isTestnet: state.isTestnet,
   }));
 
-  // Scroll to bottom when messages change
+  const viewportRef = useRef<HTMLDivElement>(null); // Ref for the ScrollArea viewport
+
+  // Scroll to bottom when messages change or isLoading changes
   useEffect(() => {
-    if (isExpanded && scrollAreaRef.current) { // Only scroll if expanded
-      // Try to find the Radix viewport first
-      const scrollViewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-      const targetElement = scrollViewport || scrollAreaRef.current; // Fallback to the main ref
-
-      if (targetElement) {
-        // Use requestAnimationFrame for smoother scrolling after render
-        requestAnimationFrame(() => {
-            targetElement.scrollTop = targetElement.scrollHeight;
-        });
-      }
+    if (isExpanded && viewportRef.current) {
+      // Use requestAnimationFrame for smoother scrolling after render
+      requestAnimationFrame(() => {
+        if (viewportRef.current) {
+           viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+        }
+      });
     }
-  }, [messages, isLoading, isExpanded]); // Add isExpanded dependency
-
+  }, [messages, isLoading, isExpanded]); // Dependencies include isLoading
 
   const handleSendMessage = async (messageContent: string) => {
     const newUserMessage: Message = { role: "user", content: messageContent };
@@ -65,9 +62,10 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     // Check if API keys are available from the store
     const credentialsAvailable = apiKey && apiSecret;
      if (!credentialsAvailable) {
-        console.warn("API Keys not found in store. Trading functions will not work unless provided elsewhere or fetched server-side.");
-        // Optionally inform the user in the chat if they attempt a trade action
-        // This logic might be better handled by the AI itself based on the prompt instructions
+        console.warn("API Keys not found in store. Trading functions will not work unless configured in 'Binance Account'.");
+        // The AI prompt instructs the bot to inform the user if credentials are required but missing.
+    } else {
+         console.log("API Keys found in store. Passing to generateResponse flow.");
     }
 
     const chatHistoryForAI = messages.map(msg => ({
@@ -75,15 +73,14 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       content: msg.content,
     }));
 
-    // Prepare input for the flow, including credentials from the store
-    // WARNING: Passing credentials directly is insecure. For demo purposes only.
+    // Prepare input for the flow, including credentials from the store IF they exist
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
-      // Include credentials IF they exist. Tools might still fail if not provided.
-      ...(credentialsAvailable && { apiKey, apiSecret, isTestnet }),
-       // Make sure isTestnet is always passed, even if false
-       isTestnet: isTestnet ?? false, // Pass isTestnet status
+      // Conditionally include credentials only if they exist
+      ...(credentialsAvailable && { apiKey, apiSecret }),
+       // Pass isTestnet status regardless (defaults to false in schema if undefined)
+       isTestnet: isTestnet ?? false,
     };
 
     try {
@@ -99,8 +96,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      // Optionally remove the user message if the bot fails
-       setMessages((prevMessages) => prevMessages.filter(msg => msg !== newUserMessage)); // Remove the specific user message
+      // Optionally keep the user message even if the bot fails, for context
+      // setMessages((prevMessages) => prevMessages.filter(msg => msg !== newUserMessage)); // Example: Remove the specific user message
     } finally {
       setIsLoading(false);
     }
@@ -108,12 +105,11 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
 
   return (
     // Ensure the container takes full height of its parent div and uses flex column layout
-    // Removed bg-card as it's now on the parent container div in page.tsx
     <div className="flex flex-col h-full w-full overflow-hidden">
       {/* Header remains, adjust padding and border */}
       <CardHeader className="border-b border-border flex-shrink-0 p-3 flex flex-row items-center justify-between">
         <CardTitle className="text-lg font-medium text-foreground">YINSEN</CardTitle>
-         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground"> {/* Ensure button text color matches theme */}
+         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground">
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
              <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
         </Button>
@@ -122,18 +118,20 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       {/* Conditionally render content based on isExpanded */}
       {isExpanded && (
         <>
-          {/* Content container takes remaining space (flex-1), adjust padding */}
-          <CardContent className="flex-1 p-0 overflow-hidden"> {/* Added flex-1 */}
+          {/* Content container takes remaining space, adjust padding */}
+          {/* Use p-0 on CardContent and apply padding within ScrollArea viewport */}
+          <CardContent className="flex-1 p-0 overflow-hidden">
             {/* Ensure ScrollArea uses theme colors and takes full height */}
-            <ScrollArea className="h-full [&>[data-radix-scroll-area-viewport]]:px-3 [&>[data-radix-scroll-area-viewport]]:py-3" ref={scrollAreaRef}>
-              <div className="space-y-4">
+            <ScrollArea className="h-full" viewportRef={viewportRef}>
+                {/* Add padding directly to the container inside viewport */}
+              <div className="space-y-4 p-3">
                 {messages.map((msg, index) => (
                   <ChatMessage key={index} role={msg.role} content={msg.content} />
                 ))}
                 {isLoading && (
                     <div className="flex items-start gap-3 justify-start">
                       {/* Use theme colors for skeletons */}
-                      <Skeleton className="h-8 w-8 rounded-full bg-muted" />
+                      <Skeleton className="h-8 w-8 rounded-full bg-muted flex-shrink-0" />
                       <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted" />
                   </div>
                 )}

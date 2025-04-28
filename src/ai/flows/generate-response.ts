@@ -12,19 +12,17 @@ import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import { placeBuyOrderTool, placeSellOrderTool } from '@/ai/tools/binance-tools';
 
-// Input schema now includes optional API credentials.
-// WARNING: Passing credentials directly like this is INSECURE for production.
-// Consider fetching credentials securely server-side based on user session.
+// Input schema still includes optional API credentials.
+// These MUST be passed from the client if trading is intended.
 const GenerateResponseInputSchema = z.object({
   message: z.string().describe('The message from the user.'),
   chatHistory: z.array(z.object({
     role: z.enum(['user', 'bot']),
     content: z.string(),
   })).optional().describe('The chat history of the conversation.'),
-  // Optional API credentials - needed for trading tools if passed directly.
-  // REMOVE THESE in production and fetch securely server-side within the tool.
-  apiKey: z.string().optional().describe('(INSECURE - For Demo Only) Binance API Key if trading is intended.'),
-  apiSecret: z.string().optional().describe('(INSECURE - For Demo Only) Binance API Secret if trading is intended.'),
+  // Optional API credentials - MUST be passed from the client component if trading is needed.
+  apiKey: z.string().optional().describe('Binance API Key required for trading.'),
+  apiSecret: z.string().optional().describe('Binance API Secret required for trading.'),
   isTestnet: z.boolean().optional().default(false).describe('Whether to use the Binance testnet for trading.')
 });
 
@@ -37,16 +35,12 @@ const GenerateResponseOutputSchema = z.object({
 export type GenerateResponseOutput = z.infer<typeof GenerateResponseOutputSchema>;
 
 export async function generateResponse(input: GenerateResponseInput): Promise<GenerateResponseOutput> {
-    // Important Security Note: If apiKey/apiSecret are present in input, it's insecure.
-    // In a real app, they should be retrieved server-side within the tool execution,
-    // not passed through the client-facing flow input.
-    // For this example, we proceed with the potentially insecure direct passing if provided.
+    // Log whether credentials were provided in the input
     if (input.apiKey && input.apiSecret) {
-         console.warn("API credentials passed directly in input. This is insecure for production!");
+         console.log("[generateResponse] API credentials provided in input. Trading tools can be attempted.");
     } else {
-         console.log("API credentials not provided in input. Trading tools will likely fail unless fetched server-side.");
-         // If credentials ARE required and not provided, you might want to return an error early:
-         // return { response: "Trading actions require API credentials to be configured." };
+         console.log("[generateResponse] API credentials NOT provided in input. Trading tools will fail.");
+         // The AI prompt should handle informing the user if credentials are required but missing.
     }
 
     return generateResponseFlow(input);
@@ -58,7 +52,7 @@ const prompt = ai.definePrompt({
   // Include the trading tools
   tools: [placeBuyOrderTool, placeSellOrderTool],
   input: {
-    // Input schema now includes the optional, insecure API keys
+    // Input schema includes optional API keys to be passed from client
     schema: GenerateResponseInputSchema,
   },
   output: {
@@ -75,8 +69,9 @@ Trading Instructions:
     - Identify the cryptocurrency (e.g., "Bitcoin", "ETH", "BTC"). Infer the standard USDT trading pair symbol (e.g., BTC -> BTCUSDT, ETH -> ETHUSDT) unless a different pair is specified.
     - Identify the quantity to trade.
     - Determine the order type. Default to MARKET order unless the user specifies a price (then use LIMIT).
-    - **Crucially: You MUST have the API Key and API Secret to use the trading tools.** These might be provided in the input context (apiKey, apiSecret). If they are not available, politely inform the user that you cannot execute the trade without configured API credentials. Do not attempt to use the tool without credentials.
-    - If all necessary parameters (symbol, quantity, credentials, price for limit orders) are clear, use the 'placeBuyOrderTool' or 'placeSellOrderTool' with the extracted information and the provided apiKey, apiSecret, and isTestnet status.
+    - **Crucially: You MUST have the API Key and API Secret to use the trading tools.** These credentials should be passed in the input context (apiKey, apiSecret).
+    - **If the apiKey or apiSecret are NOT available in the input, politely inform the user that you cannot execute the trade without the API credentials being configured in the 'Binance Account' section first.** Do not attempt to use the tool without credentials.
+    - If all necessary parameters (symbol, quantity, available credentials, price for limit orders) are clear, use the 'placeBuyOrderTool' or 'placeSellOrderTool' with the extracted information and the provided apiKey, apiSecret, and isTestnet status from the input.
     - If any parameter (especially quantity or symbol) is unclear or missing, ASK the user for clarification before attempting to use a tool. Do not guess quantities or symbols if ambiguous.
     - After attempting a trade using a tool, report the result (success message with order ID, or the error message) back to the user clearly.
 
@@ -99,38 +94,43 @@ const generateResponseFlow = ai.defineFlow<
   inputSchema: GenerateResponseInputSchema,
   outputSchema: GenerateResponseOutputSchema,
 }, async (input) => {
-    console.log("[generateResponseFlow] Input:", JSON.stringify(input, null, 2));
+    console.log("[generateResponseFlow] Input received:", {
+        message: input.message,
+        chatHistoryLength: input.chatHistory?.length,
+        apiKeyProvided: !!input.apiKey,
+        apiSecretProvided: !!input.apiSecret,
+        isTestnet: input.isTestnet
+    });
 
-    // Construct the prompt input, including potentially insecure credentials if passed.
-    // In production, remove apiKey and apiSecret from here. The tools would fetch them.
+    // Prepare the input for the prompt, passing along credentials if they exist.
     const promptInput: GenerateResponseInput = {
       message: input.message,
       chatHistory: input.chatHistory,
-       ...(input.apiKey && { apiKey: input.apiKey }),
-       ...(input.apiSecret && { apiSecret: input.apiSecret }),
+       ...(input.apiKey && { apiKey: input.apiKey }), // Pass only if exists
+       ...(input.apiSecret && { apiSecret: input.apiSecret }), // Pass only if exists
        isTestnet: input.isTestnet ?? false // Ensure boolean is passed
     };
 
     let response;
     try {
-        console.log("[generateResponseFlow] Calling prompt with input:", JSON.stringify(promptInput, null, 2));
-        response = await prompt(promptInput); // Pass potentially insecure credentials
-        console.log("[generateResponseFlow] Received response from prompt:", JSON.stringify(response, null, 2)); // Log the raw response object
+        console.log("[generateResponseFlow] Calling prompt...");
+        response = await prompt(promptInput); // Pass input containing credentials if available
+        console.log("[generateResponseFlow] Received raw response from prompt/tool execution:", JSON.stringify(response, null, 2));
 
     } catch (error: any) {
         console.error("[generateResponseFlow] Error calling prompt:", error);
-         // Handle errors during the prompt/tool execution itself
+        // Handle errors during the prompt/tool execution itself
         return { response: `Sorry, I encountered an error processing your request: ${error.message || 'Unknown error'}` };
     }
 
 
     // Check if the model decided to use a tool
     if (response?.toolRequests?.length > 0) {
-        console.log("[generateResponseFlow] Tool requests were generated and likely handled by Genkit.");
+        console.log("[generateResponseFlow] Tool requests were generated and handled by Genkit.");
         // Genkit handles tool execution and feeding results back to the model automatically.
         // The 'response' object here *should* contain the final output *after* tool use.
     } else {
-         console.log("[generateResponseFlow] No tool requests generated.");
+         console.log("[generateResponseFlow] No tool requests generated by the LLM.");
     }
 
     // **** Explicitly check if the output is null or undefined ****
