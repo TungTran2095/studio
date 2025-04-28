@@ -59,13 +59,14 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     setMessages((prevMessages) => [...prevMessages, newUserMessage]);
     setIsLoading(true);
 
-    // Check if API keys are available from the store
+    // Read credentials from the store
     const credentialsAvailable = apiKey && apiSecret;
-     if (!credentialsAvailable) {
-        console.warn("API Keys not found in store. Trading functions will not work unless configured in 'Binance Account'.");
-        // The AI prompt instructs the bot to inform the user if credentials are required but missing.
+
+    if (!credentialsAvailable) {
+      console.warn("[ChatWindow] API credentials NOT available in store. Trading intent might fail.");
+      // The AI prompt is designed to handle this and ask the user to configure credentials.
     } else {
-         console.log("API Keys found in store. Passing to generateResponse flow.");
+      console.log("[ChatWindow] API credentials found in store. Passing to generateResponse flow.");
     }
 
     const chatHistoryForAI = messages.map(msg => ({
@@ -77,14 +78,15 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
-      // Conditionally include credentials only if they exist
+      // Conditionally include credentials only if they exist in the store
       ...(credentialsAvailable && { apiKey, apiSecret }),
-       // Pass isTestnet status regardless (defaults to false in schema if undefined)
-       isTestnet: isTestnet ?? false,
+      // Pass isTestnet status from the store (defaults to false in schema if undefined/null)
+      isTestnet: isTestnet ?? false,
     };
 
     try {
       // Call the flow function (which now might use tools)
+      console.log("[ChatWindow] Calling generateResponse with input:", { ...input, apiKey: input.apiKey ? '***' : undefined, apiSecret: input.apiSecret ? '***' : undefined });
       const result = await generateResponse(input);
       const aiResponse: Message = { role: "bot", content: result.response };
        setMessages((prevMessages) => [...prevMessages, aiResponse]);
