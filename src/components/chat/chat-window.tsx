@@ -36,17 +36,15 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   // Scroll to bottom when messages change
   useEffect(() => {
     if (isExpanded && scrollAreaRef.current) { // Only scroll if expanded
+      // Try to find the Radix viewport first
       const scrollViewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-      if (scrollViewport) {
+      const targetElement = scrollViewport || scrollAreaRef.current; // Fallback to the main ref
+
+      if (targetElement) {
+        // Use requestAnimationFrame for smoother scrolling after render
         requestAnimationFrame(() => {
-            scrollViewport.scrollTop = scrollViewport.scrollHeight;
+            targetElement.scrollTop = targetElement.scrollHeight;
         });
-      } else {
-         requestAnimationFrame(() => {
-             if(scrollAreaRef.current) {
-                scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-             }
-         });
       }
     }
   }, [messages, isLoading, isExpanded]); // Add isExpanded dependency
@@ -78,17 +76,21 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
         description: "Failed to get response from AI. Please try again.",
         variant: "destructive",
       });
+      // Optionally remove the user message if the bot fails
+       setMessages((prevMessages) => prevMessages.slice(0, -1));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    // Ensure the container takes full height of its parent div
-    <div className="flex flex-col h-full w-full bg-card overflow-hidden">
-      <CardHeader className="border-b flex-shrink-0 p-3 flex flex-row items-center justify-between">
+    // Ensure the container takes full height of its parent div and uses flex column layout
+    // Removed bg-card as it's now on the parent container div in page.tsx
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      {/* Header remains, adjust padding and border */}
+      <CardHeader className="border-b border-border flex-shrink-0 p-3 flex flex-row items-center justify-between">
         <CardTitle className="text-lg font-medium text-foreground">YINSEN</CardTitle>
-         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6">
+         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground"> {/* Ensure button text color matches theme */}
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
              <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
         </Button>
@@ -97,21 +99,25 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       {/* Conditionally render content based on isExpanded */}
       {isExpanded && (
         <>
+          {/* Content container takes remaining space, adjust padding */}
           <CardContent className="flex-1 p-0 overflow-hidden">
-            <ScrollArea className="h-full" ref={scrollAreaRef}>
-              <div className="space-y-4 p-3">
+            {/* Ensure ScrollArea uses theme colors */}
+            <ScrollArea className="h-full [&>[data-radix-scroll-area-viewport]]:px-3 [&>[data-radix-scroll-area-viewport]]:py-3" ref={scrollAreaRef}>
+              <div className="space-y-4">
                 {messages.map((msg, index) => (
                   <ChatMessage key={index} role={msg.role} content={msg.content} />
                 ))}
                 {isLoading && (
                     <div className="flex items-start gap-3 justify-start">
-                      <Skeleton className="h-8 w-8 rounded-full bg-accent" />
-                      <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-secondary" />
+                      {/* Use theme colors for skeletons */}
+                      <Skeleton className="h-8 w-8 rounded-full bg-muted" />
+                      <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted" />
                   </div>
                 )}
               </div>
             </ScrollArea>
           </CardContent>
+          {/* ChatInput already uses theme colors */}
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
         </>
       )}

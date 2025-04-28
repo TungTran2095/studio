@@ -15,7 +15,7 @@ export default function Home() {
   const handleAssetToggle = () => {
       if (isAssetExpanded && !isChatExpanded) {
         // Prevent collapsing the last expanded panel
-        setIsChatExpanded(true);
+        setIsChatExpanded(true); // Force chat open if asset is collapsing and chat is already closed
       }
       setIsAssetExpanded(!isAssetExpanded);
   };
@@ -23,7 +23,7 @@ export default function Home() {
   const handleChatToggle = () => {
        if (isChatExpanded && !isAssetExpanded) {
          // Prevent collapsing the last expanded panel
-         setIsAssetExpanded(true);
+         setIsAssetExpanded(true); // Force asset open if chat is collapsing and asset is already closed
        }
        setIsChatExpanded(!isChatExpanded);
   };
@@ -39,27 +39,29 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Container for Asset Summary and Chat - Manages vertical flex layout */}
-      <aside className="w-96 border border-border flex flex-col bg-card rounded-lg shadow-md overflow-hidden flex-shrink-0">
-         {/* Asset Summary Container */}
+      {/* Container for Asset Summary and Chat - Manages vertical flex layout and spacing */}
+      <aside className="w-96 flex flex-col gap-4 flex-shrink-0">
+         {/* Asset Summary Container - Now has its own border and background */}
          {/* Apply transition for smooth height change */}
          <div className={cn(
-             "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border-b border-border",
+             "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card", // Added container styles
              isAssetExpanded && isChatExpanded ? 'h-1/2' : '',
-             isAssetExpanded && !isChatExpanded ? 'flex-1' : '',
+             isAssetExpanded && !isChatExpanded ? 'flex-1' : '', // Takes full height if chat is collapsed
              !isAssetExpanded ? 'h-auto flex-shrink-0' : '' // Height determined by content (header) when collapsed
            )}>
+            {/* Pass props down to the actual component */}
             <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} />
          </div>
 
-         {/* Chat Window Container */}
+         {/* Chat Window Container - Now has its own border and background */}
          {/* Apply transition for smooth height change */}
          <div className={cn(
-            "flex flex-col overflow-hidden transition-all duration-300 ease-in-out",
+            "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card", // Added container styles
              isChatExpanded && isAssetExpanded ? 'h-1/2' : '',
-             isChatExpanded && !isAssetExpanded ? 'flex-1' : '',
+             isChatExpanded && !isAssetExpanded ? 'flex-1' : '', // Takes full height if asset is collapsed
              !isChatExpanded ? 'h-auto flex-shrink-0' : '' // Height determined by content (header) when collapsed
          )}>
+            {/* Pass props down to the actual component */}
             <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle}/>
          </div>
       </aside>

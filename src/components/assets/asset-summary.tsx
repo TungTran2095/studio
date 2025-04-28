@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Keep Card parts for internal structure
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -89,6 +89,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     try {
+        // Simulate API response based on isTestnet
         const fetchedAssets: Asset[] = values.isTestnet
           ? [
               { asset: "Test BTC", symbol: "BTC", quantity: 0.2, totalValue: 6000 },
@@ -105,7 +106,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         setIsConnected(true);
          toast({
             title: "Success",
-            description: "Successfully fetched assets from Binance.",
+            description: "Successfully fetched assets.", // Simplified message
          });
     } catch (error) {
         console.error("Error fetching assets:", error);
@@ -125,11 +126,13 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
   const totalPortfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
 
   return (
-    // Ensure the container takes full height of its parent div
-    <div className="flex flex-col h-full w-full bg-card text-card-foreground overflow-hidden">
+    // Ensure the container takes full height of its parent div and uses flex column layout
+    // Removed bg-card, text-card-foreground, as these are now on the parent container div in page.tsx
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      {/* Header remains, adjust padding and border */}
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-medium">Asset Summary</CardTitle>
-         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6">
+        <CardTitle className="text-lg font-medium text-foreground">Asset Summary</CardTitle>
+         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground"> {/* Ensure button text color matches theme */}
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Asset Summary</span>
         </Button>
@@ -137,6 +140,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
      {/* Conditionally render content based on isExpanded */}
       {isExpanded && (
+        // Content container takes remaining space, adjust padding
         <CardContent className="flex-1 p-3 overflow-hidden flex flex-col gap-4">
           {/* API Key Form */}
           <Form {...form}>
@@ -146,13 +150,13 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 name="apiKey"
                 render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-xs">API Key</FormLabel>
+                    <FormLabel className="text-xs text-foreground">API Key</FormLabel> {/* Explicitly set text color */}
                     <FormControl>
                       <Input
                       placeholder="Binance API Key"
                       {...field}
                       type="password" // Hide sensitive input
-                      className="h-8 text-xs"
+                      className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
                       disabled={isLoading}
                       />
                     </FormControl>
@@ -165,13 +169,13 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 name="apiSecret"
                 render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-xs">API Secret</FormLabel>
+                    <FormLabel className="text-xs text-foreground">API Secret</FormLabel> {/* Explicitly set text color */}
                     <FormControl>
                       <Input
                         placeholder="Binance API Secret"
                         {...field}
                         type="password" // Hide sensitive input
-                        className="h-8 text-xs"
+                        className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
                         disabled={isLoading}
                       />
                     </FormControl>
@@ -191,68 +195,71 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                           onCheckedChange={field.onChange}
                           id="testnet"
                           disabled={isLoading}
+                          className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground" // Theme colors
                         />
                       </FormControl>
-                      <FormLabel htmlFor="testnet" className="text-xs font-normal">
+                      <FormLabel htmlFor="testnet" className="text-xs font-normal text-foreground"> {/* Explicitly set text color */}
                         Use Testnet
                       </FormLabel>
                     </FormItem>
                   )}
                 />
-                <Button type="submit" size="sm" disabled={isLoading} className="text-xs h-8">
+                <Button type="submit" size="sm" disabled={isLoading} className="text-xs h-8"> {/* Default button styling */}
                   {isLoading ? "Loading..." : "Load Assets"}
                 </Button>
               </div>
               <FormDescription className="text-xs text-muted-foreground pt-1">
-                  Enter your Binance API credentials to view your assets. These keys are handled client-side for this demo and are **not securely stored**.
+                  Enter your Binance API credentials. Handled client-side. **Not securely stored**.
               </FormDescription>
             </form>
           </Form>
 
           {/* Asset Table Area */}
+          {/* Add top border for separation */}
           <div className="flex-1 overflow-hidden border-t border-border pt-3">
             <ScrollArea className="h-full">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[100px]">Asset</TableHead>
-                    <TableHead>Symbol</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead className="text-right">Total Value (USD)</TableHead>
+                  <TableRow className="border-border">
+                    <TableHead className="w-[100px] text-muted-foreground">Asset</TableHead>
+                    <TableHead className="text-muted-foreground">Symbol</TableHead>
+                    <TableHead className="text-right text-muted-foreground">Quantity</TableHead>
+                    <TableHead className="text-right text-muted-foreground">Total Value (USD)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     // Loading Skeletons
                     Array.from({ length: 3 }).map((_, index) => (
-                      <TableRow key={index}>
-                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-10" /></TableCell>
-                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                        <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                      <TableRow key={index} className="border-border">
+                        <TableCell><Skeleton className="h-4 w-20 bg-muted" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-10 bg-muted" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto bg-muted" /></TableCell>
                       </TableRow>
                     ))
                   ) : isConnected && assets.length > 0 ? (
                     // Display Fetched Assets
                     assets.map((asset) => (
-                      <TableRow key={asset.symbol}>
-                        <TableCell className="font-medium">{asset.asset}</TableCell>
-                        <TableCell>{asset.symbol}</TableCell>
-                        <TableCell className="text-right">{asset.quantity.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                      <TableRow key={asset.symbol} className="border-border">
+                        <TableCell className="font-medium text-foreground">{asset.asset}</TableCell>
+                        <TableCell className="text-foreground">{asset.symbol}</TableCell>
+                        <TableCell className="text-right text-foreground">{asset.quantity.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-foreground">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                       </TableRow>
                     ))
                   ) : (
                     // Initial or No Data Message
-                    <TableRow>
+                    <TableRow className="border-border">
                       <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                           {isConnected ? "No assets found." : "Enter API keys to load assets."}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
+                {/* Ensure caption background matches container */}
                 {isConnected && assets.length > 0 && !isLoading && (
-                  <TableCaption className="sticky bottom-0 bg-card py-2">
+                  <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border">
                       Total Portfolio Value: ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCaption>
                 )}
