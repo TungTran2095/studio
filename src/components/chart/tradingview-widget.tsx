@@ -39,13 +39,16 @@ export const TradingViewWidget: React.FC = memo(() => {
       "noTimeScale": false,
       "valuesTracking": "1",
       "changeMode": "price-and-percent",
-      "chartType": "candlestick",
+      "chartType": "candlesticks", // Corrected typo: candlestick -> candlesticks
       "maLineColor": "#2962FF",
       "maLineWidth": 1,
       "maLength": 9,
       "lineWidth": 2,
       "lineType": 0,
-      "dateFormat": "dd MMM yy" // Removed single quotes, ensure keys are quoted
+      "dateFormat": "dd MMM yy", // Removed single quotes, ensure keys are quoted
+      "studies": [
+        "IchimokuCloud@tv-basicstudies" // Add Ichimoku Cloud indicator
+      ]
     };
 
 
@@ -84,3 +87,4 @@ export const TradingViewWidget: React.FC = memo(() => {
 });
 
 TradingViewWidget.displayName = 'TradingViewWidget';
+
