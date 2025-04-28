@@ -37,7 +37,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
         className={cn(
           "rounded-lg p-2.5 shadow-sm", // Padding inside the bubble
           // Limit width, allow vertical growth. Increased max-width slightly.
-          "max-w-[85%]", // Slightly increased max-width to give more space
+          "max-w-[90%]", // Increased max-width to 90%
           "min-w-[40px]", // Optional: minimum width
           isUser
             ? "bg-primary text-primary-foreground rounded-br-none" // User bubble color
@@ -45,7 +45,8 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
         )}
       >
         {/* Text content - Ensure wrapping and correct alignment */}
-        <p className="text-sm whitespace-pre-wrap break-words text-left text-current"> {/* Explicitly set text-left */}
+        {/* break-words should handle long strings, whitespace-pre-wrap preserves line breaks */}
+        <p className="text-sm whitespace-pre-wrap break-words text-left text-current">
           {content}
         </p>
       </div>
