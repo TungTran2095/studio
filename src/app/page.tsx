@@ -2,42 +2,33 @@
 "use client"; // Add 'use client' because we are using useState hook
 
 import { useState } from 'react';
+import { MessageCircle } from 'lucide-react';
 import { AssetSummary } from "@/components/assets/asset-summary";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
 import { AnalysisPanel } from "@/components/analysis/analysis-panel"; // Import the new panel
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from '@/lib/utils';
 
 export default function Home() {
   const [isAssetExpanded, setIsAssetExpanded] = useState(true);
-  const [isChatExpanded, setIsChatExpanded] = useState(true);
-  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true); // State for the new panel
+  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true); // State for the analysis panel
+  const [isChatOpen, setIsChatOpen] = useState(false); // State for chat popover
 
-  // Ensure at least one right-hand panel is expanded if the user tries to collapse the last one
+  // Toggle for asset summary
   const handleAssetToggle = () => {
-      if (isAssetExpanded && !isChatExpanded) {
-        // Prevent collapsing the last expanded panel
-        setIsChatExpanded(true); // Force chat open if asset is collapsing and chat is already closed
-      }
       setIsAssetExpanded(!isAssetExpanded);
   };
 
-  const handleChatToggle = () => {
-       if (isChatExpanded && !isAssetExpanded) {
-         // Prevent collapsing the last expanded panel
-         setIsAssetExpanded(true); // Force asset open if chat is collapsing and asset is already closed
-       }
-       setIsChatExpanded(!isChatExpanded);
-  };
-
-   // Toggle for the new analysis panel
+   // Toggle for the analysis panel
    const handleAnalysisToggle = () => {
       setIsAnalysisExpanded(!isAnalysisExpanded);
    };
 
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden p-4 gap-4">
+    <div className="flex h-screen bg-background overflow-hidden p-4 gap-4 relative"> {/* Added relative positioning */}
       {/* Left Analysis Panel */}
        <aside className={cn(
             "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out",
@@ -55,30 +46,44 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Right Container for Asset Summary and Chat */}
+      {/* Right Container for Asset Summary */}
       <aside className="w-96 flex flex-col gap-4 flex-shrink-0">
-         {/* Asset Summary Container - Use flex basis for better resizing */}
+         {/* Asset Summary Container */}
          <div className={cn(
              "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card",
-             // When both are expanded, use flex-basis-1/2. If only one is expanded, use flex-1.
-             isAssetExpanded && isChatExpanded ? 'flex-basis-1/2' : '',
-             isAssetExpanded && !isChatExpanded ? 'flex-1' : '',
-             !isAssetExpanded ? 'flex-shrink-0 h-auto' : '' // Collapse to header height
+             // Use flex-1 to take full height when chat is a popover
+             isAssetExpanded ? 'flex-1' : 'flex-shrink-0 h-auto'
            )}>
             <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} />
          </div>
-
-         {/* Chat Window Container - Use flex basis for better resizing */}
-         <div className={cn(
-            "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card",
-            // When both are expanded, use flex-basis-1/2. If only one is expanded, use flex-1.
-             isChatExpanded && isAssetExpanded ? 'flex-basis-1/2' : '',
-             isChatExpanded && !isAssetExpanded ? 'flex-1' : '',
-             !isChatExpanded ? 'flex-shrink-0 h-auto' : '' // Collapse to header height
-         )}>
-            <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle}/>
-         </div>
       </aside>
+
+       {/* Chat Popover */}
+      <Popover open={isChatOpen} onOpenChange={setIsChatOpen}>
+        <PopoverTrigger asChild>
+           {/* Fixed Chat Icon Button */}
+          <Button
+            variant="default" // Use primary gradient
+            size="icon"
+            className="fixed bottom-6 right-6 rounded-full h-14 w-14 shadow-lg z-50" // Positioned bottom-right, rounded, larger size
+            aria-label="Toggle Chat"
+          >
+            <MessageCircle className="h-7 w-7" /> {/* Larger icon */}
+          </Button>
+        </PopoverTrigger>
+         {/* Define width and height for the popover content */}
+        <PopoverContent
+            side="top" // Open popover above the button
+            align="end" // Align to the right edge of the trigger
+            className="w-[400px] h-[550px] p-0 border-border shadow-xl bg-card flex flex-col overflow-hidden" // Set dimensions, remove padding, add styles
+            onOpenAutoFocus={(e) => e.preventDefault()} // Prevent autofocus stealing focus
+        >
+           {/* ChatWindow now rendered inside PopoverContent */}
+           {/* Pass dummy handlers as ChatWindow expects them, though they won't be used for expand/collapse */}
+           <ChatWindow isExpanded={true} onToggle={() => {}} />
+        </PopoverContent>
+      </Popover>
+
     </div>
   );
 }

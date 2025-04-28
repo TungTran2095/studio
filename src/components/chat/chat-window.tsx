@@ -3,8 +3,8 @@
 
 import type { FC } from "react";
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, ChevronUp } from 'lucide-react'; // Import icons
-import { CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Keep Card parts for structure
+// Removed ChevronDown, ChevronUp import
+import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
@@ -12,7 +12,7 @@ import { generateResponse } from "@/ai/flows/generate-response";
 import type { GenerateResponseInput } from "@/ai/flows/generate-response";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button"; // Import Button
+// Removed Button import (toggle button)
 import { cn } from '@/lib/utils';
 import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
 
@@ -22,13 +22,12 @@ interface Message {
   content: string;
 }
 
-// Define props including isExpanded and onToggle
+// Removed isExpanded and onToggle from props
 interface ChatWindowProps {
-  isExpanded: boolean;
-  onToggle: () => void;
+  // No props needed for expansion state anymore
 }
 
-export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
+export const ChatWindow: FC<ChatWindowProps> = (/* No props here */) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -43,7 +42,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
 
   // Scroll to bottom when messages change or isLoading changes
   useEffect(() => {
-    if (isExpanded && viewportRef.current) {
+    // Scroll always happens when chat is open (since isExpanded is effectively true)
+    if (viewportRef.current) {
       // Use requestAnimationFrame for smoother scrolling after render
       requestAnimationFrame(() => {
         if (viewportRef.current) {
@@ -51,7 +51,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
         }
       });
     }
-  }, [messages, isLoading, isExpanded]); // Dependencies include isLoading
+  }, [messages, isLoading]); // Removed isExpanded dependency
 
   const handleSendMessage = async (messageContent: string) => {
     const newUserMessage: Message = { role: "user", content: messageContent };
@@ -117,19 +117,16 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   };
 
   return (
-    // Ensure the container takes full height of its parent div and uses flex column layout
-    <div className="flex flex-col h-full w-full overflow-hidden">
+    // Ensure the container takes full height of its parent div (PopoverContent) and uses flex column layout
+    <div className="flex flex-col h-full w-full overflow-hidden bg-card"> {/* Added bg-card */}
       {/* Header remains, adjust padding and border */}
+      {/* Removed toggle button */}
       <CardHeader className="border-b border-border flex-shrink-0 p-3 flex flex-row items-center justify-between">
         <CardTitle className="text-lg font-medium text-foreground">YINSEN</CardTitle>
-         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground">
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-             <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
-        </Button>
+         {/* Removed toggle button */}
       </CardHeader>
 
-      {/* Conditionally render content based on isExpanded */}
-      {isExpanded && (
+      {/* Chat content always rendered as isExpanded is effectively true */}
         <>
           {/* Content container takes remaining space, adjust padding */}
           {/* Use p-0 on CardContent and apply padding within ScrollArea viewport */}
@@ -156,7 +153,6 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
           {/* ChatInput already uses theme colors */}
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
         </>
-      )}
     </div>
   );
 };
