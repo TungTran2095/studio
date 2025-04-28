@@ -36,16 +36,16 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
       <div
         className={cn(
           "rounded-lg p-2.5 shadow-sm", // Padding inside the bubble
-          // Limit width, allow vertical growth
-          "max-w-[80%]",
+          // Limit width, allow vertical growth. Increased max-width slightly.
+          "max-w-[85%]", // Slightly increased max-width to give more space
           "min-w-[40px]", // Optional: minimum width
           isUser
             ? "bg-primary text-primary-foreground rounded-br-none" // User bubble color
             : "bg-secondary text-secondary-foreground rounded-bl-none" // Bot bubble color
         )}
       >
-        {/* Text content - Ensure wrapping */}
-        <p className="text-sm whitespace-pre-wrap break-words text-current"> {/* Styles handle wrapping */}
+        {/* Text content - Ensure wrapping and correct alignment */}
+        <p className="text-sm whitespace-pre-wrap break-words text-left text-current"> {/* Explicitly set text-left */}
           {content}
         </p>
       </div>
