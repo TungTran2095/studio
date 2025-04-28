@@ -9,25 +9,25 @@ body {
 @layer base {
   :root {
     /* Light Mode - Adjusted to match TradingView Light Theme */
-    --background: 0 0% 100%; /* White background */
-    --foreground: 220 15% 20%; /* Dark Grey Text */
+    --background: 0 0% 100%; /* White background (TradingView: #FFFFFF) */
+    --foreground: 222 47% 11%; /* Dark Grey/Black Text (TradingView: ~#131722) */
     --card: 0 0% 100%; /* White card background */
-    --card-foreground: 220 15% 20%; /* Dark Grey text on card */
+    --card-foreground: 222 47% 11%; /* Dark Grey text on card */
     --popover: 0 0% 100%; /* White popover */
-    --popover-foreground: 220 15% 20%; /* Dark Grey text on popover */
-    --primary: 25 95% 53%; /* Vibrant Orange gradient base */
+    --popover-foreground: 222 47% 11%; /* Dark Grey text on popover */
+    --primary: 25 95% 53%; /* Vibrant Orange gradient base - KEEPING AS REQUESTED */
     --primary-foreground: 0 0% 100%; /* White text on gradient */
-    --secondary: 210 20% 96%; /* Very Light Gray for secondary elements */
-    --secondary-foreground: 220 15% 25%; /* Dark Gray Text */
-    --muted: 210 20% 96%; /* Very Light Gray */
-    --muted-foreground: 215 15% 50%; /* Medium Gray Text */
-    --accent: 210 16% 96%; /* Very Light Gray for subtle accents */
-    --accent-foreground: 25 95% 53%; /* Vibrant Orange for accent text */
-    --destructive: 0 72% 51%; /* Standard Red */
+    --secondary: 220 13% 91%; /* Lighter Gray for secondary elements (TradingView: ~#E0E3EB for borders/dividers) */
+    --secondary-foreground: 222 47% 11%; /* Dark Gray Text */
+    --muted: 220 13% 91%; /* Lighter Gray */
+    --muted-foreground: 220 9% 46%; /* Medium Gray Text (TradingView: ~#787B86) */
+    --accent: 220 14% 96%; /* Very Light Gray for subtle accents/hover (TradingView: ~#F0F3FA) */
+    --accent-foreground: 222 47% 11%; /* Dark Grey text on accent */
+    --destructive: 0 84% 60%; /* Standard Red */
     --destructive-foreground: 0 0% 98%; /* Light text on red */
-    --border: 214 20% 90%; /* Lighter Gray Border */
-    --input: 214 20% 94%; /* Lighter Gray Input BG */
-    --ring: 25 95% 53%; /* Vibrant Orange for focus rings */
+    --border: 220 13% 91%; /* Lighter Gray Border (TradingView: ~#E0E3EB) */
+    --input: 220 13% 91%; /* Lighter Gray Input BG */
+    --ring: 25 95% 53%; /* Vibrant Orange for focus rings - KEEPING AS REQUESTED */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -35,49 +35,49 @@ body {
     --chart-5: 27 87% 67%;
     --radius: 0.5rem; /* Standard border radius */
     --sidebar-background: 0 0% 100%; /* Match background */
-    --sidebar-foreground: 220 15% 20%; /* Match foreground */
+    --sidebar-foreground: 222 47% 11%; /* Match foreground */
     --sidebar-primary: 25 95% 53%; /* Match primary */
     --sidebar-primary-foreground: 0 0% 100%; /* Match primary-foreground */
-    --sidebar-accent: 210 20% 96%; /* Match secondary/accent */
-    --sidebar-accent-foreground: 220 15% 25%; /* Match secondary-foreground */
-    --sidebar-border: 214 20% 90%; /* Match border */
+    --sidebar-accent: 220 14% 96%; /* Match accent */
+    --sidebar-accent-foreground: 222 47% 11%; /* Match accent-foreground */
+    --sidebar-border: 220 13% 91%; /* Match border */
     --sidebar-ring: 25 95% 53%; /* Match ring */
   }
 
   .dark {
     /* Dark Mode - Adjusted to match TradingView Dark Theme */
-    --background: 220 15% 15%; /* Dark Grey background */
-    --foreground: 210 40% 96%; /* Light Grey Text */
-    --card: 220 15% 18%; /* Slightly lighter dark grey card */
-    --card-foreground: 210 40% 96%; /* Light Grey text on card */
-    --popover: 220 15% 18%; /* Dark Grey popover */
-    --popover-foreground: 210 40% 96%; /* Light Grey text on popover */
-    --primary: 25 95% 53%; /* Vibrant Orange gradient base */
+    --background: 222 47% 11%; /* Very Dark Grey background (TradingView: #131722) */
+    --foreground: 215 20% 85%; /* Light Grey Text (TradingView: ~#D1D4DC) */
+    --card: 224 30% 15%; /* Slightly lighter dark grey card (TradingView: ~#1E222D) */
+    --card-foreground: 215 20% 85%; /* Light Grey text on card */
+    --popover: 224 30% 15%; /* Dark Grey popover */
+    --popover-foreground: 215 20% 85%; /* Light Grey text on popover */
+    --primary: 25 95% 53%; /* Vibrant Orange gradient base - KEEPING AS REQUESTED */
     --primary-foreground: 0 0% 100%; /* White text on gradient */
-    --secondary: 220 15% 25%; /* Medium Dark Grey for bot messages */
-    --secondary-foreground: 210 40% 96%; /* Light Gray Text for bot messages */
-    --muted: 220 15% 25%; /* Medium Dark Grey */
-    --muted-foreground: 215 25% 70%; /* Lighter Gray Text */
-    --accent: 220 15% 25%; /* Medium Dark Grey for accents */
-    --accent-foreground: 210 40% 96%; /* Light Grey accent text */
+    --secondary: 224 30% 15%; /* Dark Grey for bot messages (matching card) */
+    --secondary-foreground: 215 20% 85%; /* Light Gray Text for bot messages */
+    --muted: 224 30% 15%; /* Dark Grey */
+    --muted-foreground: 218 15% 55%; /* Lighter Gray Text (TradingView: ~#787B86) */
+    --accent: 226 25% 20%; /* Medium Dark Grey for accents/hover (TradingView: ~#2A2E39) */
+    --accent-foreground: 215 20% 85%; /* Light Grey accent text */
     --destructive: 0 63% 51%; /* Red */
     --destructive-foreground: 0 0% 98%; /* Light text on red */
-    --border: 217 30% 30%; /* Slightly darker border */
-    --input: 220 15% 22%; /* Darker Input BG */
-    --ring: 25 95% 53%; /* Vibrant Orange for focus rings */
+    --border: 221 22% 28%; /* Darker Gray Border (TradingView: ~#363A45) */
+    --input: 221 22% 28%; /* Darker Input BG */
+    --ring: 25 95% 53%; /* Vibrant Orange for focus rings - KEEPING AS REQUESTED */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     --radius: 0.5rem; /* Standard border radius */
-     --sidebar-background: 220 15% 15%; /* Match background */
-    --sidebar-foreground: 210 40% 96%; /* Match foreground */
+     --sidebar-background: 222 47% 11%; /* Match background */
+    --sidebar-foreground: 215 20% 85%; /* Match foreground */
     --sidebar-primary: 25 95% 53%; /* Match primary */
     --sidebar-primary-foreground: 0 0% 100%; /* Match primary-foreground */
-    --sidebar-accent: 220 15% 25%; /* Match secondary/accent */
-    --sidebar-accent-foreground: 210 40% 96%; /* Match accent-foreground */
-    --sidebar-border: 217 30% 30%; /* Match border */
+    --sidebar-accent: 226 25% 20%; /* Match accent */
+    --sidebar-accent-foreground: 215 20% 85%; /* Match accent-foreground */
+    --sidebar-border: 221 22% 28%; /* Match border */
     --sidebar-ring: 25 95% 53%; /* Match ring */
   }
 }

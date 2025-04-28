@@ -22,8 +22,8 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
     >
       {!isUser && (
         <Avatar className="h-8 w-8 border border-border">
-           {/* Use secondary for bot avatar fallback background to contrast with bot message */}
-          <AvatarFallback className="bg-secondary text-secondary-foreground">
+           {/* Use accent for bot avatar fallback background to contrast with bot message */}
+          <AvatarFallback className="bg-accent text-accent-foreground">
             <Bot className="h-5 w-5" />
           </AvatarFallback>
         </Avatar>
@@ -41,8 +41,8 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
       </div>
        {isUser && (
         <Avatar className="h-8 w-8 border border-border">
-           {/* Use muted for user avatar fallback background */}
-          <AvatarFallback className="bg-muted text-muted-foreground">
+           {/* Use accent for user avatar fallback background */}
+          <AvatarFallback className="bg-accent text-accent-foreground">
             <User className="h-5 w-5" />
           </AvatarFallback>
         </Avatar>

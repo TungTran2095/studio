@@ -25,15 +25,15 @@ export const ChatInput: FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   };
 
   return (
-    // Use background color for the form container, apply top border
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 border-t bg-background border-border"> {/* Changed to bg-background */}
+    // Use background color for the form container, apply top border matching the theme
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 p-3 border-t bg-background border-border"> {/* Use theme background, adjusted padding */}
       <Input
         ref={inputRef}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         placeholder="Type your message..."
-        // Explicitly set input background to input theme color, text to foreground
-        className="flex-1 bg-input text-foreground placeholder:text-muted-foreground border-border focus-visible:ring-ring" // Ensure border and ring use theme colors
+        // Use input theme color, ensure text/placeholder/border/ring use theme colors
+        className="flex-1 bg-input text-foreground placeholder:text-muted-foreground border-border focus-visible:ring-ring"
         disabled={isLoading}
         aria-label="Chat message input"
       />
