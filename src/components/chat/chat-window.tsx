@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button"; // Import Button
 import { cn } from '@/lib/utils';
+import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
 
 
 interface Message {
@@ -32,6 +33,12 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  // Access credentials from Zustand store
+  const { apiKey, apiSecret, isTestnet } = useAssetStore(state => ({
+    apiKey: state.apiKey,
+    apiSecret: state.apiSecret,
+    isTestnet: state.isTestnet,
+  }));
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -55,29 +62,45 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     setMessages((prevMessages) => [...prevMessages, newUserMessage]);
     setIsLoading(true);
 
+    // Check if API keys are available from the store
+    const credentialsAvailable = apiKey && apiSecret;
+     if (!credentialsAvailable) {
+        console.warn("API Keys not found in store. Trading functions will not work unless provided elsewhere or fetched server-side.");
+        // Optionally inform the user in the chat if they attempt a trade action
+        // This logic might be better handled by the AI itself based on the prompt instructions
+    }
+
     const chatHistoryForAI = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
     }));
 
+    // Prepare input for the flow, including credentials from the store
+    // WARNING: Passing credentials directly is insecure. For demo purposes only.
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
+      // Include credentials IF they exist. Tools might still fail if not provided.
+      ...(credentialsAvailable && { apiKey, apiSecret, isTestnet }),
+       // Make sure isTestnet is always passed, even if false
+       isTestnet: isTestnet ?? false, // Pass isTestnet status
     };
 
     try {
+      // Call the flow function (which now might use tools)
       const result = await generateResponse(input);
       const aiResponse: Message = { role: "bot", content: result.response };
        setMessages((prevMessages) => [...prevMessages, aiResponse]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating AI response:", error);
+      const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
        toast({
         title: "Error",
-        description: "Failed to get response from AI. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
       // Optionally remove the user message if the bot fails
-       setMessages((prevMessages) => prevMessages.slice(0, -1));
+       setMessages((prevMessages) => prevMessages.filter(msg => msg !== newUserMessage)); // Remove the specific user message
     } finally {
       setIsLoading(false);
     }
