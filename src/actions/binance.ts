@@ -442,5 +442,3 @@ export async function fetchBinanceTradeHistory(
         return { success: false, data: [], error: errorMessage };
     }
 }
-
-    
