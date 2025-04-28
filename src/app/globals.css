@@ -8,27 +8,25 @@ body {
 
 @layer base {
   :root {
-    /* Firebase Studio Inspired Theme - Light Mode */
-    --background: 210 20% 98%; /* Slightly off-white like Firebase Console */
-    --foreground: 220 15% 25%; /* Dark Gray Text (#202124) */
-    --card: 0 0% 100%; /* White (#FFFFFF) */
-    --card-foreground: 220 15% 25%; /* Dark Gray Text */
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 220 15% 25%; /* Dark Gray Text */
-    /* --primary: 217 91% 60%; /* Firebase Blue (#1A73E8) */
-    /* --primary-foreground: 0 0% 100%; /* White text on blue */
-    --primary: 25 95% 53%; /* Vibrant Orange as base for gradient */
-    --primary-foreground: 0 0% 100%; /* White text for contrast on gradient */
-    --secondary: 210 16% 93%; /* Lighter Gray (#E8EAED) */
+    /* Light Mode - Adjusted to match TradingView Light Theme */
+    --background: 0 0% 100%; /* White background */
+    --foreground: 220 15% 20%; /* Dark Grey Text */
+    --card: 0 0% 100%; /* White card background */
+    --card-foreground: 220 15% 20%; /* Dark Grey text on card */
+    --popover: 0 0% 100%; /* White popover */
+    --popover-foreground: 220 15% 20%; /* Dark Grey text on popover */
+    --primary: 25 95% 53%; /* Vibrant Orange gradient base */
+    --primary-foreground: 0 0% 100%; /* White text on gradient */
+    --secondary: 210 20% 96%; /* Very Light Gray for secondary elements */
     --secondary-foreground: 220 15% 25%; /* Dark Gray Text */
-    --muted: 210 16% 93%; /* Lighter Gray (#E8EAED) */
-    --muted-foreground: 215 14% 47%; /* Medium Gray Text (#6E7177) */
+    --muted: 210 20% 96%; /* Very Light Gray */
+    --muted-foreground: 215 15% 50%; /* Medium Gray Text */
     --accent: 210 16% 96%; /* Very Light Gray for subtle accents */
     --accent-foreground: 25 95% 53%; /* Vibrant Orange for accent text */
     --destructive: 0 72% 51%; /* Standard Red */
     --destructive-foreground: 0 0% 98%; /* Light text on red */
-    --border: 214 20% 87%; /* Gray Border (#DADCE0) */
-    --input: 214 20% 91%; /* Lighter Gray Input BG (#EAECEF) */
+    --border: 214 20% 90%; /* Lighter Gray Border */
+    --input: 214 20% 94%; /* Lighter Gray Input BG */
     --ring: 25 95% 53%; /* Vibrant Orange for focus rings */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -36,38 +34,36 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem; /* Standard border radius */
-    --sidebar-background: 210 17% 98%; /* Match background */
-    --sidebar-foreground: 220 7% 16%;
+    --sidebar-background: 0 0% 100%; /* Match background */
+    --sidebar-foreground: 220 15% 20%; /* Match foreground */
     --sidebar-primary: 25 95% 53%; /* Match primary */
     --sidebar-primary-foreground: 0 0% 100%; /* Match primary-foreground */
-    --sidebar-accent: 220 14% 90%;
-    --sidebar-accent-foreground: 220 7% 16%;
-    --sidebar-border: 220 13% 85%;
+    --sidebar-accent: 210 20% 96%; /* Match secondary/accent */
+    --sidebar-accent-foreground: 220 15% 25%; /* Match secondary-foreground */
+    --sidebar-border: 214 20% 90%; /* Match border */
     --sidebar-ring: 25 95% 53%; /* Match ring */
   }
 
   .dark {
-    /* Firebase Studio Inspired Theme - Dark Mode */
-    --background: 222 47% 11%; /* Dark Blue/Gray (#111827 -> adjusted darker) */
-    --foreground: 210 40% 98%; /* Almost White Text */
-    --card: 222 43% 16%; /* Slightly lighter dark blue/gray (#1A202E) */
-    --card-foreground: 210 40% 98%; /* Almost White Text */
-    --popover: 222 43% 16%; /* Dark Gray */
-    --popover-foreground: 210 40% 98%; /* Almost White Text */
-    /* --primary: 217 91% 72%; /* Lighter Blue for user messages in dark mode (#589AF3) */
-    /* --primary-foreground: 222 47% 11%; /* Dark text on the lighter blue */
-    --primary: 25 95% 53%; /* Vibrant Orange as base for gradient */
-    --primary-foreground: 0 0% 100%; /* White text for contrast on gradient */
-    --secondary: 222 40% 22%; /* Medium Dark Blue/Gray (#252D3E) - For bot messages */
+    /* Dark Mode - Adjusted to match TradingView Dark Theme */
+    --background: 220 15% 15%; /* Dark Grey background */
+    --foreground: 210 40% 96%; /* Light Grey Text */
+    --card: 220 15% 18%; /* Slightly lighter dark grey card */
+    --card-foreground: 210 40% 96%; /* Light Grey text on card */
+    --popover: 220 15% 18%; /* Dark Grey popover */
+    --popover-foreground: 210 40% 96%; /* Light Grey text on popover */
+    --primary: 25 95% 53%; /* Vibrant Orange gradient base */
+    --primary-foreground: 0 0% 100%; /* White text on gradient */
+    --secondary: 220 15% 25%; /* Medium Dark Grey for bot messages */
     --secondary-foreground: 210 40% 96%; /* Light Gray Text for bot messages */
-    --muted: 222 40% 22%; /* Medium Dark Blue/Gray */
-    --muted-foreground: 215 28% 60%; /* Lighter Gray Text (#828FA1) */
-    --accent: 222 40% 22%; /* Medium Dark Blue/Gray */
-    --accent-foreground: 210 40% 98%; /* Almost White Text */
+    --muted: 220 15% 25%; /* Medium Dark Grey */
+    --muted-foreground: 215 25% 70%; /* Lighter Gray Text */
+    --accent: 220 15% 25%; /* Medium Dark Grey for accents */
+    --accent-foreground: 210 40% 96%; /* Light Grey accent text */
     --destructive: 0 63% 51%; /* Red */
     --destructive-foreground: 0 0% 98%; /* Light text on red */
-    --border: 217 33% 25%; /* Slightly lighter border (#303A4F) */
-    --input: 222 40% 18%; /* Darker Input BG (#1F2635) */
+    --border: 217 30% 30%; /* Slightly darker border */
+    --input: 220 15% 22%; /* Darker Input BG */
     --ring: 25 95% 53%; /* Vibrant Orange for focus rings */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -75,13 +71,13 @@ body {
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     --radius: 0.5rem; /* Standard border radius */
-     --sidebar-background: 222 47% 11%; /* Match background */
-    --sidebar-foreground: 210 40% 98%;
+     --sidebar-background: 220 15% 15%; /* Match background */
+    --sidebar-foreground: 210 40% 96%; /* Match foreground */
     --sidebar-primary: 25 95% 53%; /* Match primary */
     --sidebar-primary-foreground: 0 0% 100%; /* Match primary-foreground */
-    --sidebar-accent: 222 40% 22%; /* Match accent/secondary */
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 25%; /* Match border */
+    --sidebar-accent: 220 15% 25%; /* Match secondary/accent */
+    --sidebar-accent-foreground: 210 40% 96%; /* Match accent-foreground */
+    --sidebar-border: 217 30% 30%; /* Match border */
     --sidebar-ring: 25 95% 53%; /* Match ring */
   }
 }
