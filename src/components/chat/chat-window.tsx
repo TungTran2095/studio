@@ -84,8 +84,8 @@ export const ChatWindow: FC = () => {
   };
 
   return (
-    // Use card styling, match Firebase Studio's less pronounced shadow/border
-    <Card className="flex flex-col h-[calc(100vh-4rem)] max-h-[800px] w-full max-w-4xl mx-auto my-4 rounded-lg overflow-hidden bg-card border shadow-md"> {/* Slightly wider, less margin, subtle shadow */}
+    // Use card styling, adjust size for fixed positioning
+    <Card className="flex flex-col w-96 h-[500px] rounded-lg overflow-hidden bg-card border shadow-xl"> {/* Adjusted size and shadow */}
       <CardHeader className="border-b">
         <CardTitle className="text-center text-lg font-medium text-foreground">EchoBot</CardTitle> {/* Adjusted font weight */}
       </CardHeader>
@@ -102,7 +102,7 @@ export const ChatWindow: FC = () => {
                    {/* Use muted for skeleton bg */}
                    <Skeleton className="h-8 w-8 rounded-full bg-muted" />
                    {/* Use secondary for bot message skeleton */}
-                   <Skeleton className="h-10 rounded-lg p-3 w-1/4 bg-secondary" />
+                   <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-secondary" /> {/* Adjusted width for smaller chat */}
               </div>
              )}
           </div>
