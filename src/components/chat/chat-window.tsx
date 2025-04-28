@@ -122,9 +122,9 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       {/* Conditionally render content based on isExpanded */}
       {isExpanded && (
         <>
-          {/* Content container takes remaining space, adjust padding */}
-          <CardContent className="flex-1 p-0 overflow-hidden">
-            {/* Ensure ScrollArea uses theme colors */}
+          {/* Content container takes remaining space (flex-1), adjust padding */}
+          <CardContent className="flex-1 p-0 overflow-hidden"> {/* Added flex-1 */}
+            {/* Ensure ScrollArea uses theme colors and takes full height */}
             <ScrollArea className="h-full [&>[data-radix-scroll-area-viewport]]:px-3 [&>[data-radix-scroll-area-viewport]]:py-3" ref={scrollAreaRef}>
               <div className="space-y-4">
                 {messages.map((msg, index) => (

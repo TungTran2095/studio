@@ -57,22 +57,24 @@ export default function Home() {
 
       {/* Right Container for Asset Summary and Chat */}
       <aside className="w-96 flex flex-col gap-4 flex-shrink-0">
-         {/* Asset Summary Container */}
+         {/* Asset Summary Container - Use flex basis for better resizing */}
          <div className={cn(
              "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card",
-             isAssetExpanded && isChatExpanded ? 'h-1/2' : '',
-             isAssetExpanded && !isChatExpanded ? 'flex-1' : '', // Takes full height if chat is collapsed
-             !isAssetExpanded ? 'h-auto flex-shrink-0' : '' // Height determined by content (header) when collapsed
+             // When both are expanded, use flex-basis-1/2. If only one is expanded, use flex-1.
+             isAssetExpanded && isChatExpanded ? 'flex-basis-1/2' : '',
+             isAssetExpanded && !isChatExpanded ? 'flex-1' : '',
+             !isAssetExpanded ? 'flex-shrink-0 h-auto' : '' // Collapse to header height
            )}>
             <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} />
          </div>
 
-         {/* Chat Window Container */}
+         {/* Chat Window Container - Use flex basis for better resizing */}
          <div className={cn(
             "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card",
-             isChatExpanded && isAssetExpanded ? 'h-1/2' : '',
-             isChatExpanded && !isAssetExpanded ? 'flex-1' : '', // Takes full height if asset is collapsed
-             !isChatExpanded ? 'h-auto flex-shrink-0' : '' // Height determined by content (header) when collapsed
+            // When both are expanded, use flex-basis-1/2. If only one is expanded, use flex-1.
+             isChatExpanded && isAssetExpanded ? 'flex-basis-1/2' : '',
+             isChatExpanded && !isAssetExpanded ? 'flex-1' : '',
+             !isChatExpanded ? 'flex-shrink-0 h-auto' : '' // Collapse to header height
          )}>
             <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle}/>
          </div>
