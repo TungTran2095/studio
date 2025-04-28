@@ -56,4 +56,10 @@ function isValidUrl(string: string) {
 
 // Initialize the Supabase client
 // Pass the Database generic for type safety
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export const supabase = supabaseUrl && isValidUrl(supabaseUrl) && supabaseAnonKey
+  ? createClient<Database>(supabaseUrl, supabaseAnonKey)
+  : null;
+
+if (!supabase) {
+  console.error('Supabase client could not be initialized. Check your environment variables.');
+}
