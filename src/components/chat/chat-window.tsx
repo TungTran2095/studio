@@ -2,7 +2,7 @@
 
 import type { FC } from "react";
 import { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Keep Card parts for structure
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
@@ -10,7 +10,6 @@ import { generateResponse } from "@/ai/flows/generate-response";
 import type { GenerateResponseInput } from "@/ai/flows/generate-response";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-
 
 interface Message {
   role: "user" | "bot";
@@ -84,13 +83,15 @@ export const ChatWindow: FC = () => {
   };
 
   return (
-    // Use card styling, adjust size for fixed positioning
-    <Card className="flex flex-col w-96 h-[500px] rounded-lg overflow-hidden bg-card border shadow-xl"> {/* Adjusted size and shadow */}
-      <CardHeader className="border-b">
-        <CardTitle className="text-center text-lg font-medium text-foreground">EchoBot</CardTitle> {/* Adjusted font weight */}
+    // Use flex-col and height full to fill the parent `aside`
+    // Removed Card component wrapper, border, shadow, fixed w/h
+    <div className="flex flex-col h-full w-full bg-card">
+      {/* Keep header structure, ensure it doesn't grow */}
+      <CardHeader className="border-b flex-shrink-0">
+        <CardTitle className="text-center text-lg font-medium text-foreground">EchoBot</CardTitle>
       </CardHeader>
-       {/* Content area should match the card's background */}
-      <CardContent className="flex-1 p-0 overflow-hidden bg-card"> {/* Changed to bg-card */}
+      {/* Content area should grow and allow scrolling */}
+      <CardContent className="flex-1 p-0 overflow-hidden"> {/* flex-1 to grow, removed bg-card */}
         <ScrollArea className="h-full" ref={scrollAreaRef}>
            {/* Add padding within the scroll area content */}
           <div className="space-y-4 p-4">
@@ -102,14 +103,14 @@ export const ChatWindow: FC = () => {
                    {/* Use muted for skeleton bg */}
                    <Skeleton className="h-8 w-8 rounded-full bg-muted" />
                    {/* Use secondary for bot message skeleton */}
-                   <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-secondary" /> {/* Adjusted width for smaller chat */}
+                   <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-secondary" />
               </div>
              )}
           </div>
         </ScrollArea>
       </CardContent>
-      {/* Input area uses card styling */}
+      {/* Input area stays at the bottom */}
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-    </Card>
+    </div>
   );
 };

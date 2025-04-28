@@ -3,22 +3,22 @@ import { TradingViewWidget } from "@/components/chart/tradingview-widget";
 
 export default function Home() {
   return (
-    // Use flexbox for the main layout
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Main content area for the chart (takes up remaining space) */}
-      <main className="flex-1 p-4 overflow-y-auto"> {/* Allow vertical scroll if needed */}
-        <h1 className="text-2xl font-semibold mb-4 text-foreground">BTC/USDT Price Chart</h1>
-        {/* Ensure chart container takes available height */}
-        <div className="h-[calc(100vh-8rem)]"> {/* Adjust height considering padding and title */}
+    // Use flexbox for the main layout with padding and gap
+    <div className="flex h-screen bg-background overflow-hidden p-4 gap-4">
+      {/* Main content area for the chart */}
+      <main className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border">
+        {/* Make header smaller and consistent */}
+        <h1 className="text-lg font-semibold p-4 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
+        {/* Chart container takes remaining space and has padding */}
+        <div className="flex-1 p-4 overflow-hidden">
          <TradingViewWidget />
         </div>
       </main>
 
-      {/* Chat Window container */}
-      <aside className="w-96 border-l border-border p-4 flex flex-col">
-        <div className="flex-shrink-0"> {/* Prevent chat window from shrinking */}
-            <ChatWindow />
-        </div>
+      {/* Chat Window container - apply consistent card styling */}
+      <aside className="w-96 border border-border flex flex-col bg-card rounded-lg shadow-md overflow-hidden flex-shrink-0">
+         {/* Let ChatWindow fill this container */}
+         <ChatWindow />
       </aside>
     </div>
   );
