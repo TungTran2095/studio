@@ -2,13 +2,13 @@
 "use client";
 
 import type { FC } from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { ChevronDown, ChevronUp } from 'lucide-react'; // Import icons
-import { fetchBinanceAssets } from "@/actions/binance"; // Import the Server Action
-import type { Asset } from "@/actions/binance"; // Import the Asset type from the action
+import { ChevronDown, ChevronUp, RotateCw } from 'lucide-react'; // Import icons
+import { fetchBinanceAssets, fetchBinanceTradeHistory } from "@/actions/binance"; // Import Server Actions
+import type { Asset, Trade } from "@/actions/binance"; // Import types
 import {
   Table,
   TableBody,
@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs components
 import {
   Form,
   FormControl,
@@ -36,9 +37,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns'; // For formatting timestamps
 
 // Placeholder data for initial state
 const initialAssets: Asset[] = [];
+const initialTrades: Trade[] = [];
 
 // Schema for form validation - remains the same
 const formSchema = z.object({
@@ -55,8 +58,12 @@ interface AssetSummaryProps {
 
 export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) => {
   const [assets, setAssets] = useState<Asset[]>(initialAssets);
-  const [isLoading, setIsLoading] = useState(false);
+  const [trades, setTrades] = useState<Trade[]>(initialTrades);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
+  const [isLoadingTrades, setIsLoadingTrades] = useState(false);
   const [isConnected, setIsConnected] = useState(false); // Track if API is connected
+  const [ownedSymbols, setOwnedSymbols] = useState<string[]>([]); // Store symbols for trade history
+  const [activeTab, setActiveTab] = useState("summary"); // Track active tab
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -68,14 +75,18 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     },
   });
 
+  const currentCredentials = form.getValues(); // Get current form values
+
   // Function to fetch assets using the Server Action
   const handleFetchAssets = async (values: z.infer<typeof formSchema>) => {
-    setIsLoading(true);
-    setIsConnected(false);
+    setIsLoadingAssets(true);
+    setIsConnected(false); // Reset connection status
     setAssets([]); // Clear previous assets
+    setTrades(initialTrades); // Clear previous trades
+    setOwnedSymbols([]); // Clear owned symbols
 
     try {
-      // Call the Server Action
+      // Call the Server Action for assets
       const result = await fetchBinanceAssets({
         apiKey: values.apiKey,
         apiSecret: values.apiSecret,
@@ -84,24 +95,27 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
       if (result.success) {
         setAssets(result.data);
-        setIsConnected(true);
+        setOwnedSymbols(result.ownedSymbols || []); // Store owned symbols
+        setIsConnected(true); // Mark as connected
         toast({
           title: "Success",
           description: "Successfully fetched assets from Binance.",
         });
+        // Automatically fetch trades after fetching assets if on trade history tab
+        if (activeTab === "history") {
+             handleFetchTrades(values, result.ownedSymbols || []);
+        }
       } else {
-        // Handle errors reported by the Server Action
         console.error("Error fetching assets from action:", result.error);
         setAssets(initialAssets);
         setIsConnected(false);
         toast({
-          title: "Error",
+          title: "Error Fetching Assets",
           description: `Failed to fetch assets: ${result.error}. Check credentials and permissions.`,
           variant: "destructive",
         });
       }
     } catch (error) {
-      // Handle unexpected errors during the action call
       console.error("Error calling fetchBinanceAssets action:", error);
       setAssets(initialAssets);
       setIsConnected(false);
@@ -111,22 +125,95 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setIsLoadingAssets(false);
     }
   };
 
-  // Calculate total portfolio value
-  const totalPortfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
+   // Function to fetch trade history using the Server Action
+   const handleFetchTrades = async (
+        credentials: z.infer<typeof formSchema>,
+        symbolsToFetch: string[] // Pass symbols explicitly
+    ) => {
+        if (!isConnected) {
+             toast({ title: "Not Connected", description: "Please load assets first.", variant: "destructive" });
+             return;
+        }
+        if (symbolsToFetch.length === 0) {
+            console.log("No owned symbols with balance found to fetch trade history for.");
+             setTrades([]); // Clear trades if no symbols
+            return; // Don't attempt fetch if no symbols
+        }
+
+
+        setIsLoadingTrades(true);
+        setTrades(initialTrades); // Clear previous trades
+
+        try {
+            // Call the Server Action for trade history
+             const result = await fetchBinanceTradeHistory({
+                apiKey: credentials.apiKey,
+                apiSecret: credentials.apiSecret,
+                isTestnet: credentials.isTestnet,
+                // Pass the symbols obtained from the asset fetch
+                 // We need to construct the pairs (e.g., BTC -> BTCUSDT) - Action handles this now
+                 symbols: undefined, // Let the action determine symbols based on owned assets
+                 limit: 50, // Fetch fewer trades initially for performance
+            });
+
+
+            if (result.success) {
+                setTrades(result.data);
+                if (result.data.length === 0) {
+                     toast({ title: "No Trades", description: "No recent trade history found for your assets." });
+                } else {
+                     toast({ title: "Success", description: `Fetched ${result.data.length} trades.` });
+                }
+
+            } else {
+                console.error("Error fetching trade history from action:", result.error);
+                 setTrades(initialTrades);
+                toast({
+                title: "Error Fetching Trades",
+                description: `Failed to fetch trade history: ${result.error}.`,
+                variant: "destructive",
+                });
+            }
+        } catch (error) {
+             console.error("Error calling fetchBinanceTradeHistory action:", error);
+             setTrades(initialTrades);
+            toast({
+                title: "Error",
+                description: "An unexpected error occurred while fetching trade history.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsLoadingTrades(false);
+        }
+    };
+
+   // Handle tab change
+   const onTabChange = (value: string) => {
+        setActiveTab(value);
+        // Fetch trades if switching to history tab and assets are already loaded
+        if (value === 'history' && isConnected && trades.length === 0 && !isLoadingTrades) {
+            handleFetchTrades(form.getValues(), ownedSymbols);
+        }
+    };
+
+   // Recalculate total portfolio value when assets change
+   const totalPortfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
+
+   const isLoading = isLoadingAssets || isLoadingTrades; // Combined loading state
 
   return (
     // Ensure the container takes full height of its parent div and uses flex column layout
     <div className="flex flex-col h-full w-full overflow-hidden">
       {/* Header remains, adjust padding and border */}
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-medium text-foreground">Asset Summary</CardTitle>
+        <CardTitle className="text-lg font-medium text-foreground">Binance Account</CardTitle>
          <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground"> {/* Ensure button text color matches theme */}
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Asset Summary</span>
+            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Binance Account</span>
         </Button>
       </CardHeader>
 
@@ -137,7 +224,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
           {/* API Key Form */}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleFetchAssets)} className="space-y-3">
-              <FormField
+               {/* Inputs remain the same */}
+               <FormField
                 control={form.control}
                 name="apiKey"
                 render={({ field }) => (
@@ -196,69 +284,153 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                     </FormItem>
                   )}
                 />
-                <Button type="submit" size="sm" disabled={isLoading} className="text-xs h-8">
-                  {isLoading ? "Loading..." : "Load Assets"}
+                <Button type="submit" size="sm" disabled={isLoadingAssets} className="text-xs h-8">
+                  {isLoadingAssets ? "Loading..." : "Load Assets"}
                 </Button>
               </div>
               <FormDescription className="text-xs text-muted-foreground pt-1">
-                  Enter your Binance API credentials. Ensure keys have read-only access. Keys are sent to the server for processing and **not stored**.
+                  Enter your Binance API credentials. Ensure keys have read-only access. Keys are sent to the server for processing and **not stored**. Loading assets will also prepare data for the trade history tab.
               </FormDescription>
             </form>
           </Form>
 
-          {/* Asset Table Area */}
-          <div className="flex-1 overflow-hidden border-t border-border pt-3">
-            <ScrollArea className="h-full">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border">
-                    {/* Update headers slightly if needed */}
-                    <TableHead className="w-[100px] text-muted-foreground">Asset</TableHead>
-                    <TableHead className="text-muted-foreground">Symbol</TableHead>
-                    <TableHead className="text-right text-muted-foreground">Quantity</TableHead>
-                    <TableHead className="text-right text-muted-foreground">Value (USD)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    // Loading Skeletons - remain the same
-                    Array.from({ length: 3 }).map((_, index) => (
-                      <TableRow key={index} className="border-border">
-                        <TableCell><Skeleton className="h-4 w-20 bg-muted" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-10 bg-muted" /></TableCell>
-                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
-                        <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto bg-muted" /></TableCell>
-                      </TableRow>
-                    ))
-                  ) : isConnected && assets.length > 0 ? (
-                    // Display Fetched Assets
-                    assets.map((asset) => (
-                      <TableRow key={asset.symbol} className="border-border">
-                        <TableCell className="font-medium text-foreground">{asset.asset || asset.symbol}</TableCell> {/* Use symbol as fallback */}
-                        <TableCell className="text-foreground">{asset.symbol}</TableCell>
-                        <TableCell className="text-right text-foreground">{asset.quantity.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell> {/* Show more precision for crypto */}
-                        <TableCell className="text-right text-foreground">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    // Initial or No Data Message
-                    <TableRow className="border-border">
-                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                          {isConnected && !isLoading ? "No assets with a balance found or API key lacks permissions." : "Enter API keys to load assets."}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-                {isConnected && assets.length > 0 && !isLoading && (
-                  <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border">
-                      Total Portfolio Value: ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      <br />
-                      <span className="text-xs">Value calculated based on current market prices.</span>
-                  </TableCaption>
+          {/* Tabs for Summary and History */}
+          <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col overflow-hidden pt-3 border-t border-border">
+            <div className="flex justify-between items-center mb-2">
+                <TabsList className="grid w-full grid-cols-2 h-9">
+                    <TabsTrigger value="summary" className="text-xs h-full">Asset Summary</TabsTrigger>
+                    <TabsTrigger value="history" className="text-xs h-full">Trade History</TabsTrigger>
+                </TabsList>
+                 {/* Refresh button for trades, only shown on history tab */}
+                {activeTab === 'history' && isConnected && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleFetchTrades(currentCredentials, ownedSymbols)}
+                        disabled={isLoadingTrades || !isConnected || ownedSymbols.length === 0}
+                        className="ml-2 h-8 w-8 flex-shrink-0"
+                        title="Refresh Trade History"
+                    >
+                        <RotateCw className={`h-4 w-4 ${isLoadingTrades ? 'animate-spin' : ''}`} />
+                        <span className="sr-only">Refresh Trades</span>
+                    </Button>
                 )}
-              </Table>
-            </ScrollArea>
-          </div>
+            </div>
+
+
+            {/* Asset Summary Tab Content */}
+            <TabsContent value="summary" className="flex-1 overflow-hidden mt-0">
+              <ScrollArea className="h-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border">
+                      {/* Update headers slightly if needed */}
+                      <TableHead className="w-[100px] text-muted-foreground text-xs">Asset</TableHead>
+                      <TableHead className="text-muted-foreground text-xs">Symbol</TableHead>
+                      <TableHead className="text-right text-muted-foreground text-xs">Quantity</TableHead>
+                      <TableHead className="text-right text-muted-foreground text-xs">Value (USD)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingAssets ? (
+                      // Loading Skeletons for Assets
+                      Array.from({ length: 3 }).map((_, index) => (
+                        <TableRow key={index} className="border-border">
+                          <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-10 bg-muted" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto bg-muted" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
+                        </TableRow>
+                      ))
+                    ) : isConnected && assets.length > 0 ? (
+                      // Display Fetched Assets
+                      assets.map((asset) => (
+                        <TableRow key={asset.symbol} className="border-border">
+                          <TableCell className="font-medium text-foreground text-xs">{asset.asset || asset.symbol}</TableCell> {/* Use symbol as fallback */}
+                          <TableCell className="text-foreground text-xs">{asset.symbol}</TableCell>
+                          <TableCell className="text-right text-foreground text-xs">{asset.quantity.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell> {/* Show more precision for crypto */}
+                          <TableCell className="text-right text-foreground text-xs">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      // Initial or No Data Message for Assets
+                      <TableRow className="border-border">
+                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground text-xs">
+                            {isConnected && !isLoadingAssets ? "No assets with a balance found." : "Enter API keys to load assets."}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                  {isConnected && assets.length > 0 && !isLoadingAssets && (
+                    <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                        Total Portfolio Value: ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <br />
+                        <span className="text-xs opacity-70">Value calculated based on current market prices.</span>
+                    </TableCaption>
+                  )}
+                </Table>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* Trade History Tab Content */}
+            <TabsContent value="history" className="flex-1 overflow-hidden mt-0">
+               <ScrollArea className="h-full">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="border-border">
+                            <TableHead className="text-muted-foreground text-xs">Time</TableHead>
+                            <TableHead className="text-muted-foreground text-xs">Pair</TableHead>
+                            <TableHead className="text-muted-foreground text-xs">Side</TableHead>
+                            <TableHead className="text-right text-muted-foreground text-xs">Price</TableHead>
+                            <TableHead className="text-right text-muted-foreground text-xs">Amount</TableHead>
+                            <TableHead className="text-right text-muted-foreground text-xs">Total</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {isLoadingTrades ? (
+                             // Loading Skeletons for Trades
+                            Array.from({ length: 5 }).map((_, index) => (
+                                <TableRow key={index} className="border-border">
+                                <TableCell><Skeleton className="h-4 w-24 bg-muted" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-8 bg-muted" /></TableCell>
+                                <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
+                                <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto bg-muted" /></TableCell>
+                                <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
+                                </TableRow>
+                            ))
+                         ) : isConnected && trades.length > 0 ? (
+                            // Display Fetched Trades
+                            trades.map((trade) => (
+                                <TableRow key={trade.id} className="border-border">
+                                <TableCell className="text-foreground text-xs">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
+                                <TableCell className="text-foreground text-xs">{trade.symbol}</TableCell>
+                                <TableCell className={cn("text-xs", trade.isBuyer ? "text-green-500" : "text-red-500")}>
+                                    {trade.isBuyer ? 'BUY' : 'SELL'}
+                                </TableCell>
+                                <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
+                                <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.qty).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
+                                <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.quoteQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                             // Initial or No Data Message for Trades
+                            <TableRow className="border-border">
+                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
+                                     {isConnected && !isLoadingTrades ? "No trade history found or fetch failed." : "Load assets first to enable trade history."}
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                    {isConnected && trades.length > 0 && !isLoadingTrades && (
+                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                             Showing last {trades.length} trades. Refresh for latest.
+                         </TableCaption>
+                    )}
+                </Table>
+               </ScrollArea>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       )}
     </div>

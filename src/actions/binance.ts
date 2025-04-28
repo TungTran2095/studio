@@ -12,23 +12,57 @@ export interface Asset {
   totalValue: number; // Value in USD
 }
 
-// Define the input schema for the action
+// Define the structure for a trade
+export interface Trade {
+    symbol: string;
+    id: number;
+    orderId: number;
+    price: string;
+    qty: string;
+    quoteQty: string; // Total value of the trade (price * qty)
+    commission: string;
+    commissionAsset: string;
+    time: number; // Timestamp
+    isBuyer: boolean;
+    isMaker: boolean;
+}
+
+
+// Define the input schema for the asset action
 const BinanceInputSchema = z.object({
   apiKey: z.string().min(10), // Basic length check
   apiSecret: z.string().min(10), // Basic length check
   isTestnet: z.boolean(),
 });
 
-// Define the output schema (or structure) for the action
-interface BinanceActionResult {
+// Define the input schema for the trade history action (can reuse BinanceInputSchema or be more specific)
+const TradeHistoryInputSchema = BinanceInputSchema.extend({
+    symbols: z.array(z.string()).optional(), // Optional: Fetch history only for specific symbols
+    limit: z.number().optional().default(500), // Optional: Limit number of trades per symbol
+});
+
+
+// Define the output schema (or structure) for the asset action
+interface BinanceAssetsResult {
   success: boolean;
   data: Asset[];
   error?: string;
+  // Include symbols with balance for trade history fetching
+  ownedSymbols?: string[];
 }
 
+// Define the output schema (or structure) for the trade history action
+interface BinanceTradeHistoryResult {
+    success: boolean;
+    data: Trade[];
+    error?: string;
+}
+
+
+// --- Fetch Assets Action ---
 export async function fetchBinanceAssets(
   input: z.infer<typeof BinanceInputSchema>
-): Promise<BinanceActionResult> {
+): Promise<BinanceAssetsResult> {
   // Validate input server-side
   const validationResult = BinanceInputSchema.safeParse(input);
   if (!validationResult.success) {
@@ -60,31 +94,29 @@ export async function fetchBinanceAssets(
     }
 
     // 2. Filter assets with positive balance and prepare symbols for price fetching
-    const ownedAssetsSymbols = Object.keys(balances).filter(
+    const ownedAssetSymbolsWithBalance = Object.keys(balances).filter(
       symbol => parseFloat(balances[symbol].available) > 0 || parseFloat(balances[symbol].onOrder) > 0
     );
 
-    // Add "BTC" if not present to ensure we can calculate non-USDT pairs
-    if (!ownedAssetsSymbols.includes('BTC') && ownedAssetsSymbols.length > 0) {
-        ownedAssetsSymbols.push('BTC');
+    // Add "BTC" and "USDT" if needed for price calculations
+    const symbolsForPricing = new Set(ownedAssetSymbolsWithBalance);
+    if (ownedAssetSymbolsWithBalance.length > 0) {
+        if (!symbolsForPricing.has('BTC')) symbolsForPricing.add('BTC');
+        if (!symbolsForPricing.has('USDT')) symbolsForPricing.add('USDT');
     }
-     // Add "USDT" if not present to ensure we have a base quote currency
-     if (!ownedAssetsSymbols.includes('USDT') && ownedAssetsSymbols.length > 0) {
-         ownedAssetsSymbols.push('USDT');
+
+
+    const symbolsToFetchPrices = new Set<string>();
+     symbolsForPricing.forEach(assetSymbol => {
+       if (assetSymbol !== 'USDT') {
+         symbolsToFetchPrices.add(`${assetSymbol}USDT`); // Try direct USDT pair first
+         symbolsToFetchPrices.add(`${assetSymbol}BTC`); // Try BTC pair as fallback
+       }
+     });
+      // Ensure BTCUSDT price is fetched if we have BTC or need it for conversion
+     if (symbolsForPricing.has('BTC')) {
+        symbolsToFetchPrices.add('BTCUSDT');
      }
-
-
-    const symbolsToFetch = new Set<string>();
-    ownedAssetsSymbols.forEach(assetSymbol => {
-      if (assetSymbol !== 'USDT') {
-        symbolsToFetch.add(`${assetSymbol}USDT`); // Try direct USDT pair first
-        symbolsToFetch.add(`${assetSymbol}BTC`); // Try BTC pair as fallback
-      }
-    });
-     // Ensure BTCUSDT price is fetched if we have BTC or need it for conversion
-    if (ownedAssetsSymbols.includes('BTC')) {
-       symbolsToFetch.add('BTCUSDT');
-    }
 
 
     // 3. Fetch current prices for the required trading pairs
@@ -94,7 +126,7 @@ export async function fetchBinanceAssets(
     }
 
     const filteredPrices: { [key: string]: string } = {};
-    symbolsToFetch.forEach(symbol => {
+    symbolsToFetchPrices.forEach(symbol => {
       if (prices[symbol]) {
         filteredPrices[symbol] = prices[symbol];
       }
@@ -104,7 +136,7 @@ export async function fetchBinanceAssets(
 
     // 4. Calculate total value for each asset
     const assets: Asset[] = [];
-    for (const assetSymbol of ownedAssetsSymbols) {
+    for (const assetSymbol of ownedAssetSymbolsWithBalance) { // Iterate only over symbols with balance
         const quantity = parseFloat(balances[assetSymbol].available) + parseFloat(balances[assetSymbol].onOrder);
         if (quantity <= 0) continue; // Skip if total quantity is zero or less
 
@@ -142,25 +174,195 @@ export async function fetchBinanceAssets(
     // Sort assets by value, descending
     assets.sort((a, b) => b.totalValue - a.totalValue);
 
-    return { success: true, data: assets };
+    return { success: true, data: assets, ownedSymbols: ownedAssetSymbolsWithBalance };
   } catch (error: any) {
-    console.error('Binance API Error:', error);
+    console.error('Binance Asset Fetch Error:', error);
     // Provide a more user-friendly error message
-    let errorMessage = 'An unknown error occurred.';
+    let errorMessage = 'An unknown error occurred while fetching assets.';
     if (error?.message) {
-      if (error.message.includes('Timestamp') || error.message.includes('timestamp')) {
-        errorMessage = 'Request timed out or clock sync issue. Check system time.';
-      } else if (error.message.includes('Invalid API-key') || error.message.includes('signature')) {
-        errorMessage = 'Invalid API key or secret.';
-      } else if (error.message.includes('permissions') || error.message.includes('permission')) {
-          errorMessage = 'API key lacks necessary permissions (requires read access).';
-      } else {
-        errorMessage = `API Error: ${error.message}`;
-      }
+       if (error.message.includes('Timestamp') || error.message.includes('timestamp')) {
+         errorMessage = 'Request timed out or clock sync issue. Check system time.';
+       } else if (error.message.includes('Invalid API-key') || error.message.includes('signature')) {
+         errorMessage = 'Invalid API key or secret.';
+       } else if (error.message.includes('permissions') || error.message.includes('permission')) {
+           errorMessage = 'API key lacks necessary permissions (requires read access).';
+       } else if (error.message.includes('symbol is invalid') || error.message.includes('Invalid symbol')) {
+           // Ignore invalid symbol errors during price fetching if possible, log otherwise
+           console.warn('Ignoring invalid symbol error during price fetch:', error.message);
+           // Continue execution if possible, or return partial data? For now, fail.
+           errorMessage = `Error fetching prices: ${error.message}`;
+       }
+       else {
+         errorMessage = `API Error: ${error.message}`;
+       }
     } else if (typeof error === 'string') {
         errorMessage = error;
     }
 
     return { success: false, data: [], error: errorMessage };
   }
+}
+
+
+// --- Fetch Trade History Action ---
+export async function fetchBinanceTradeHistory(
+    input: z.infer<typeof TradeHistoryInputSchema>
+): Promise<BinanceTradeHistoryResult> {
+    const validationResult = TradeHistoryInputSchema.safeParse(input);
+    if (!validationResult.success) {
+        return { success: false, data: [], error: 'Invalid input for trade history.' };
+    }
+
+    const { apiKey, apiSecret, isTestnet, symbols, limit } = validationResult.data;
+
+    // Configure Binance client
+    const binance = new Binance().options({
+        APIKEY: apiKey,
+        APISECRET: apiSecret,
+        ...(isTestnet && {
+            urls: { base: 'https://testnet.binance.vision/api/' },
+        }),
+        // recvWindow: 60000,
+    });
+
+    try {
+        let symbolsToFetch: string[] = [];
+
+        // If specific symbols are provided, use them
+        if (symbols && symbols.length > 0) {
+            symbolsToFetch = symbols;
+        } else {
+            // Otherwise, fetch all available trading pairs (this can be a lot!)
+            // Alternatively, fetch symbols from user's balance (requires another call or passing from asset fetch)
+            // For now, let's fetch pairs based on common quote assets USDT and BTC - this is an assumption
+            // A better approach would be to pass owned symbols from the asset fetch result.
+            // Let's assume `fetchBinanceAssets` is called first and `ownedSymbols` are passed.
+            // **MODIFICATION**: Expect `symbols` to be passed (e.g., from asset fetch result).
+            // If `symbols` is empty/undefined, maybe default to BTCUSDT or return error.
+            // For this implementation, we require `symbols` to be passed if not specified in input.
+             if (!input.symbols) {
+                // Fetch symbols from account info if not provided
+                 const accountInfo = await binance.account();
+                 if (!accountInfo || !accountInfo.balances) {
+                     throw new Error('Could not fetch account info to determine symbols.');
+                 }
+                 const ownedSymbols = accountInfo.balances
+                    .filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
+                    .map((b: any) => b.asset);
+
+                // Need to form pairs (e.g., BTC -> BTCUSDT, ETH -> ETHUSDT, ETHBTC)
+                // This logic can get complex. Let's try fetching common pairs for owned assets.
+                const exchangeInfo = await binance.exchangeInfo();
+                const availableSymbols = exchangeInfo.symbols.map((s: any) => s.symbol);
+
+                ownedSymbols.forEach((asset: string) => {
+                     if (asset !== 'USDT' && availableSymbols.includes(`${asset}USDT`)) {
+                        symbolsToFetch.push(`${asset}USDT`);
+                     }
+                     if (asset !== 'BTC' && asset !== 'USDT' && availableSymbols.includes(`${asset}BTC`)) {
+                        symbolsToFetch.push(`${asset}BTC`);
+                     }
+                     // Add more quote currencies if needed (e.g., EUR, BNB)
+                });
+                // Remove duplicates
+                symbolsToFetch = [...new Set(symbolsToFetch)];
+
+                if (symbolsToFetch.length === 0 && ownedSymbols.includes('BTC') && availableSymbols.includes('BTCUSDT')){
+                     symbolsToFetch.push('BTCUSDT'); // Fallback for BTC only accounts
+                }
+             } else {
+                 symbolsToFetch = input.symbols; // Use provided symbols directly
+             }
+
+
+            if (symbolsToFetch.length === 0) {
+                 return { success: true, data: [], error: "No relevant trading pairs found for your assets or none specified." };
+            }
+
+        }
+
+
+        console.log(`Fetching trades for symbols: ${symbolsToFetch.join(', ')} with limit ${limit}`);
+
+
+        let allTrades: Trade[] = [];
+        const fetchPromises = symbolsToFetch.map(symbol =>
+            binance.myTrades(symbol, { limit: limit }) // Fetch trades for each symbol
+                .then((trades: any) => {
+                     if (Array.isArray(trades)) {
+                        console.log(`Fetched ${trades.length} trades for ${symbol}`);
+                        // Ensure trades have the expected structure
+                        return trades.map((trade: any) => ({
+                            symbol: trade.symbol,
+                            id: trade.id,
+                            orderId: trade.orderId,
+                            price: trade.price,
+                            qty: trade.qty,
+                            quoteQty: trade.quoteQty,
+                            commission: trade.commission,
+                            commissionAsset: trade.commissionAsset,
+                            time: trade.time,
+                            isBuyer: trade.isBuyer,
+                            isMaker: trade.isMaker,
+                        } as Trade));
+                    }
+                    console.warn(`Received non-array response for ${symbol} trades:`, trades);
+                    return []; // Return empty array if response is not as expected
+
+                })
+                .catch((error: any) => {
+                     // Handle specific errors, e.g., "Invalid symbol"
+                    if (error?.message?.includes('Invalid symbol') || error?.body?.includes('-1121')) {
+                        console.warn(`Skipping invalid symbol for trade history: ${symbol}`);
+                        return []; // Ignore errors for invalid symbols
+                    }
+                    if(error?.message?.includes('Duplicate') || error?.body?.includes('-1104')) {
+                        // Sometimes happens with concurrent requests, maybe retry or ignore
+                        console.warn(`Duplicate request warning for ${symbol}, skipping: ${error.message}`);
+                        return [];
+                    }
+                     if(error?.message?.includes('Too many requests') || error?.body?.includes('-1003')) {
+                        console.warn(`Rate limited fetching trades for ${symbol}, skipping.`);
+                        // Implement backoff/retry later if needed
+                        return [];
+                    }
+                    console.error(`Error fetching trades for ${symbol}:`, error);
+                    throw new Error(`Failed to fetch trades for ${symbol}: ${error.message || 'Unknown error'}`); // Re-throw other errors
+                })
+        );
+
+        const results = await Promise.all(fetchPromises);
+        results.forEach(trades => {
+            if (trades) { // Check if trades is defined (handles ignored errors)
+                 allTrades = allTrades.concat(trades);
+            }
+
+        });
+
+        // Sort trades by time, descending (most recent first)
+        allTrades.sort((a, b) => b.time - a.time);
+
+        console.log(`Fetched a total of ${allTrades.length} trades.`);
+
+        return { success: true, data: allTrades };
+
+    } catch (error: any) {
+        console.error('Binance Trade History Fetch Error:', error);
+        let errorMessage = 'An unknown error occurred while fetching trade history.';
+        if (error?.message) {
+            if (error.message.includes('Timestamp') || error.message.includes('timestamp')) {
+                errorMessage = 'Request timed out or clock sync issue. Check system time.';
+            } else if (error.message.includes('Invalid API-key') || error.message.includes('signature')) {
+                errorMessage = 'Invalid API key or secret.';
+            } else if (error.message.includes('permissions') || error.message.includes('permission')) {
+                errorMessage = 'API key lacks permissions (requires trade history access).';
+            } else {
+                 errorMessage = `API Error: ${error.message}`;
+            }
+
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        }
+        return { success: false, data: [], error: errorMessage };
+    }
 }
