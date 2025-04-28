@@ -38,11 +38,15 @@ interface SaveMessageResult {
  */
 export async function fetchChatHistory(): Promise<FetchHistoryResult> {
   console.log('[fetchChatHistory] Attempting to fetch chat history...');
+  if (!supabase) {
+      console.error('[fetchChatHistory] Supabase client is not initialized.');
+      return { success: false, data: [], error: 'Supabase client not initialized.' };
+  }
   try {
     const { data, error } = await supabase
       .from('message_history')
       .select('*') // Select all columns
-      .order('created_at', { ascending: true }); // Order by timestamp
+      .order('created_at', { ascending: true }); // Order by timestamp ASC
 
     if (error) {
       console.error('[fetchChatHistory] Supabase error:', error);
@@ -65,6 +69,10 @@ export async function saveChatMessage(
   input: z.infer<typeof SaveMessageSchema>
 ): Promise<SaveMessageResult> {
   console.log('[saveChatMessage] Attempting to save message:', { role: input.role, content: input.content.substring(0, 50) + '...' });
+  if (!supabase) {
+    console.error('[saveChatMessage] Supabase client is not initialized.');
+    return { success: false, error: 'Supabase client not initialized.' };
+   }
 
   // Validate input
   const validationResult = SaveMessageSchema.safeParse(input);
@@ -92,4 +100,3 @@ export async function saveChatMessage(
     return { success: false, error: err.message || 'An unknown error occurred.' };
   }
 }
-

@@ -38,12 +38,15 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
   // Fetch initial chat history on component mount
   useEffect(() => {
     const loadHistory = async () => {
+      console.log("[ChatWindow] Fetching chat history...");
       setIsLoadingHistory(true);
       const result = await fetchChatHistory();
       if (result.success) {
+        console.log(`[ChatWindow] Successfully fetched ${result.data.length} messages.`);
         // Map roles if necessary, assuming DB roles match 'user' | 'bot'
         setMessages(result.data);
       } else {
+        console.error("[ChatWindow] Error fetching chat history:", result.error);
         toast({
           title: "Error Loading History",
           description: `Failed to fetch chat history: ${result.error}`,
