@@ -2,7 +2,7 @@
 "use client";
 
 import type { FC } from "react";
-import { useState, useEffect, useCallback } from "react"; // Added useCallback
+import { useState, useEffect, useCallback, useRef } from "react"; // Added useRef
 import { useForm, useWatch } from "react-hook-form"; // Added useWatch
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -81,6 +81,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
   } = useAssetStore();
 
   const { toast } = useToast();
+  const summaryViewportRef = useRef<HTMLDivElement>(null); // Ref for summary scroll area
+  const historyViewportRef = useRef<HTMLDivElement>(null); // Ref for history scroll area
 
    // Initialize the form with values from the store
    const form = useForm<z.infer<typeof formSchema>>({
@@ -227,7 +229,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         } finally {
             setIsLoadingTrades(false);
         }
-    }, [isConnected, setIsLoadingTrades, setTrades, toast]);
+    }, [isConnected, setIsLoadingTrades, setTrades, toast, setCredentials]); // Added setCredentials dependency
 
 
   // Function to fetch assets using the Server Action and update store
@@ -555,7 +557,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
             {/* Asset Summary Tab Content */}
             <TabsContent value="summary" className="flex-1 overflow-hidden mt-0">
-              <ScrollArea className="h-full">
+              {/* Pass viewportRef to ScrollArea */}
+              <ScrollArea className="h-full" viewportRef={summaryViewportRef}>
                 {/* Use store state for rendering */}
                 <Table>
                   <TableHeader>
@@ -594,7 +597,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
             {/* Trade History Tab Content */}
             <TabsContent value="history" className="flex-1 overflow-hidden mt-0">
-               <ScrollArea className="h-full">
+              {/* Pass viewportRef to ScrollArea */}
+               <ScrollArea className="h-full" viewportRef={historyViewportRef}>
                  {/* Use store state for rendering (uses filtered trades) */}
                 <Table>
                     <TableHeader>
