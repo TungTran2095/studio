@@ -32,7 +32,6 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
   // Access credentials from Zustand store using a selector
   const { apiKey, apiSecret, isTestnet } = useAssetStore(state => ({
     apiKey: state.apiKey,
@@ -79,10 +78,11 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       message: messageContent,
       chatHistory: chatHistoryForAI,
       // Conditionally include credentials only if they exist in the store
-      ...(credentialsAvailable && { apiKey, apiSecret }),
+      ...(credentialsAvailable && { apiKey: apiKey, apiSecret: apiSecret }), // Pass apiKey and apiSecret if available
       // Pass isTestnet status from the store (defaults to false in schema if undefined/null)
       isTestnet: isTestnet ?? false,
     };
+
 
     try {
       // Call the flow function (which now might use tools)
@@ -92,12 +92,22 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
        setMessages((prevMessages) => [...prevMessages, aiResponse]);
     } catch (error: any) {
       console.error("Error generating AI response:", error);
-      const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
-       toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      // Check if the error is a Zod validation error
+      if (error.issues) { // Zod errors often have an 'issues' array
+        const validationErrors = error.issues.map((issue: any) => `${issue.path.join('.')}: ${issue.message}`).join('\n');
+        toast({
+          title: "Input Error",
+          description: `There was an issue with the data sent: \n${validationErrors}`,
+          variant: "destructive",
+        });
+      } else {
+        const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
+         toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
       // Optionally keep the user message even if the bot fails, for context
       // setMessages((prevMessages) => prevMessages.filter(msg => msg !== newUserMessage)); // Example: Remove the specific user message
     } finally {
@@ -124,9 +134,10 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
           {/* Use p-0 on CardContent and apply padding within ScrollArea viewport */}
           <CardContent className="flex-1 p-0 overflow-hidden">
             {/* Ensure ScrollArea uses theme colors and takes full height */}
-            <ScrollArea className="h-full" viewportRef={viewportRef}>
+            <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both"> {/* Enable both orientations */}
                 {/* Add padding directly to the container inside viewport */}
-              <div className="space-y-4 p-3">
+                {/* min-w-max ensures the inner div can expand horizontally */}
+              <div className="space-y-4 p-3 min-w-max">
                 {messages.map((msg, index) => (
                   <ChatMessage key={index} role={msg.role} content={msg.content} />
                 ))}

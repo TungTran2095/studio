@@ -177,24 +177,32 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 // This is an extra layer of safety, main pair should be BTCUSDT
                 const targetSymbolsSet = new Set(TARGET_SYMBOLS);
                 const filteredTrades = result.data.filter(trade => {
-                    // Determine base and quote - simplified logic for BTC/USDT
-                    let baseAsset = "";
-                    let quoteAsset = "";
-                    if (trade.symbol === 'BTCUSDT') {
-                        baseAsset = 'BTC';
-                        quoteAsset = 'USDT';
-                    } else {
-                        // Add more robust parsing if other pairs were included in fetch
-                         const knownQuoteAssets = ['USDT']; // Focus on USDT as quote for simplicity now
-                         for (const quote of knownQuoteAssets) {
-                            if (trade.symbol.endsWith(quote) && trade.symbol.length > quote.length) {
-                                baseAsset = trade.symbol.substring(0, trade.symbol.length - quote.length);
-                                quoteAsset = quote;
-                                break;
-                            }
-                         }
-                         if(!baseAsset) baseAsset = trade.symbol; // Fallback
+                    // Determine base and quote - use the properties from the trade object if available
+                    const base = trade.baseAsset || ""; // Use provided baseAsset
+                    const quote = trade.quoteAsset || ""; // Use provided quoteAsset
+
+                    // If base/quote not provided, attempt simple parse (fallback)
+                    let baseAsset = base;
+                    let quoteAsset = quote;
+                    if (!baseAsset || !quoteAsset) {
+                        // console.warn(`Trade ${trade.id} for ${trade.symbol} missing base/quote asset. Attempting fallback parse.`);
+                        if (trade.symbol === 'BTCUSDT') {
+                            baseAsset = 'BTC';
+                            quoteAsset = 'USDT';
+                        } else {
+                             // Add more robust parsing if other pairs were included in fetch
+                             const knownQuoteAssets = ['USDT']; // Focus on USDT as quote for simplicity now
+                             for (const q of knownQuoteAssets) {
+                                if (trade.symbol.endsWith(q) && trade.symbol.length > q.length) {
+                                    baseAsset = trade.symbol.substring(0, trade.symbol.length - q.length);
+                                    quoteAsset = q;
+                                    break;
+                                }
+                             }
+                             if(!baseAsset) baseAsset = trade.symbol; // Fallback if still nothing
+                        }
                     }
+
 
                     // Include the trade if EITHER the base OR quote asset is in our target list
                     return targetSymbolsSet.has(baseAsset) || targetSymbolsSet.has(quoteAsset);
@@ -205,9 +213,9 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                  setTrades(filteredTrades); // Update trades in store with filtered list
 
                 if (filteredTrades.length === 0) {
-                     toast({ title: "No Relevant Trades Found", description: `No recent trade history found involving ${TARGET_SYMBOLS.join(', ')}.` });
+                     toast({ title: "No Relevant Trades Found", description: `No recent trade history found involving ${TARGET_SYMBOLS.join(' or ')}.` });
                 } else {
-                     toast({ title: "Success", description: `Fetched ${filteredTrades.length} relevant trades for ${TARGET_SYMBOLS.join(', ')}.` });
+                     toast({ title: "Success", description: `Fetched ${filteredTrades.length} relevant trades for ${TARGET_SYMBOLS.join(' and ')}.` });
                 }
             } else {
                  setTrades([]); // Clear trades in store on failure
@@ -394,14 +402,14 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         if (trades.length > 0 && !isLoadingTrades) {
             return trades.map((trade) => (
                 <TableRow key={trade.id} className="border-border">
-                    <TableCell className="text-foreground text-xs">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
-                    <TableCell className="text-foreground text-xs">{trade.symbol}</TableCell>
-                    <TableCell className={cn("text-xs", trade.isBuyer ? "text-green-500" : "text-red-500")}>
+                    <TableCell className="text-foreground text-xs whitespace-nowrap">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
+                    <TableCell className="text-foreground text-xs whitespace-nowrap">{trade.symbol}</TableCell>
+                    <TableCell className={cn("text-xs whitespace-nowrap", trade.isBuyer ? "text-green-500" : "text-red-500")}>
                         {trade.isBuyer ? 'BUY' : 'SELL'}
                     </TableCell>
-                    <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
-                    <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.qty).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
-                    <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.quoteQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap">{parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap">{parseFloat(trade.qty).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap">{parseFloat(trade.quoteQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                 </TableRow>
             ));
         }
@@ -558,84 +566,90 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
             {/* Asset Summary Tab Content */}
             <TabsContent value="summary" className="flex-1 overflow-hidden mt-0">
               {/* Pass viewportRef to ScrollArea */}
-              <ScrollArea className="h-full" viewportRef={summaryViewportRef}>
-                {/* Use store state for rendering */}
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-border">
-                      {/* Update headers slightly if needed */}
-                      <TableHead className="w-[100px] text-muted-foreground text-xs">Asset</TableHead>
-                      <TableHead className="text-muted-foreground text-xs">Symbol</TableHead>
-                      <TableHead className="text-right text-muted-foreground text-xs">Quantity</TableHead>
-                      <TableHead className="text-right text-muted-foreground text-xs">Value (USD)</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {renderAssetRows()}
-                  </TableBody>
-                   {/* Use store state for condition (based on filtered assets: BTC, USDT) */}
-                  {isConnected && assets.length > 0 && !isLoadingAssets && (
-                    <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                        Total Value ({TARGET_SYMBOLS.join(' & ')}): ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        <br />
-                        <span className="text-xs opacity-70">Value calculated based on current market prices.</span>
-                    </TableCaption>
-                  )}
-                   {isConnected && assets.length === 0 && !isLoadingAssets && (
-                     <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                         No balance found for {TARGET_SYMBOLS.join(' or ')}. Check Binance account or API key permissions.
-                     </TableCaption>
-                   )}
-                    {!isConnected && !isLoadingAssets && (
+              <ScrollArea className="h-full" viewportRef={summaryViewportRef} orientation="both"> {/* Enable both orientations */}
+                {/* Wrap table in a div to allow horizontal scrolling */}
+                <div className="min-w-max"> {/* Ensure content doesn't shrink */}
+                    {/* Use store state for rendering */}
+                    <Table>
+                    <TableHeader>
+                        <TableRow className="border-border">
+                        {/* Update headers slightly if needed */}
+                        <TableHead className="w-[100px] text-muted-foreground text-xs">Asset</TableHead>
+                        <TableHead className="text-muted-foreground text-xs">Symbol</TableHead>
+                        <TableHead className="text-right text-muted-foreground text-xs">Quantity</TableHead>
+                        <TableHead className="text-right text-muted-foreground text-xs">Value (USD)</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {renderAssetRows()}
+                    </TableBody>
+                    {/* Use store state for condition (based on filtered assets: BTC, USDT) */}
+                    {isConnected && assets.length > 0 && !isLoadingAssets && (
                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                            Enter API keys and click "Load Assets".
+                            Total Value ({TARGET_SYMBOLS.join(' & ')}): ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <br />
+                            <span className="text-xs opacity-70">Value calculated based on current market prices.</span>
                         </TableCaption>
                     )}
-                </Table>
+                    {isConnected && assets.length === 0 && !isLoadingAssets && (
+                        <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                            No balance found for {TARGET_SYMBOLS.join(' or ')}. Check Binance account or API key permissions.
+                        </TableCaption>
+                    )}
+                        {!isConnected && !isLoadingAssets && (
+                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                                Enter API keys and click "Load Assets".
+                            </TableCaption>
+                        )}
+                    </Table>
+                 </div>
               </ScrollArea>
             </TabsContent>
 
             {/* Trade History Tab Content */}
             <TabsContent value="history" className="flex-1 overflow-hidden mt-0">
               {/* Pass viewportRef to ScrollArea */}
-               <ScrollArea className="h-full" viewportRef={historyViewportRef}>
-                 {/* Use store state for rendering (uses filtered trades) */}
-                <Table>
-                    <TableHeader>
-                        <TableRow className="border-border">
-                            <TableHead className="text-muted-foreground text-xs">Time</TableHead>
-                            <TableHead className="text-muted-foreground text-xs">Pair</TableHead>
-                            <TableHead className="text-muted-foreground text-xs">Side</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-xs">Price</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-xs">Amount</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-xs">Total</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {renderTradeRows()}
-                    </TableBody>
-                     {/* Use store state for condition */}
-                    {isConnected && trades.length > 0 && !isLoadingTrades && (
-                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             Showing last {trades.length} relevant trades involving {TARGET_SYMBOLS.join(' or ')}. Refresh for latest.
-                         </TableCaption>
-                    )}
-                      {isConnected && trades.length === 0 && !isLoadingTrades && apiKey && apiSecret && ( // Only show 'No trades found' if tried and finished loading
-                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             No recent relevant trades found involving {TARGET_SYMBOLS.join(' or ')}.
-                         </TableCaption>
-                    )}
-                     {!isConnected && !isLoadingTrades && ( // Show prompt if not connected
-                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             Load Assets first to view trade history.
-                         </TableCaption>
-                     )}
-                      {!apiKey || !apiSecret && !isLoadingTrades && ( // Show prompt if no credentials
-                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             Enter API Keys to view trade history.
-                         </TableCaption>
-                     )}
-                </Table>
+               <ScrollArea className="h-full" viewportRef={historyViewportRef} orientation="both"> {/* Enable both orientations */}
+                 {/* Wrap table in a div to allow horizontal scrolling */}
+                 <div className="min-w-max"> {/* Ensure content doesn't shrink */}
+                    {/* Use store state for rendering (uses filtered trades) */}
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="border-border">
+                                <TableHead className="text-muted-foreground text-xs whitespace-nowrap">Time</TableHead>
+                                <TableHead className="text-muted-foreground text-xs whitespace-nowrap">Pair</TableHead>
+                                <TableHead className="text-muted-foreground text-xs whitespace-nowrap">Side</TableHead>
+                                <TableHead className="text-right text-muted-foreground text-xs whitespace-nowrap">Price</TableHead>
+                                <TableHead className="text-right text-muted-foreground text-xs whitespace-nowrap">Amount</TableHead>
+                                <TableHead className="text-right text-muted-foreground text-xs whitespace-nowrap">Total</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {renderTradeRows()}
+                        </TableBody>
+                        {/* Use store state for condition */}
+                        {isConnected && trades.length > 0 && !isLoadingTrades && (
+                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                                Showing last {trades.length} relevant trades involving {TARGET_SYMBOLS.join(' or ')}. Refresh for latest.
+                            </TableCaption>
+                        )}
+                        {isConnected && trades.length === 0 && !isLoadingTrades && apiKey && apiSecret && ( // Only show 'No trades found' if tried and finished loading
+                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                                No recent relevant trades found involving {TARGET_SYMBOLS.join(' or ')}.
+                            </TableCaption>
+                        )}
+                        {!isConnected && !isLoadingTrades && ( // Show prompt if not connected
+                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                                Load Assets first to view trade history.
+                            </TableCaption>
+                        )}
+                        {!apiKey || !apiSecret && !isLoadingTrades && ( // Show prompt if no credentials
+                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                                Enter API Keys to view trade history.
+                            </TableCaption>
+                        )}
+                    </Table>
+                  </div>
                </ScrollArea>
             </TabsContent>
           </Tabs>
