@@ -12,72 +12,75 @@ export const TradingViewWidget: React.FC = memo(() => {
     if (!container.current || scriptAdded.current) return;
 
     // Determine the theme *before* creating the JSON string
-    // Check if document is available (client-side)
     const currentTheme = typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? "dark" : "light";
 
+    // Configuration for the Advanced Real-Time Chart Widget
     const widgetConfig = {
-      "symbols": [
-        [
-          "BINANCE:BTCUSDT|1D"
-        ]
-      ],
-      "chartOnly": true,
       "width": "100%",
       "height": "100%",
+      "symbol": "BINANCE:BTCUSDT", // Primary symbol
+      "interval": "D", // Default interval (Daily)
+      "timezone": "Etc/UTC",
+      "theme": currentTheme,
+      "style": "1", // 1 = Candlesticks
       "locale": "en",
-      "colorTheme": currentTheme, // Use variable directly
-      "autosize": true,
-      "showVolume": false,
-      "showMA": false,
-      "hideDateRanges": false,
-      "hideMarketStatus": true,
-      "hideSymbolLogo": true,
-      "scalePosition": "right",
-      "scaleMode": "Normal",
-      "fontFamily": "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
-      "fontSize": "10",
-      "noTimeScale": false,
-      "valuesTracking": "1",
-      "changeMode": "price-and-percent",
-      "chartType": "candlesticks", // Corrected typo: candlestick -> candlesticks
-      "maLineColor": "#2962FF",
-      "maLineWidth": 1,
-      "maLength": 9,
-      "lineWidth": 2,
-      "lineType": 0,
-      "dateFormat": "dd MMM yy", // Removed single quotes, ensure keys are quoted
+      "enable_publishing": false, // Disable publishing button
+      "allow_symbol_change": true, // Allow user to change symbol
+      "withdateranges": true, // Show date ranges
+      "hide_side_toolbar": false, // Show drawing toolbar
+      "hide_top_toolbar": false, // Show top toolbar (interval, chart type etc.)
       "studies": [
-        "IchimokuCloud@tv-basicstudies" // Add Ichimoku Cloud indicator
-      ]
+        "IchimokuCloud@tv-basicstudies" // Keep Ichimoku Cloud
+      ],
+      "container_id": "tradingview_chart_container", // Important for advanced widget
+      "autosize": true,
     };
-
 
     const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
+    // Use the Advanced Chart Widget script
+    script.src = "https://s3.tradingview.com/tv.js";
     script.type = "text/javascript";
     script.async = true;
-    // Use JSON.stringify to ensure valid JSON format
-    script.innerHTML = JSON.stringify(widgetConfig);
+    script.onload = () => {
+        if (typeof TradingView !== 'undefined') {
+           // Ensure the container ID matches the one in widgetConfig
+           new (window as any).TradingView.widget(widgetConfig);
+           scriptAdded.current = true; // Mark script as loaded and widget initialized
+        }
+    }
+    script.onerror = () => {
+        console.error("TradingView script failed to load.");
+        // Handle error appropriately, maybe show a message to the user
+    }
 
 
+    // The advanced widget script doesn't use innerHTML for config.
+    // It needs a container div with a specific ID.
+    // The script's onload handler initializes the widget.
     container.current.appendChild(script);
-    scriptAdded.current = true; // Mark script as added
 
-    // Optional: Cleanup script on component unmount
+
+    // Cleanup function: Remove the widget and script if the component unmounts
     return () => {
-      if (container.current && container.current.contains(script)) {
-         container.current.removeChild(script);
-         scriptAdded.current = false; // Reset script added status on unmount
+      // The advanced widget might add its own elements. Simple script removal might not be enough.
+      // Ideally, TradingView provides a cleanup method, but a simple removal might suffice for basic cases.
+      if (container.current) {
+        // Clear the container's content
+        while (container.current.firstChild) {
+          container.current.removeChild(container.current.firstChild);
+        }
       }
+      // Reset script added status
+      scriptAdded.current = false;
     };
-    // Add currentTheme to dependency array if it might change dynamically
-    // For now, assuming theme is set on initial load based on class
   }, []); // Empty dependency array ensures this runs only once on mount
 
-   // Use Tailwind classes for styling the container
+
+   // Container div for the advanced widget, ID must match config
    return (
     <div className="tradingview-widget-container h-full w-full" ref={container}>
-      <div className="tradingview-widget-container__widget h-full w-full"></div>
+      {/* The widget script will target this ID */}
+      <div id="tradingview_chart_container" className="h-full w-full"></div>
       <div className="tradingview-widget-copyright">
         {/* Optional: Link to TradingView */}
         {/* <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank"><span className="blue-text">Track all markets on TradingView</span></a> */}
