@@ -134,10 +134,11 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
           {/* Use p-0 on CardContent and apply padding within ScrollArea viewport */}
           <CardContent className="flex-1 p-0 overflow-hidden">
             {/* Ensure ScrollArea uses theme colors and takes full height */}
-            <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both"> {/* Enable both orientations */}
+            {/* Set orientation to vertical only for the chat messages list */}
+            <ScrollArea className="h-full" viewportRef={viewportRef} orientation="vertical">
                 {/* Add padding directly to the container inside viewport */}
-                {/* min-w-max ensures the inner div can expand horizontally */}
-              <div className="space-y-4 p-3 min-w-max">
+                {/* No min-w-max needed here as text should wrap */}
+              <div className="space-y-4 p-3">
                 {messages.map((msg, index) => (
                   <ChatMessage key={index} role={msg.role} content={msg.content} />
                 ))}

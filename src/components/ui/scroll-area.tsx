@@ -16,7 +16,8 @@ interface ScrollAreaProps extends React.ComponentPropsWithoutRef<typeof ScrollAr
 const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
   ScrollAreaProps // Use the extended props interface
->(({ className, children, viewportRef, orientation = "vertical", ...props }, ref) => ( // Default to vertical
+// Default orientation to vertical, allow explicit override
+>(({ className, children, viewportRef, orientation = "vertical", ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     ref={ref}
     className={cn("relative overflow-hidden", className)}
@@ -25,7 +26,13 @@ const ScrollArea = React.forwardRef<
     {/* Pass the viewportRef to the Viewport component */}
     <ScrollAreaPrimitive.Viewport
       ref={viewportRef}
-      className="h-full w-full rounded-[inherit]"
+      // Ensure viewport handles potential overflow based on parent ScrollArea type
+      className={cn("h-full w-full rounded-[inherit]",
+         // Add specific overflow handling based on orientation prop
+         orientation === 'vertical' && 'overflow-y-auto overflow-x-hidden',
+         orientation === 'horizontal' && 'overflow-x-auto overflow-y-hidden',
+         orientation === 'both' && 'overflow-auto'
+      )}
     >
       {children}
     </ScrollAreaPrimitive.Viewport>
@@ -49,15 +56,14 @@ const ScrollBar = React.forwardRef<
       orientation === "vertical" &&
         "h-full w-2.5 border-l border-l-transparent p-[1px]",
       orientation === "horizontal" &&
-        "h-2.5 flex-col border-t border-t-transparent p-[1px]", // Changed to flex-col
+        "h-2.5 flex-col border-t border-t-transparent p-[1px]",
       className
     )}
     {...props}
   >
+    {/* Ensure thumb is visible with a background color */}
     <ScrollAreaPrimitive.ScrollAreaThumb className={cn(
-        "relative rounded-full bg-border", // Ensure thumb is visible
-         orientation === 'vertical' && 'flex-1', // Ensure vertical thumb fills height
-         orientation === 'horizontal' && 'flex-1' // Ensure horizontal thumb fills width (might need width adjustment if parent flex-col)
+        "relative rounded-full bg-border flex-1", // Use border color for thumb, ensure it fills space
       )} />
   </ScrollAreaPrimitive.ScrollAreaScrollbar>
 ))

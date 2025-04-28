@@ -1,3 +1,4 @@
+// src/components/chat/chat-message.tsx
 "use client";
 
 import type { FC } from "react";
@@ -21,8 +22,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
       )}
     >
       {!isUser && (
-        <Avatar className="h-8 w-8 border border-border flex-shrink-0"> {/* Added flex-shrink-0 */}
-           {/* Use accent for bot avatar fallback background to contrast with bot message */}
+        <Avatar className="h-8 w-8 border border-border flex-shrink-0">
           <AvatarFallback className="bg-accent text-accent-foreground">
             <Bot className="h-5 w-5" />
           </AvatarFallback>
@@ -30,21 +30,24 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
       )}
       <div
         className={cn(
-          "rounded-lg p-3 shadow-sm", // Use theme's radius and shadow
-           // Reduced max-width from 75% to 70%
-          "max-w-[70%]",
+          "rounded-lg p-3 shadow-sm",
+          // Let the chat bubble take up to 70% width, text should wrap inside
+          "max-w-[70%]", // Reduced max-width slightly
           isUser
-            ? "bg-primary-gradient text-primary-foreground" // User message uses gradient
-            : "bg-secondary text-secondary-foreground" // Bot message uses secondary theme color
+            ? "bg-primary-gradient text-primary-foreground"
+            : "bg-secondary text-secondary-foreground"
         )}
       >
-         {/* Use foreground color for text within the bubble, let the parent div set the correct color */}
-         {/* Added break-words to ensure long words wrap */}
+        {/*
+         Ensure text wraps naturally and breaks long words.
+         whitespace-pre-wrap: Preserves whitespace and wraps text.
+         break-words: Allows long words to break and wrap to the next line.
+         text-current: Inherits text color from the parent div.
+        */}
         <p className="text-sm whitespace-pre-wrap break-words text-current">{content}</p>
       </div>
        {isUser && (
-        <Avatar className="h-8 w-8 border border-border flex-shrink-0"> {/* Added flex-shrink-0 */}
-           {/* Use accent for user avatar fallback background */}
+        <Avatar className="h-8 w-8 border border-border flex-shrink-0">
           <AvatarFallback className="bg-accent text-accent-foreground">
             <User className="h-5 w-5" />
           </AvatarFallback>
