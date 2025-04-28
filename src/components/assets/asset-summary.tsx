@@ -53,8 +53,8 @@ interface AssetSummaryProps {
   onToggle: () => void;
 }
 
-// Define the list of symbols to always check for trade history
-const ALWAYS_CHECK_SYMBOLS = ['BTC', 'USDT', 'USDC', 'BNB', 'ETH'];
+// Define the list of symbols to ALWAYS check for trade history and display assets for
+const TARGET_SYMBOLS = ['BTC', 'USDT', 'USDC', 'BNB', 'ETH'];
 
 export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) => {
   // Use state from Zustand store
@@ -64,7 +64,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     isLoadingAssets,
     isLoadingTrades,
     isConnected,
-    ownedSymbols, // Asset symbols (e.g., BTC, ETH) - represents *actually* owned assets
+    ownedSymbols, // Still keep track of all owned symbols internally if needed, but UI shows filtered
     activeTab,
     apiKey,
     apiSecret,
@@ -116,6 +116,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
    // Function to fetch trade history using the Server Action and update store
    const handleFetchTrades = useCallback(async (
         credentials: z.infer<typeof formSchema>,
+        // `actuallyOwnedSymbols` is no longer used for pair construction, but kept for potential future use or logging
         actuallyOwnedSymbols: string[] // Symbols user actually owns with balance
     ) => {
         if (!credentials.apiKey || !credentials.apiSecret) {
@@ -123,60 +124,52 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
              toast({ title: "Credentials Missing", description: "API credentials not provided.", variant: "destructive" });
              return;
         }
-         if (!isConnected) {
-             console.warn("Fetching trades even though asset fetch might have failed or yielded no assets.");
-         }
 
-
-        // --- Combine actually owned symbols with the mandatory list ---
-        const symbolsToCheck = new Set([...actuallyOwnedSymbols, ...ALWAYS_CHECK_SYMBOLS]);
-        const symbolsToUseForPairConstruction = Array.from(symbolsToCheck);
-
-        if (symbolsToUseForPairConstruction.length === 0) {
-             console.error("No symbols available (including mandatory) to construct pairs for trade history.");
-             setTrades([]);
-             toast({ title: "Internal Error", description: "Could not determine symbols for trade history." });
-             return;
-        }
+        // --- Use ONLY the TARGET_SYMBOLS for pair construction ---
+        const symbolsToUseForPairConstruction = TARGET_SYMBOLS;
         console.log("Symbols being used for trade history pair construction:", symbolsToUseForPairConstruction);
 
-
-        // --- Construct potential trading pairs ---
-        const quoteAssets = ['USDT', 'BTC', 'ETH', 'BNB', 'USDC', 'TUSD', 'FDUSD'];
+        // --- Construct potential trading pairs based ONLY on TARGET_SYMBOLS ---
+        const quoteAssets = ['USDT', 'BTC', 'ETH', 'BNB', 'USDC', 'TUSD', 'FDUSD']; // Common quote assets
         const potentialPairs = new Set<string>();
 
         symbolsToUseForPairConstruction.forEach(asset => {
             quoteAssets.forEach(quote => {
                 if (asset !== quote) {
-                    // Add ASSET/QUOTE pair
-                    potentialPairs.add(`${asset}${quote}`);
-                    // Add QUOTE/ASSET pair only if the asset IS a quote asset itself
-                    if (quoteAssets.includes(asset)) {
+                    // Add ASSET/QUOTE pair only if the asset is one of the target symbols
+                    if (TARGET_SYMBOLS.includes(asset)) {
+                         potentialPairs.add(`${asset}${quote}`);
+                    }
+                    // Add QUOTE/ASSET pair only if BOTH are target symbols OR if quote is a common quote asset and asset is a target symbol
+                    if (TARGET_SYMBOLS.includes(asset) && (TARGET_SYMBOLS.includes(quote) || quoteAssets.includes(quote))) {
                          potentialPairs.add(`${quote}${asset}`);
                     }
                 }
             });
         });
 
-        // Ensure core pairs are included if somehow missed (e.g., BTC/USDT)
-        ALWAYS_CHECK_SYMBOLS.forEach(base => {
-             if (base !== 'USDT') potentialPairs.add(`${base}USDT`);
-             if (base !== 'BTC') potentialPairs.add(`${base}BTC`);
+         // Ensure core pairs involving TARGET_SYMBOLS are included
+         TARGET_SYMBOLS.forEach(base => {
+            if (base !== 'USDT' && TARGET_SYMBOLS.includes('USDT')) potentialPairs.add(`${base}USDT`);
+            if (base !== 'BTC' && TARGET_SYMBOLS.includes('BTC')) potentialPairs.add(`${base}BTC`);
+            if (base !== 'ETH' && TARGET_SYMBOLS.includes('ETH')) potentialPairs.add(`${base}ETH`);
+             if (base !== 'BNB' && TARGET_SYMBOLS.includes('BNB')) potentialPairs.add(`${base}BNB`);
+              if (base !== 'USDC' && TARGET_SYMBOLS.includes('USDC')) potentialPairs.add(`${base}USDC`);
         });
 
 
         const tradingPairsToFetch = Array.from(potentialPairs);
 
         if (tradingPairsToFetch.length === 0) {
-            console.log("Could not construct any potential trading pairs from symbols:", symbolsToUseForPairConstruction);
+            console.log("Could not construct any potential trading pairs from target symbols:", symbolsToUseForPairConstruction);
             setTrades([]);
-            toast({ title: "No Pairs", description: "Could not determine relevant trading pairs." });
+            toast({ title: "No Pairs", description: "Could not determine relevant trading pairs for target symbols." });
             return;
         }
         // --- End constructing pairs ---
 
 
-        console.log(`Attempting to fetch trade history for ${tradingPairsToFetch.length} potential pairs:`, tradingPairsToFetch.slice(0, 10).join(', ') + (tradingPairsToFetch.length > 10 ? '...' : '')); // Log first few pairs
+        console.log(`Attempting to fetch trade history for ${tradingPairsToFetch.length} potential pairs (TARGET SYMBOLS ONLY):`, tradingPairsToFetch.slice(0, 10).join(', ') + (tradingPairsToFetch.length > 10 ? '...' : '')); // Log first few pairs
         setIsLoadingTrades(true);
         setTrades([]); // Clear previous trades in store
 
@@ -187,49 +180,62 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 apiSecret: credentials.apiSecret,
                 isTestnet: credentials.isTestnet,
                 symbols: tradingPairsToFetch, // Pass the generated trading pairs
-                limit: 50, // Adjust limit as needed
+                limit: 100, // Fetch a bit more per pair if needed
             });
 
             console.log("fetchBinanceTradeHistory result:", result);
 
             if (result.success) {
-                // Filter trades to only include those involving the ALWAYS_CHECK_SYMBOLS or actuallyOwnedSymbols
-                const relevantSymbolsForFiltering = new Set([...actuallyOwnedSymbols, ...ALWAYS_CHECK_SYMBOLS]);
+                // Filter trades to only include those involving the TARGET_SYMBOLS
+                const targetSymbolsSet = new Set(TARGET_SYMBOLS);
                 const filteredTrades = result.data.filter(trade => {
                     let baseAsset = "";
                     let quoteAsset = "";
-                    const knownQuoteAssets = ['USDT', 'BTC', 'ETH', 'BNB', 'USDC', 'TUSD', 'FDUSD', 'BUSD']; // Add more if needed
+                    // More robust pair splitting logic
+                    const knownQuoteAssets = ['USDT', 'USDC', 'TUSD', 'BUSD', 'FDUSD', 'BTC', 'ETH', 'BNB']; // Add more if needed
 
                     for (const quote of knownQuoteAssets) {
-                        if (trade.symbol.endsWith(quote)) {
-                           quoteAsset = quote;
-                           baseAsset = trade.symbol.substring(0, trade.symbol.length - quote.length);
-                           break;
+                         if (trade.symbol.endsWith(quote) && trade.symbol.length > quote.length) {
+                           const potentialBase = trade.symbol.substring(0, trade.symbol.length - quote.length);
+                            // Basic check if potential base looks like a valid asset symbol (e.g., not just numbers)
+                           if (/^[A-Z0-9]+$/.test(potentialBase)) {
+                               baseAsset = potentialBase;
+                               quoteAsset = quote;
+                               break;
+                           }
                          }
                     }
+
+                     // Fallback if no known quote asset matched at the end
                      if (!baseAsset && trade.symbol.length > 3) {
-                          quoteAsset = trade.symbol.substring(trade.symbol.length - 3); // Guess 3 chars
-                          baseAsset = trade.symbol.substring(0, trade.symbol.length - 3);
-                          if (!trade.symbol.endsWith(quoteAsset)) { // Try 4 chars
-                             quoteAsset = trade.symbol.substring(trade.symbol.length - 4);
-                             baseAsset = trade.symbol.substring(0, trade.symbol.length - 4);
+                         // Assume common 3 or 4 letter quote assets
+                         const potentialQuote = trade.symbol.substring(trade.symbol.length - (trade.symbol.endsWith('USDT') || trade.symbol.endsWith('FDUSD') ? 4 : 3));
+                          const potentialBase = trade.symbol.substring(0, trade.symbol.length - potentialQuote.length);
+                          if (/^[A-Z0-9]+$/.test(potentialBase) && /^[A-Z]+$/.test(potentialQuote)) {
+                               baseAsset = potentialBase;
+                               quoteAsset = potentialQuote;
                           }
-                     } else if (!baseAsset) {
+                     }
+
+                     // If splitting failed, maybe it's a simple symbol like BTC? (Less likely for trades but handle)
+                     if (!baseAsset) {
                          baseAsset = trade.symbol;
+                         quoteAsset = ""; // Or try to infer if possible
                      }
 
 
-                    return relevantSymbolsForFiltering.has(baseAsset) || relevantSymbolsForFiltering.has(quoteAsset);
+                    // Include the trade if EITHER the base OR quote asset is in our target list
+                    return targetSymbolsSet.has(baseAsset) || targetSymbolsSet.has(quoteAsset);
                 });
 
 
-                 console.log(`Filtered trades from ${result.data.length} to ${filteredTrades.length} based on relevance.`);
+                 console.log(`Filtered trades from ${result.data.length} to ${filteredTrades.length} based on TARGET SYMBOLS: ${TARGET_SYMBOLS.join(', ')}`);
                  setTrades(filteredTrades); // Update trades in store with filtered list
 
                 if (filteredTrades.length === 0) {
-                     toast({ title: "No Relevant Trades Found", description: "No recent trade history found for BTC, ETH, BNB, USDT, USDC or your owned assets." });
+                     toast({ title: "No Relevant Trades Found", description: `No recent trade history found involving ${TARGET_SYMBOLS.join(', ')}.` });
                 } else {
-                     toast({ title: "Success", description: `Fetched ${filteredTrades.length} relevant trades.` });
+                     toast({ title: "Success", description: `Fetched ${filteredTrades.length} relevant trades for ${TARGET_SYMBOLS.join(', ')}.` });
                 }
             } else {
                  setTrades([]); // Clear trades in store on failure
@@ -251,7 +257,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         } finally {
             setIsLoadingTrades(false);
         }
-    }, [isConnected, setIsLoadingTrades, setTrades, toast, setOwnedSymbols /* Removed setOwnedSymbols if not directly used inside this callback, added to dependency array otherwise */]);
+    }, [isConnected, setIsLoadingTrades, setTrades, toast /* No setOwnedSymbols needed here anymore */]); // Removed setOwnedSymbols from deps
 
 
   // Function to fetch assets using the Server Action and update store
@@ -261,7 +267,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     // Clear relevant parts of the store before fetching
     setAssets([]);
     setTrades([]); // Clear trades when fetching new assets
-    setOwnedSymbols([]);
+    setOwnedSymbols([]); // Clear all owned symbols first
     setIsConnected(false);
     setCredentials(values.apiKey, values.apiSecret, values.isTestnet); // Ensure store has latest credentials
 
@@ -275,23 +281,32 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
       console.log("fetchBinanceAssets result:", result);
 
       if (result.success) {
-        setAssets(result.data);
-        // Store only *actually* owned symbols
-        setOwnedSymbols(result.ownedSymbols || []);
+        // Filter the fetched assets to only include TARGET_SYMBOLS before setting state
+        const targetSymbolsSet = new Set(TARGET_SYMBOLS);
+        const filteredAssets = result.data.filter(asset => targetSymbolsSet.has(asset.symbol));
+
+        setAssets(filteredAssets); // Set the filtered assets
+        // Store all originally owned symbols if needed elsewhere, or filter this too
+        setOwnedSymbols(result.ownedSymbols || []); // Keep the original owned symbols list from the API response
         setIsConnected(true);
         toast({
           title: "Success",
-          description: `Fetched ${result.data.length} assets from Binance.`,
+          description: `Fetched ${filteredAssets.length} target assets (${TARGET_SYMBOLS.join(', ')}) from Binance. Total assets checked: ${result.data.length}.`,
         });
 
         // Automatically fetch trades IF on history tab and connection was successful
         if (activeTab === 'history') {
-           console.log("Assets loaded, triggering trade history fetch.");
-           // Pass credentials and the *actually* owned symbols
+           console.log("Assets loaded, triggering trade history fetch for TARGET SYMBOLS.");
+           // Pass credentials and the *original* owned symbols (or just an empty array if not needed)
            handleFetchTrades(values, result.ownedSymbols || []);
         }
       } else {
-        clearState();
+        // Clear assets, trades, owned symbols, but keep credentials
+        setAssets([]);
+        setTrades([]);
+        setOwnedSymbols([]);
+        setIsConnected(false);
+        // clearState(); // Avoid clearing credentials on error
         toast({
           title: "Error Fetching Assets",
           description: `Failed to fetch assets: ${result.error}. Check credentials and permissions.`,
@@ -299,7 +314,12 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         });
       }
     } catch (error) {
-       clearState();
+      // Clear assets, trades, owned symbols, but keep credentials
+      setAssets([]);
+      setTrades([]);
+      setOwnedSymbols([]);
+      setIsConnected(false);
+      // clearState(); // Avoid clearing credentials on error
       console.error("Error calling fetchBinanceAssets action:", error);
       toast({
         title: "Error",
@@ -309,36 +329,42 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     } finally {
       setIsLoadingAssets(false);
     }
-  }, [setIsLoadingAssets, setAssets, setTrades, setOwnedSymbols, setIsConnected, setCredentials, clearState, toast, activeTab, handleFetchTrades]); // Added handleFetchTrades to dependency array
+    // Add handleFetchTrades to dependency array if it uses state that changes here
+  }, [setIsLoadingAssets, setAssets, setTrades, setOwnedSymbols, setIsConnected, setCredentials, toast, activeTab, handleFetchTrades]);
 
    // Handle tab change - update store
    const onTabChange = (value: string) => {
         console.log("Tab changed to:", value);
         setActiveTab(value);
-        // Fetch trades if switching to history tab and trades are not already loaded/loading
-        if (value === 'history' && trades.length === 0 && !isLoadingTrades) {
+        // Fetch trades if switching to history tab and trades are not already loaded/loading AND we are connected
+        if (value === 'history' && trades.length === 0 && !isLoadingTrades && isConnected) {
              // Use credentials from the store
              if (apiKey && apiSecret) {
-                 console.log("Switching to history tab, fetching trades.");
+                 console.log("Switching to history tab, fetching trades for TARGET SYMBOLS.");
+                 // Pass original ownedSymbols list (might not be needed by handleFetchTrades anymore)
                 handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols);
             } else {
                  console.warn("Switching to history tab, but credentials missing.");
                  setTrades([]); // Clear trades if no credentials
-                 toast({ title: "Credentials Missing", description: "API credentials not found. Please enter them.", variant: "destructive" });
+                 toast({ title: "Credentials Missing", description: "API credentials not found. Cannot fetch history.", variant: "destructive" });
             }
+        } else if (value === 'history' && !isConnected) {
+             toast({ title: "Not Connected", description: "Load assets first to fetch trade history.", variant: "destructive" });
+             setTrades([]); // Clear trades if not connected
         }
     };
 
-   // Recalculate total portfolio value when assets change
+   // Recalculate total portfolio value based on the FILTERED assets shown
    const totalPortfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
 
    const isLoading = isLoadingAssets || isLoadingTrades; // Combined loading state
 
 
-    // Helper function to render asset rows
+    // Helper function to render asset rows (uses the filtered 'assets' state)
     const renderAssetRows = () => {
         if (isLoadingAssets) {
-            return Array.from({ length: 3 }).map((_, index) => (
+            // Show skeletons based on TARGET_SYMBOLS count for consistency
+            return Array.from({ length: TARGET_SYMBOLS.length }).map((_, index) => (
                 <TableRow key={`asset-skeleton-${index}`} className="border-border">
                     <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-10 bg-muted" /></TableCell>
@@ -347,6 +373,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 </TableRow>
             ));
         }
+        // 'assets' state already contains only the filtered assets
         if (isConnected && assets.length > 0) {
             return assets.map((asset) => (
                 <TableRow key={asset.symbol} className="border-border">
@@ -361,7 +388,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
              return (
                 <TableRow className="border-border">
                     <TableCell colSpan={4} className="h-24 text-center text-muted-foreground text-xs">
-                        No assets with a balance found.
+                        No balance found for {TARGET_SYMBOLS.join(', ')}.
                     </TableCell>
                 </TableRow>
             );
@@ -376,7 +403,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
          );
     };
 
-    // Helper function to render trade rows
+    // Helper function to render trade rows (uses the filtered 'trades' state)
     const renderTradeRows = () => {
         if (isLoadingTrades) {
             return Array.from({ length: 5 }).map((_, index) => (
@@ -390,7 +417,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 </TableRow>
             ));
         }
-        if (trades.length > 0 && !isLoadingTrades) { // Condition based on trades having data
+        // 'trades' state already contains filtered trades
+        if (trades.length > 0 && !isLoadingTrades) {
             return trades.map((trade) => (
                 <TableRow key={trade.id} className="border-border">
                     <TableCell className="text-foreground text-xs">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
@@ -409,7 +437,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
              return (
                 <TableRow className="border-border">
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
-                        No recent trade history found for relevant pairs (BTC, ETH, BNB, USDT, USDC or owned assets).
+                        No recent trade history found involving {TARGET_SYMBOLS.join(', ')}.
                     </TableCell>
                 </TableRow>
              );
@@ -418,7 +446,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         return (
              <TableRow className="border-border">
                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
-                     {apiKey && apiSecret ? "Loading trade history or switch to this tab..." : "Enter API Keys and Load Assets first."}
+                     {apiKey && apiSecret ? (isLoadingTrades ? "Loading..." : "Loading trade history or switch to this tab...") : "Enter API Keys and Load Assets first."}
                  </TableCell>
              </TableRow>
         );
@@ -520,8 +548,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
           <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col overflow-hidden pt-3 border-t border-border">
             <div className="flex justify-between items-center mb-2">
                 <TabsList className="grid w-full grid-cols-2 h-9">
-                    <TabsTrigger value="summary" className="text-xs h-full">Asset Summary</TabsTrigger>
-                    <TabsTrigger value="history" className="text-xs h-full">Trade History</TabsTrigger>
+                    <TabsTrigger value="summary" className="text-xs h-full">Asset Summary ({TARGET_SYMBOLS.join(', ')})</TabsTrigger>
+                    <TabsTrigger value="history" className="text-xs h-full">Trade History ({TARGET_SYMBOLS.join(', ')})</TabsTrigger>
                 </TabsList>
                  {/* Refresh button for trades, only shown on history tab */}
                 {activeTab === 'history' && ( // Show refresh if on history tab
@@ -531,17 +559,21 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                          // Use credentials from the store for refresh
                         onClick={() => {
                              // Make sure credentials exist before refreshing
-                            if(apiKey && apiSecret) {
-                                 console.log("Manual refresh clicked for trade history.");
+                            if(apiKey && apiSecret && isConnected) { // Only refresh if connected
+                                 console.log("Manual refresh clicked for trade history (TARGET SYMBOLS).");
+                                 // Pass original ownedSymbols list (might not be needed by handleFetchTrades anymore)
                                 handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols);
                             }
+                             else if (!isConnected) {
+                                toast({ title: "Not Connected", description: "Load assets first to refresh trade history.", variant: "destructive" });
+                             }
                              else {
                                  console.warn("Cannot refresh trades: Credentials missing.");
                                  toast({ title: "Credentials Missing", description: "Cannot refresh trades without API credentials.", variant: "destructive" });
                             }
                         }}
-                         // Disable if loading trades OR if credentials are missing
-                         disabled={isLoadingTrades || !apiKey || !apiSecret}
+                         // Disable if loading trades OR if credentials are missing OR not connected
+                         disabled={isLoadingTrades || !apiKey || !apiSecret || !isConnected}
                         className="ml-2 h-8 w-8 flex-shrink-0"
                         title="Refresh Trade History"
                     >
@@ -569,19 +601,24 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                   <TableBody>
                     {renderAssetRows()}
                   </TableBody>
-                   {/* Use store state for condition */}
+                   {/* Use store state for condition (based on filtered assets) */}
                   {isConnected && assets.length > 0 && !isLoadingAssets && (
                     <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                        Total Portfolio Value: ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        Total Value ({TARGET_SYMBOLS.join(', ')}): ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         <br />
                         <span className="text-xs opacity-70">Value calculated based on current market prices.</span>
                     </TableCaption>
                   )}
                    {isConnected && assets.length === 0 && !isLoadingAssets && (
                      <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                         No assets with balance found. Check Binance account or API key permissions.
+                         No balance found for {TARGET_SYMBOLS.join(', ')}. Check Binance account or API key permissions.
                      </TableCaption>
                    )}
+                    {!isConnected && !isLoadingAssets && (
+                        <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                            Enter API keys and click "Load Assets".
+                        </TableCaption>
+                    )}
                 </Table>
               </ScrollArea>
             </TabsContent>
@@ -589,7 +626,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
             {/* Trade History Tab Content */}
             <TabsContent value="history" className="flex-1 overflow-hidden mt-0">
                <ScrollArea className="h-full">
-                 {/* Use store state for rendering */}
+                 {/* Use store state for rendering (uses filtered trades) */}
                 <Table>
                     <TableHeader>
                         <TableRow className="border-border">
@@ -605,17 +642,22 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                         {renderTradeRows()}
                     </TableBody>
                      {/* Use store state for condition */}
-                    {trades.length > 0 && !isLoadingTrades && (
+                    {isConnected && trades.length > 0 && !isLoadingTrades && (
                          <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             Showing last {trades.length} relevant trades. Refresh for latest.
+                             Showing last {trades.length} relevant trades involving {TARGET_SYMBOLS.join(', ')}. Refresh for latest.
                          </TableCaption>
                     )}
-                      {trades.length === 0 && !isLoadingTrades && (apiKey && apiSecret) && ( // Only show 'No trades found' if tried and finished loading
+                      {isConnected && trades.length === 0 && !isLoadingTrades && apiKey && apiSecret && ( // Only show 'No trades found' if tried and finished loading
                          <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             No recent relevant trades found.
+                             No recent relevant trades found involving {TARGET_SYMBOLS.join(', ')}.
                          </TableCaption>
                     )}
-                     {!(apiKey && apiSecret) && ( // Show prompt if no credentials
+                     {!isConnected && !isLoadingTrades && ( // Show prompt if not connected
+                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                             Load Assets first to view trade history.
+                         </TableCaption>
+                     )}
+                      {!apiKey || !apiSecret && !isLoadingTrades && ( // Show prompt if no credentials
                          <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
                              Enter API Keys to view trade history.
                          </TableCaption>
@@ -629,3 +671,5 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     </div>
   );
 };
+
+    
