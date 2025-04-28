@@ -287,6 +287,15 @@ export async function fetchBinanceTradeHistory(
         // recvWindow: 60000, // Consider increasing if timeouts occur
     });
 
+    // Check if the myTrades function exists on the binance instance BEFORE trying to use it
+    if (typeof binance.myTrades !== 'function') {
+      const errorMsg = 'Internal Server Error: Could not access trade history function (myTrades method not found on Binance client). Check library version or initialization.';
+      console.error(`[fetchBinanceTradeHistory] ${errorMsg}`);
+      console.error('[fetchBinanceTradeHistory] Binance client instance:', binance); // Log the instance for inspection
+      return { success: false, data: [], error: errorMsg };
+    }
+
+
     try {
         // The `symbols` are already provided in the input as `tradingPairsToFetch`
         if (!tradingPairsToFetch || tradingPairsToFetch.length === 0) {
@@ -299,11 +308,7 @@ export async function fetchBinanceTradeHistory(
 
 
         let allTrades: Trade[] = [];
-        // Check if the myTrades function exists on the binance instance
-         if (typeof binance.myTrades !== 'function') {
-           console.error('[fetchBinanceTradeHistory] binance.myTrades is not a function. Library issue?');
-           return { success: false, data: [], error: 'Internal Server Error: Could not access trade history function.' };
-         }
+
 
         // --- Fetch trades concurrently with error handling for each symbol ---
         const fetchPromises = tradingPairsToFetch.map(symbol => {
@@ -421,8 +426,11 @@ export async function fetchBinanceTradeHistory(
                 errorMessage = 'Invalid API key or secret.';
             } else if (error.message.includes('permissions') || error.message.includes('permission')) {
                 errorMessage = 'API key lacks permissions (requires trade history access).';
-            } else if (error.message.includes('binance.myTrades is not a function')) { // Catch the specific error
-                 errorMessage = 'Internal Server Error: Trade history feature unavailable.';
+            }
+             // Explicitly check for the function existence error here as well, though the initial check should catch it
+            else if (error.message.includes('binance.myTrades is not a function')) {
+                 errorMessage = 'Internal Server Error: Trade history feature unavailable (function missing).';
+                 console.error('[fetchBinanceTradeHistory] Caught error confirming myTrades is not a function.');
             }
             else {
                  errorMessage = `API Error: ${error.message}`;
