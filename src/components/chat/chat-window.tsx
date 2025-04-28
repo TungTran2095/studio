@@ -88,6 +88,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       // Call the flow function (which now might use tools)
       console.log("[ChatWindow] Calling generateResponse with input:", { ...input, apiKey: input.apiKey ? '***' : undefined, apiSecret: input.apiSecret ? '***' : undefined });
       const result = await generateResponse(input);
+      console.log("[ChatWindow] Received response from generateResponse:", result); // Log the result
       const aiResponse: Message = { role: "bot", content: result.response };
        setMessages((prevMessages) => [...prevMessages, aiResponse]);
     } catch (error: any) {
@@ -134,11 +135,11 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
           {/* Use p-0 on CardContent and apply padding within ScrollArea viewport */}
           <CardContent className="flex-1 p-0 overflow-hidden">
             {/* Ensure ScrollArea uses theme colors and takes full height */}
-            {/* Set orientation to vertical only for the chat messages list */}
-            <ScrollArea className="h-full" viewportRef={viewportRef} orientation="vertical">
+            {/* Set orientation to BOTH vertical and horizontal */}
+            <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both">
                 {/* Add padding directly to the container inside viewport */}
-                {/* No min-w-max needed here as text should wrap */}
-              <div className="space-y-4 p-3">
+                {/* Use min-w-max to allow horizontal expansion if content is wider */}
+              <div className="space-y-4 p-3 min-w-max">
                 {messages.map((msg, index) => (
                   <ChatMessage key={index} role={msg.role} content={msg.content} />
                 ))}
