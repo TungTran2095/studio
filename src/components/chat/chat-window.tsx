@@ -3,7 +3,6 @@
 
 import type { FC } from "react";
 import { useState, useRef, useEffect } from "react";
-// Removed ChevronDown, ChevronUp import
 import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
@@ -12,147 +11,162 @@ import { generateResponse } from "@/ai/flows/generate-response";
 import type { GenerateResponseInput } from "@/ai/flows/generate-response";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-// Removed Button import (toggle button)
 import { cn } from '@/lib/utils';
 import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
+import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // Import Supabase actions
+import type { MessageHistory } from "@/lib/supabase-client"; // Import the type for messages from DB
 
 
-interface Message {
-  role: "user" | "bot";
-  content: string;
-}
+// Use MessageHistory type for consistency
+type Message = MessageHistory;
 
-// Removed isExpanded and onToggle from props
-interface ChatWindowProps {
-  // No props needed for expansion state anymore
-}
+interface ChatWindowProps {}
 
-export const ChatWindow: FC<ChatWindowProps> = (/* No props here */) => {
+export const ChatWindow: FC<ChatWindowProps> = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true); // State for loading history
   const { toast } = useToast();
-  // Access credentials from Zustand store using a selector
   const { apiKey, apiSecret, isTestnet } = useAssetStore(state => ({
     apiKey: state.apiKey,
     apiSecret: state.apiSecret,
     isTestnet: state.isTestnet,
   }));
 
-  const viewportRef = useRef<HTMLDivElement>(null); // Ref for the ScrollArea viewport
+  const viewportRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom when messages change or isLoading changes
+  // Fetch initial chat history on component mount
   useEffect(() => {
-    // Scroll always happens when chat is open (since isExpanded is effectively true)
+    const loadHistory = async () => {
+      setIsLoadingHistory(true);
+      const result = await fetchChatHistory();
+      if (result.success) {
+        // Map roles if necessary, assuming DB roles match 'user' | 'bot'
+        setMessages(result.data);
+      } else {
+        toast({
+          title: "Error Loading History",
+          description: `Failed to fetch chat history: ${result.error}`,
+          variant: "destructive",
+        });
+      }
+      setIsLoadingHistory(false);
+    };
+    loadHistory();
+  }, [toast]); // Dependency array includes toast
+
+  // Scroll to bottom effect
+  useEffect(() => {
     if (viewportRef.current) {
-      // Use requestAnimationFrame for smoother scrolling after render
       requestAnimationFrame(() => {
         if (viewportRef.current) {
-           viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+          viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
         }
       });
     }
-  }, [messages, isLoading]); // Removed isExpanded dependency
+  }, [messages, isLoading, isLoadingHistory]); // Include isLoadingHistory
 
   const handleSendMessage = async (messageContent: string) => {
     const newUserMessage: Message = { role: "user", content: messageContent };
+    // Immediately display the user message
     setMessages((prevMessages) => [...prevMessages, newUserMessage]);
-    setIsLoading(true);
+    setIsLoading(true); // Start loading for AI response
 
-    // Read credentials from the store
+    // Save user message to Supabase (don't wait for it to finish to show AI response)
+    saveChatMessage(newUserMessage).catch(err => {
+      console.error("Failed to save user message:", err);
+      toast({ title: "Error", description: "Could not save your message.", variant: "destructive" });
+      // Optionally remove the message from UI if saving fails critically
+      // setMessages(prev => prev.filter(m => m !== newUserMessage));
+    });
+
+    // Prepare for AI
     const credentialsAvailable = apiKey && apiSecret;
-
     if (!credentialsAvailable) {
       console.warn("[ChatWindow] API credentials NOT available in store. Trading intent might fail.");
-      // The AI prompt is designed to handle this and ask the user to configure credentials.
     } else {
       console.log("[ChatWindow] API credentials found in store. Passing to generateResponse flow.");
     }
 
+    // Get history for AI (use current UI state for context)
     const chatHistoryForAI = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
     }));
 
-    // Prepare input for the flow, including credentials from the store IF they exist
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
-      // Conditionally include credentials only if they exist in the store
-      ...(credentialsAvailable && { apiKey: apiKey, apiSecret: apiSecret }), // Pass apiKey and apiSecret if available
-      // Pass isTestnet status from the store (defaults to false in schema if undefined/null)
+      ...(credentialsAvailable && { apiKey: apiKey, apiSecret: apiSecret }),
       isTestnet: isTestnet ?? false,
     };
 
-
     try {
-      // Call the flow function (which now might use tools)
       console.log("[ChatWindow] Calling generateResponse with input:", { ...input, apiKey: input.apiKey ? '***' : undefined, apiSecret: input.apiSecret ? '***' : undefined });
       const result = await generateResponse(input);
-      console.log("[ChatWindow] Received response from generateResponse:", result); // Log the result
+      console.log("[ChatWindow] Received response from generateResponse:", result);
+
       const aiResponse: Message = { role: "bot", content: result.response };
-       setMessages((prevMessages) => [...prevMessages, aiResponse]);
+      // Display AI response
+      setMessages((prevMessages) => [...prevMessages, aiResponse]);
+
+      // Save AI response to Supabase
+      saveChatMessage(aiResponse).catch(err => {
+        console.error("Failed to save AI response:", err);
+        toast({ title: "Error", description: "Could not save the bot's response.", variant: "destructive" });
+        // UI already shows the message, so no need to remove it on save failure typically
+      });
+
     } catch (error: any) {
       console.error("Error generating AI response:", error);
-      // Check if the error is a Zod validation error
-      if (error.issues) { // Zod errors often have an 'issues' array
-        const validationErrors = error.issues.map((issue: any) => `${issue.path.join('.')}: ${issue.message}`).join('\n');
-        toast({
-          title: "Input Error",
-          description: `There was an issue with the data sent: \n${validationErrors}`,
-          variant: "destructive",
-        });
-      } else {
-        const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
-         toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      }
-      // Optionally keep the user message even if the bot fails, for context
-      // setMessages((prevMessages) => prevMessages.filter(msg => msg !== newUserMessage)); // Example: Remove the specific user message
+      const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+       // Remove the user message if AI fails? Optional.
+       // setMessages((prevMessages) => prevMessages.slice(0, -1));
+
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Stop loading indicator
     }
   };
 
   return (
-    // Ensure the container takes full height of its parent div (PopoverContent) and uses flex column layout
-    <div className="flex flex-col h-full w-full overflow-hidden bg-card"> {/* Added bg-card */}
-      {/* Header remains, adjust padding and border */}
-      {/* Removed toggle button */}
+    <div className="flex flex-col h-full w-full overflow-hidden bg-card">
       <CardHeader className="border-b border-border flex-shrink-0 p-3 flex flex-row items-center justify-between">
         <CardTitle className="text-lg font-medium text-foreground">YINSEN</CardTitle>
-         {/* Removed toggle button */}
       </CardHeader>
 
-      {/* Chat content always rendered as isExpanded is effectively true */}
-        <>
-          {/* Content container takes remaining space, adjust padding */}
-          {/* Use p-0 on CardContent and apply padding within ScrollArea viewport */}
-          <CardContent className="flex-1 p-0 overflow-hidden">
-            {/* Ensure ScrollArea uses theme colors and takes full height */}
-            {/* Set orientation to BOTH vertical and horizontal */}
-            <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both">
-                {/* Add padding directly to the container inside viewport */}
-                {/* Use min-w-max to allow horizontal expansion if content is wider */}
-              <div className="space-y-4 p-3 min-w-max">
-                {messages.map((msg, index) => (
-                  <ChatMessage key={index} role={msg.role} content={msg.content} />
-                ))}
-                {isLoading && (
-                    <div className="flex items-start gap-3 justify-start">
-                      {/* Use theme colors for skeletons */}
-                      <Skeleton className="h-8 w-8 rounded-full bg-muted flex-shrink-0" />
-                      <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted" />
-                  </div>
-                )}
+      <CardContent className="flex-1 p-0 overflow-hidden">
+        <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both">
+          <div className="space-y-2 p-3 min-w-max"> {/* Reduced space-y */}
+            {/* Show loading skeletons for history */}
+            {isLoadingHistory && (
+              <>
+                <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted ml-auto" />
+                <Skeleton className="h-12 rounded-lg p-3 w-4/5 bg-muted" />
+                <Skeleton className="h-10 rounded-lg p-3 w-2/3 bg-muted ml-auto" />
+              </>
+            )}
+             {/* Render actual messages once loaded */}
+            {!isLoadingHistory && messages.map((msg, index) => (
+               // Use msg.id as key if available and unique, otherwise index
+              <ChatMessage key={msg.id ?? index} role={msg.role} content={msg.content} />
+            ))}
+            {/* Loading indicator for AI response */}
+            {isLoading && (
+              <div className="flex items-start gap-2 justify-start pt-2"> {/* Adjusted gap and added padding */}
+                <Skeleton className="h-8 w-8 rounded-full bg-muted flex-shrink-0 mt-1" />
+                <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted" /> {/* Use similar padding */}
               </div>
-            </ScrollArea>
-          </CardContent>
-          {/* ChatInput already uses theme colors */}
-          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-        </>
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
+      {/* Input remains the same */}
+      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
     </div>
   );
 };

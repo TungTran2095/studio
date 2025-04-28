@@ -17,14 +17,14 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
   return (
     <div
       className={cn(
-        // Use items-start to align avatar and bubble top, ensure full width
+        // Align avatar and bubble to the top
         "flex items-start gap-2 w-full",
         isUser ? "justify-end" : "justify-start"
       )}
     >
-      {/* Avatar outside the bubble for bot messages */}
+      {/* Bot Avatar */}
       {!isUser && (
-        // Add slight top margin for better alignment with text bubble padding
+        // Consistent margin for avatar
         <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
           <AvatarFallback className="bg-accent text-accent-foreground">
             <Bot className="h-5 w-5" />
@@ -32,31 +32,29 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
         </Avatar>
       )}
 
-      {/* Bubble container */}
+      {/* Bubble */}
       <div
         className={cn(
-          "rounded-lg p-2.5 shadow-sm", // Padding inside the bubble
-          // Limit width, allow vertical growth. Increased max-width slightly.
-          "max-w-[90%]", // Increased max-width to 90%
-          "min-w-[40px]", // Optional: minimum width
+           // Standard padding, adjusted max-width if needed
+          "rounded-lg p-2.5 shadow-sm max-w-[90%]", // Consistent padding
+          "min-w-[40px]",
           isUser
-            ? "bg-primary text-primary-foreground rounded-br-none" // User bubble color
-            : "bg-secondary text-secondary-foreground rounded-bl-none" // Bot bubble color
+            ? "bg-primary text-primary-foreground rounded-br-none"
+            : "bg-secondary text-secondary-foreground rounded-bl-none"
         )}
       >
-        {/* Text content - Ensure wrapping and correct alignment */}
-        {/* break-words should handle long strings, whitespace-pre-wrap preserves line breaks */}
+        {/* Text Content */}
         <p className="text-sm whitespace-pre-wrap break-words text-left text-current">
           {content}
         </p>
       </div>
 
-       {/* Avatar outside the bubble for user messages */}
-       {isUser && (
-         // Add slight top margin for better alignment
+      {/* User Avatar */}
+      {isUser && (
+         // Consistent margin for avatar
         <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
           <AvatarFallback className="bg-accent text-accent-foreground">
-             <User className="h-5 w-5" />
+            <User className="h-5 w-5" />
           </AvatarFallback>
         </Avatar>
       )}
