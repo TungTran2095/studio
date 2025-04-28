@@ -302,6 +302,78 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
    const isLoading = isLoadingAssets || isLoadingTrades; // Combined loading state
 
 
+    // Helper function to render asset rows
+    const renderAssetRows = () => {
+        if (isLoadingAssets) {
+            return Array.from({ length: 3 }).map((_, index) => (
+                <TableRow key={`asset-skeleton-${index}`} className="border-border">
+                    <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-10 bg-muted" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto bg-muted" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
+                </TableRow>
+            ));
+        }
+        if (isConnected && assets.length > 0) {
+            return assets.map((asset) => (
+                <TableRow key={asset.symbol} className="border-border">
+                    <TableCell className="font-medium text-foreground text-xs">{asset.asset || asset.symbol}</TableCell>
+                    <TableCell className="text-foreground text-xs">{asset.symbol}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs">{asset.quantity.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                </TableRow>
+            ));
+        }
+        return (
+            <TableRow className="border-border">
+                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground text-xs">
+                    {isConnected && !isLoadingAssets ? "No assets with a balance found." : "Enter API keys to load assets."}
+                </TableCell>
+            </TableRow>
+        );
+    };
+
+    // Helper function to render trade rows
+    const renderTradeRows = () => {
+        if (isLoadingTrades) {
+            return Array.from({ length: 5 }).map((_, index) => (
+                <TableRow key={`trade-skeleton-${index}`} className="border-border">
+                    <TableCell><Skeleton className="h-4 w-24 bg-muted" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-8 bg-muted" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto bg-muted" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
+                </TableRow>
+            ));
+        }
+        if (isConnected && trades.length > 0) {
+            return trades.map((trade) => (
+                <TableRow key={trade.id} className="border-border">
+                    <TableCell className="text-foreground text-xs">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
+                    <TableCell className="text-foreground text-xs">{trade.symbol}</TableCell>
+                    <TableCell className={cn("text-xs", trade.isBuyer ? "text-green-500" : "text-red-500")}>
+                        {trade.isBuyer ? 'BUY' : 'SELL'}
+                    </TableCell>
+                    <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.qty).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.quoteQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                </TableRow>
+            ));
+        }
+        return (
+            <TableRow className="border-border">
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
+                    {isConnected && !isLoadingTrades && trades.length === 0 ? "No recent trade history found for checked pairs." :
+                     isConnected && !isLoadingTrades ? "Failed to fetch trades or invalid pairs." :
+                     !isConnected ? "Load assets first to enable trade history." :
+                     "Loading trade history..."}
+                </TableCell>
+            </TableRow>
+        );
+    };
+
+
   return (
     // Ensure the container takes full height of its parent div and uses flex column layout
     <div className="flex flex-col h-full w-full overflow-hidden">
@@ -447,34 +519,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {isLoadingAssets ? (
-                      // Loading Skeletons for Assets
-                      Array.from({ length: 3 }).map((_, index) => (
-                        <TableRow key={index} className="border-border">
-                          <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-10 bg-muted" /></TableCell>
-                          <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto bg-muted" /></TableCell>
-                          <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
-                        </TableRow>
-                      ))
-                    ) : isConnected && assets.length > 0 ? (
-                      // Display Fetched Assets from store
-                      assets.map((asset) => (
-                        <TableRow key={asset.symbol} className="border-border">
-                          <TableCell className="font-medium text-foreground text-xs">{asset.asset || asset.symbol}</TableCell> {/* Use symbol as fallback */}
-                          <TableCell className="text-foreground text-xs">{asset.symbol}</TableCell>
-                          <TableCell className="text-right text-foreground text-xs">{asset.quantity.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell> {/* Show more precision for crypto */}
-                          <TableCell className="text-right text-foreground text-xs">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      // Initial or No Data Message for Assets
-                      <TableRow className="border-border">
-                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground text-xs">
-                            {isConnected && !isLoadingAssets ? "No assets with a balance found." : "Enter API keys to load assets."}
-                        </TableCell>
-                      </TableRow>
-                    )}
+                    {renderAssetRows()}
                   </TableBody>
                    {/* Use store state for condition */}
                   {isConnected && assets.length > 0 && !isLoadingAssets && (
@@ -504,44 +549,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {isLoadingTrades ? (
-                             // Loading Skeletons for Trades
-                            Array.from({ length: 5 }).map((_, index) => (
-                                <TableRow key={index} className="border-border">
-                                <TableCell><Skeleton className="h-4 w-24 bg-muted" /></TableCell>
-                                <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
-                                <TableCell><Skeleton className="h-4 w-8 bg-muted" /></TableCell>
-                                <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
-                                <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto bg-muted" /></TableCell>
-                                <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableCell>
-                                </TableRow>
-                            ))
-                         ) : isConnected && trades.length > 0 ? (
-                             // Display Fetched Trades from store
-                            trades.map((trade) => (
-                                <TableRow key={trade.id} className="border-border">
-                                <TableCell className="text-foreground text-xs">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
-                                <TableCell className="text-foreground text-xs">{trade.symbol}</TableCell>
-                                <TableCell className={cn("text-xs", trade.isBuyer ? "text-green-500" : "text-red-500")}>
-                                    {trade.isBuyer ? 'BUY' : 'SELL'}
-                                </TableCell>
-                                <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
-                                <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.qty).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
-                                <TableCell className="text-right text-foreground text-xs">{parseFloat(trade.quoteQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                                </TableRow>
-                            ))
-                        ) : (
-                             // Initial or No Data Message for Trades
-                            <TableRow className="border-border">
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
-                                     {isConnected && !isLoadingTrades && trades.length === 0 ? "No recent trade history found for checked pairs." :
-                                      isConnected && !isLoadingTrades ? "Failed to fetch trades or invalid pairs." :
-                                      !isConnected ? "Load assets first to enable trade history." :
-                                      "Loading trade history..." // Should be covered by isLoadingTrades, but as fallback
-                                     }
-                                </TableCell>
-                            </TableRow>
-                        )}
+                        {renderTradeRows()}
                     </TableBody>
                      {/* Use store state for condition */}
                     {isConnected && trades.length > 0 && !isLoadingTrades && (
@@ -568,4 +576,3 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     </div>
   );
 };
-
