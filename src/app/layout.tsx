@@ -14,8 +14,8 @@ const roboto = Roboto({
 
 
 export const metadata: Metadata = {
-  title: 'EchoBot',
-  description: 'An AI powered chatbot inspired by Firebase Studio', // Updated description
+  title: 'YINSEN', // Updated title
+  description: 'An AI powered chatbot and asset viewer inspired by Firebase Studio', // Updated description
 };
 
 export default function RootLayout({

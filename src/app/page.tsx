@@ -1,3 +1,4 @@
+import { AssetSummary } from "@/components/assets/asset-summary";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
 
@@ -16,10 +17,16 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Chat Window container - apply consistent card styling */}
+      {/* Container for Asset Summary and Chat */}
       <aside className="w-96 border border-border flex flex-col bg-card rounded-lg shadow-md overflow-hidden flex-shrink-0">
-         {/* Let ChatWindow fill this container */}
-         <ChatWindow />
+         {/* Asset Summary Section - Top Half */}
+         <div className="h-1/2 border-b border-border flex flex-col">
+            <AssetSummary />
+         </div>
+         {/* Chat Window Section - Bottom Half */}
+         <div className="h-1/2 flex flex-col">
+            <ChatWindow />
+         </div>
       </aside>
     </div>
   );

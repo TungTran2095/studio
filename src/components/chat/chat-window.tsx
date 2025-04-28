@@ -16,6 +16,7 @@ interface Message {
   content: string;
 }
 
+// Removed export default for named export if needed elsewhere, ensure FC type is correct
 export const ChatWindow: FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,12 +84,12 @@ export const ChatWindow: FC = () => {
   };
 
   return (
-    // Use flex-col and height full to fill the parent `aside`
-    // Removed Card component wrapper, border, shadow, fixed w/h
+    // Use flex-col and height full to fill the parent div (which is h-1/2)
     <div className="flex flex-col h-full w-full bg-card"> {/* Ensure card background */}
       {/* Keep header structure, ensure it doesn't grow, adjust padding */}
       <CardHeader className="border-b flex-shrink-0 p-3">
-        <CardTitle className="text-center text-lg font-medium text-foreground">EchoBot</CardTitle>
+        {/* Rename EchoBot to YINSEN */}
+        <CardTitle className="text-center text-lg font-medium text-foreground">YINSEN</CardTitle>
       </CardHeader>
       {/* Content area should grow and allow scrolling */}
       <CardContent className="flex-1 p-0 overflow-hidden"> {/* flex-1 to grow, removed bg-card */}
