@@ -537,7 +537,6 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                   {isLoadingAssets ? "Loading..." : "Load Assets"}
                 </Button>
               </div>
-              {/* Removed the FormDescription component */}
             </form>
           </Form>
 
@@ -546,8 +545,9 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
           <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col overflow-hidden pt-3 border-t border-border">
             <div className="flex justify-between items-center mb-2">
                 <TabsList className="grid w-full grid-cols-2 h-9">
-                    <TabsTrigger value="summary" className="text-xs h-full">Asset Summary ({TARGET_SYMBOLS.join(', ')})</TabsTrigger>
-                    <TabsTrigger value="history" className="text-xs h-full">Trade History ({TARGET_SYMBOLS.join(', ')})</TabsTrigger>
+                    {/* Updated Tab Titles */}
+                    <TabsTrigger value="summary" className="text-xs h-full">Summary</TabsTrigger>
+                    <TabsTrigger value="history" className="text-xs h-full">Trade History</TabsTrigger>
                 </TabsList>
                  {/* Refresh button for trades, only shown on history tab */}
                 {activeTab === 'history' && ( // Show refresh if on history tab
