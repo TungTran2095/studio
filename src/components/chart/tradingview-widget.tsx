@@ -11,10 +11,14 @@ export const TradingViewWidget: React.FC = memo(() => {
     // Prevent adding the script multiple times if component re-renders
     if (!container.current || scriptAdded.current) return;
 
+    // Determine the theme *before* creating the JSON string
+    const currentTheme = document.documentElement.classList.contains('dark') ? "dark" : "light";
+
     const script = document.createElement("script");
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
     script.type = "text/javascript";
     script.async = true;
+    // Inject the determined theme directly into the JSON string
     script.innerHTML = `
       {
         "symbols": [
@@ -26,7 +30,7 @@ export const TradingViewWidget: React.FC = memo(() => {
         "width": "100%",
         "height": "100%",
         "locale": "en",
-        "colorTheme": document.documentElement.classList.contains('dark') ? "dark" : "light", // Dynamically set theme
+        "colorTheme": "${currentTheme}",
         "autosize": true,
         "showVolume": false,
         "showMA": false,
