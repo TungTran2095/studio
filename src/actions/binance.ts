@@ -78,19 +78,30 @@ export async function fetchBinanceAssets(
   const { apiKey, apiSecret, isTestnet } = validationResult.data;
 
   // Configure Binance client
-  const binance = new Binance().options({
-    APIKEY: apiKey,
-    APISECRET: apiSecret,
-    // Use testnet URLs if isTestnet is true
-    ...(isTestnet && {
-      urls: {
-        base: 'https://testnet.binance.vision/api/',
-        // Add other testnet URLs if needed (e.g., for streams)
-      },
-    }),
-    // Consider adding recvWindow if requests time out
-    // recvWindow: 60000, // Increased timeout window
-  });
+  let binance;
+  try {
+      console.log('[fetchBinanceAssets] Initializing Binance client...');
+      binance = new Binance().options({
+        APIKEY: apiKey,
+        APISECRET: apiSecret,
+        // Use testnet URLs if isTestnet is true
+        ...(isTestnet && {
+          urls: {
+            base: 'https://testnet.binance.vision/api/',
+            // Add other testnet URLs if needed (e.g., for streams)
+          },
+        }),
+        // Consider adding recvWindow if requests time out
+        // recvWindow: 60000, // Increased timeout window
+      });
+      console.log('[fetchBinanceAssets] Binance client initialized.');
+      // Log available methods on the initialized object immediately
+      // console.log('[fetchBinanceAssets] Initialized Binance client methods:', Object.keys(binance));
+  } catch (initError: any) {
+       console.error('[fetchBinanceAssets] Failed to initialize Binance client:', initError);
+       return { success: false, data: [], error: `Failed to initialize Binance client: ${initError.message}` };
+  }
+
 
   try {
     // 1. Fetch account balances
@@ -284,22 +295,43 @@ export async function fetchBinanceTradeHistory(
     const { apiKey, apiSecret, isTestnet, symbols: tradingPairsToFetch, limit } = validationResult.data;
 
     // Configure Binance client
-    const binance = new Binance().options({
-        APIKEY: apiKey,
-        APISECRET: apiSecret,
-        ...(isTestnet && {
-            urls: { base: 'https://testnet.binance.vision/api/' },
-        }),
-        // recvWindow: 60000, // Consider increasing if timeouts occur
-    });
+    let binance;
+     try {
+       console.log('[fetchBinanceTradeHistory] Initializing Binance client for trade history...');
+       binance = new Binance().options({
+         APIKEY: apiKey,
+         APISECRET: apiSecret,
+         ...(isTestnet && {
+             urls: { base: 'https://testnet.binance.vision/api/' },
+         }),
+         // recvWindow: 60000, // Consider increasing if timeouts occur
+       });
+        console.log('[fetchBinanceTradeHistory] Binance client initialized.');
+         // Log available methods immediately after initialization
+        // console.log('[fetchBinanceTradeHistory] Initialized Binance client methods:', Object.keys(binance));
+     } catch (initError: any) {
+        console.error('[fetchBinanceTradeHistory] Failed to initialize Binance client:', initError);
+        return { success: false, data: [], error: `Failed to initialize Binance client: ${initError.message}` };
+     }
+
 
     // ** REINFORCED CHECK: Verify if myTrades function exists **
-    if (typeof binance.myTrades !== 'function') {
+    // Add extra logging here to confirm the state of `binance` and `binance.myTrades`
+    console.log('[fetchBinanceTradeHistory] Checking for binance.myTrades method...');
+    console.log('[fetchBinanceTradeHistory] typeof binance.myTrades:', typeof binance?.myTrades); // Use optional chaining for safety
+
+    if (typeof binance?.myTrades !== 'function') { // Use optional chaining here too
       const errorMsg = 'Internal Server Error: Could not access trade history function (myTrades method not found on Binance client). Check library version or initialization.';
       console.error(`[fetchBinanceTradeHistory] ${errorMsg}`);
-      console.error('[fetchBinanceTradeHistory] Binance client instance properties:', Object.keys(binance)); // Log available properties/methods for inspection
+       // Log available properties/methods for inspection IF binance object exists
+      if (binance) {
+        console.error('[fetchBinanceTradeHistory] Binance client instance properties:', Object.keys(binance));
+      } else {
+          console.error('[fetchBinanceTradeHistory] Binance client object is undefined or null.');
+      }
       return { success: false, data: [], error: errorMsg };
     }
+     console.log('[fetchBinanceTradeHistory] binance.myTrades method found. Proceeding...');
     // ** END REINFORCED CHECK **
 
     try {
@@ -321,6 +353,7 @@ export async function fetchBinanceTradeHistory(
             return new Promise<Trade[]>(async (resolve) => { // Make inner function async
                try {
                    // Now we know binance.myTrades exists (or the check above would have returned)
+                   console.log(`[fetchBinanceTradeHistory] Calling binance.myTrades for ${symbol}...`);
                    const trades: any[] = await binance.myTrades(symbol, { limit: limit });
 
                     if (Array.isArray(trades)) {
@@ -450,3 +483,5 @@ export async function fetchBinanceTradeHistory(
         return { success: false, data: [], error: errorMessage };
     }
 }
+
+    
