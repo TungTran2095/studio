@@ -11,6 +11,7 @@ import { generateResponse } from "@/ai/flows/generate-response";
 import type { GenerateResponseInput } from "@/ai/flows/generate-response";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"; // Import Avatar components
 import { cn } from '@/lib/utils';
 import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
 import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // Import Supabase actions
