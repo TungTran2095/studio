@@ -61,7 +61,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     isLoadingAssets,
     isLoadingTrades,
     isConnected,
-    ownedSymbols,
+    ownedSymbols, // Asset symbols (e.g., BTC, ETH)
     activeTab,
     apiKey,
     apiSecret,
@@ -111,10 +111,11 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
   // Function to fetch assets using the Server Action and update store
   const handleFetchAssets = useCallback(async (values: z.infer<typeof formSchema>) => {
+    console.log("Attempting to fetch assets with credentials:", { apiKey: '...', apiSecret: '...', isTestnet: values.isTestnet });
     setIsLoadingAssets(true);
     // Clear relevant parts of the store before fetching
     setAssets([]);
-    setTrades([]);
+    setTrades([]); // Clear trades when fetching new assets
     setOwnedSymbols([]);
     setIsConnected(false);
     setCredentials(values.apiKey, values.apiSecret, values.isTestnet); // Ensure store has latest credentials
@@ -126,21 +127,28 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         isTestnet: values.isTestnet,
       });
 
+      console.log("fetchBinanceAssets result:", result);
+
       if (result.success) {
         setAssets(result.data);
         setOwnedSymbols(result.ownedSymbols || []);
         setIsConnected(true);
         toast({
           title: "Success",
-          description: "Successfully fetched assets from Binance.",
+          description: `Fetched ${result.data.length} assets from Binance.`,
         });
-         // Automatically fetch trades if on history tab and just connected
-        if (activeTab === "history") {
-           handleFetchTrades(values, result.ownedSymbols || []);
+         // Automatically fetch trades IF on history tab and assets were loaded successfully
+         // Ensure ownedSymbols from the result are used immediately
+        if (activeTab === "history" && result.ownedSymbols && result.ownedSymbols.length > 0) {
+           console.log("Assets loaded, triggering trade history fetch for symbols:", result.ownedSymbols);
+           handleFetchTrades(values, result.ownedSymbols); // Pass credentials and fetched symbols
+        } else if (activeTab === "history") {
+            console.log("Assets loaded, but no symbols with balance found for trade history.");
+             setTrades([]); // Ensure trades are cleared if no symbols
         }
       } else {
         // Clear state on failure
-        clearState();
+        clearState(); // Consider if clearing credentials here is desired UX
         toast({
           title: "Error Fetching Assets",
           description: `Failed to fetch assets: ${result.error}. Check credentials and permissions.`,
@@ -158,39 +166,88 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     } finally {
       setIsLoadingAssets(false);
     }
-  }, [setIsLoadingAssets, setAssets, setTrades, setOwnedSymbols, setIsConnected, setCredentials, clearState, toast, activeTab]); // Added activeTab
+  }, [setIsLoadingAssets, setAssets, setTrades, setOwnedSymbols, setIsConnected, setCredentials, clearState, toast, activeTab, /* Removed handleFetchTrades from deps */]); // Avoid handleFetchTrades in deps here
+
 
    // Function to fetch trade history using the Server Action and update store
+   // Takes credentials and the list of ASSET symbols (e.g., ['BTC', 'ETH'])
    const handleFetchTrades = useCallback(async (
         credentials: z.infer<typeof formSchema>,
-        symbolsToFetch: string[]
+        ownedAssetSymbols: string[] // Expecting asset symbols like BTC, ETH
     ) => {
         if (!isConnected) {
+             console.warn("Cannot fetch trades: Not connected (assets not loaded).");
              toast({ title: "Not Connected", description: "Please load assets first.", variant: "destructive" });
              return;
         }
-        if (symbolsToFetch.length === 0) {
-            console.log("No owned symbols with balance found to fetch trade history for.");
+        if (!ownedAssetSymbols || ownedAssetSymbols.length === 0) {
+            console.log("No owned symbols provided to fetch trade history for.");
              setTrades([]); // Clear trades in store
+             toast({ title: "No Symbols", description: "No assets with balance found to check trade history." });
             return;
         }
 
+        // --- Construct potential trading pairs ---
+        // Common quote assets (adjust as needed)
+        const quoteAssets = ['USDT', 'BTC', 'ETH', 'BNB', 'USDC', 'TUSD', 'FDUSD'];
+        const potentialPairs = new Set<string>();
+
+        ownedAssetSymbols.forEach(asset => {
+            quoteAssets.forEach(quote => {
+                if (asset !== quote) {
+                    // Add ASSET/QUOTE pair
+                    potentialPairs.add(`${asset}${quote}`);
+                    // Add QUOTE/ASSET pair (less common for history but possible)
+                    // potentialPairs.add(`${quote}${asset}`);
+                }
+            });
+        });
+
+         // If user owns a quote asset, add pairs against other quote assets
+        ownedAssetSymbols.forEach(asset => {
+            if (quoteAssets.includes(asset)) {
+                quoteAssets.forEach(quote => {
+                     if (asset !== quote) {
+                         potentialPairs.add(`${asset}${quote}`); // e.g., BTCUSDT if owning BTC
+                         potentialPairs.add(`${quote}${asset}`); // e.g., USDTBTC if owning USDT
+                     }
+                });
+            }
+        });
+
+
+        // Filter out duplicates (already handled by Set)
+        const tradingPairsToFetch = Array.from(potentialPairs);
+
+        if (tradingPairsToFetch.length === 0) {
+            console.log("Could not construct any potential trading pairs from owned symbols:", ownedAssetSymbols);
+            setTrades([]);
+            toast({ title: "No Pairs", description: "Could not determine relevant trading pairs." });
+            return;
+        }
+        // --- End constructing pairs ---
+
+
+        console.log(`Attempting to fetch trade history for ${tradingPairsToFetch.length} potential pairs:`, tradingPairsToFetch.slice(0, 10).join(', ') + (tradingPairsToFetch.length > 10 ? '...' : '')); // Log first few pairs
         setIsLoadingTrades(true);
         setTrades([]); // Clear previous trades in store
 
         try {
+             // Call the action with the CONSTRUCTED TRADING PAIRS
              const result = await fetchBinanceTradeHistory({
                 apiKey: credentials.apiKey,
                 apiSecret: credentials.apiSecret,
                 isTestnet: credentials.isTestnet,
-                symbols: undefined,
-                limit: 50,
+                symbols: tradingPairsToFetch, // Pass the generated trading pairs
+                limit: 50, // Adjust limit as needed
             });
+
+            console.log("fetchBinanceTradeHistory result:", result);
 
             if (result.success) {
                 setTrades(result.data); // Update trades in store
                 if (result.data.length === 0) {
-                     toast({ title: "No Trades", description: "No recent trade history found for your assets." });
+                     toast({ title: "No Trades Found", description: "No recent trade history found for the checked pairs." });
                 } else {
                      toast({ title: "Success", description: `Fetched ${result.data.length} trades.` });
                 }
@@ -199,7 +256,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 console.error("Error fetching trade history from action:", result.error);
                 toast({
                 title: "Error Fetching Trades",
-                description: `Failed to fetch trade history: ${result.error}.`,
+                description: `Failed to fetch trade history: ${result.error}. Some symbols might be invalid.`,
                 variant: "destructive",
                 });
             }
@@ -214,17 +271,25 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         } finally {
             setIsLoadingTrades(false);
         }
-    }, [isConnected, setIsLoadingTrades, setTrades, toast]);
+    }, [isConnected, setIsLoadingTrades, setTrades, toast /* No other store deps needed here */]);
 
    // Handle tab change - update store
    const onTabChange = (value: string) => {
+        console.log("Tab changed to:", value);
         setActiveTab(value);
         // Fetch trades if switching to history tab, assets are loaded, and trades are not already loaded/loading
         if (value === 'history' && isConnected && trades.length === 0 && !isLoadingTrades) {
-             // Use credentials from the store
-             if (apiKey && apiSecret) {
+             // Use credentials and OWNED SYMBOLS from the store
+             if (apiKey && apiSecret && ownedSymbols && ownedSymbols.length > 0) {
+                 console.log("Switching to history tab, fetching trades for symbols:", ownedSymbols);
                 handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols);
-            } else {
+            } else if (apiKey && apiSecret) {
+                 console.log("Switching to history tab, but no owned symbols available to fetch trades for.");
+                 setTrades([]); // Clear trades if no symbols
+                 toast({ title: "No Symbols", description: "Load assets first or no assets with balance found.", variant: "destructive" });
+            }
+            else {
+                 console.warn("Switching to history tab, but credentials or symbols missing.");
                  toast({ title: "Credentials Missing", description: "API credentials not found in store.", variant: "destructive" });
             }
 
@@ -270,7 +335,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                       {...field}
                       type="password" // Hide sensitive input
                       className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
-                      disabled={isLoading}
+                      disabled={isLoadingAssets} // Only disable during asset load
                       />
                     </FormControl>
                     <FormMessage className="text-xs" />
@@ -289,7 +354,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                         {...field}
                         type="password" // Hide sensitive input
                         className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
-                        disabled={isLoading}
+                         disabled={isLoadingAssets} // Only disable during asset load
                       />
                     </FormControl>
                     <FormMessage className="text-xs" />
@@ -307,7 +372,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                           checked={field.value}
                           onCheckedChange={field.onChange}
                           id="testnet"
-                          disabled={isLoading}
+                           disabled={isLoadingAssets} // Only disable during asset load
                           className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground" // Theme colors
                         />
                       </FormControl>
@@ -342,13 +407,21 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                         size="icon"
                          // Use credentials from the store for refresh
                         onClick={() => {
-                            if(apiKey && apiSecret) {
-                                handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols)
-                            } else {
+                             // Make sure ownedSymbols exist before refreshing
+                            if(apiKey && apiSecret && ownedSymbols && ownedSymbols.length > 0) {
+                                 console.log("Manual refresh clicked for trade history, symbols:", ownedSymbols);
+                                handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols);
+                            } else if (apiKey && apiSecret) {
+                                 console.warn("Cannot refresh trades: No owned symbols available.");
+                                 toast({ title: "No Symbols", description: "No assets with balance to refresh trades for.", variant: "destructive" });
+                            }
+                             else {
+                                 console.warn("Cannot refresh trades: Credentials missing.");
                                  toast({ title: "Credentials Missing", description: "Cannot refresh trades without API credentials.", variant: "destructive" });
                             }
                         }}
-                        disabled={isLoadingTrades || !isConnected || ownedSymbols.length === 0 || !apiKey || !apiSecret}
+                         // Disable if loading trades, not connected, no symbols, or no credentials
+                         disabled={isLoadingTrades || !isConnected || !ownedSymbols || ownedSymbols.length === 0 || !apiKey || !apiSecret}
                         className="ml-2 h-8 w-8 flex-shrink-0"
                         title="Refresh Trade History"
                     >
@@ -461,7 +534,11 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                              // Initial or No Data Message for Trades
                             <TableRow className="border-border">
                                 <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
-                                     {isConnected && !isLoadingTrades ? "No trade history found or fetch failed." : "Load assets first to enable trade history."}
+                                     {isConnected && !isLoadingTrades && trades.length === 0 ? "No recent trade history found for checked pairs." :
+                                      isConnected && !isLoadingTrades ? "Failed to fetch trades or invalid pairs." :
+                                      !isConnected ? "Load assets first to enable trade history." :
+                                      "Loading trade history..." // Should be covered by isLoadingTrades, but as fallback
+                                     }
                                 </TableCell>
                             </TableRow>
                         )}
@@ -469,9 +546,19 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                      {/* Use store state for condition */}
                     {isConnected && trades.length > 0 && !isLoadingTrades && (
                          <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             Showing last {trades.length} trades. Refresh for latest.
+                             Showing last {trades.length} trades for relevant pairs. Refresh for latest.
                          </TableCaption>
                     )}
+                      {isConnected && trades.length === 0 && !isLoadingTrades && (
+                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                             No recent trades found for relevant pairs.
+                         </TableCaption>
+                    )}
+                     {!isConnected && (
+                         <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
+                             Load assets to view trade history.
+                         </TableCaption>
+                     )}
                 </Table>
                </ScrollArea>
             </TabsContent>
@@ -481,3 +568,4 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     </div>
   );
 };
+
