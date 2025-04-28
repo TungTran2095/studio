@@ -111,11 +111,17 @@ export async function fetchBinanceAssets(
 
     // Add "BTC" and "USDT" if needed for price calculations, among others
     const symbolsForPricing = new Set(ownedAssetSymbolsWithBalance);
-    const essentialQuoteAssets = ['BTC', 'USDT', 'ETH', 'BNB', 'USDC']; // Ensure these are checked if owned or needed
+    // Use TARGET_SYMBOLS constant to define the core assets we need prices for
+    const TARGET_SYMBOLS = ['BTC', 'USDT']; // Define target symbols
+    const essentialQuoteAssets = ['USDT']; // Primarily need USDT for pricing
+
+    // Ensure TARGET_SYMBOLS are included if we own anything
+    if (ownedAssetSymbolsWithBalance.length > 0) {
+        TARGET_SYMBOLS.forEach(asset => symbolsForPricing.add(asset));
+    }
+    // Ensure essential quote assets are added
     essentialQuoteAssets.forEach(asset => {
-        if (!symbolsForPricing.has(asset) && ownedAssetSymbolsWithBalance.length > 0) { // Only add if we own something
-             // Check if needed for conversion, don't add if not owned AND not needed
-             // Simple approach: always add if we own anything, prices API will filter invalid ones
+        if (ownedAssetSymbolsWithBalance.length > 0) { // Only add if we own something
               symbolsForPricing.add(asset);
         }
     });
@@ -129,6 +135,10 @@ export async function fetchBinanceAssets(
              symbolsToFetchPrices.add(`${assetSymbol}${quoteAsset}`);
           }
        });
+       // Add BTC pairing if the asset is not BTC or a quote asset
+       if (assetSymbol !== 'BTC' && !essentialQuoteAssets.includes(assetSymbol)) {
+            symbolsToFetchPrices.add(`${assetSymbol}BTC`);
+       }
      });
 
      // Ensure essential quote asset prices against USDT are fetched if they exist
@@ -137,17 +147,26 @@ export async function fetchBinanceAssets(
              symbolsToFetchPrices.add(`${asset}USDT`);
          }
      });
+     // Ensure BTC/USDT is always included if any prices are needed
+      if (symbolsToFetchPrices.size > 0) {
+         symbolsToFetchPrices.add('BTCUSDT');
+     }
 
 
     // 3. Fetch current prices for the required trading pairs
     console.log(`[fetchBinanceAssets] Fetching prices for ${symbolsToFetchPrices.size} potential pairs...`);
     let prices: { [key: string]: string } = {};
     try {
-         prices = await binance.prices();
-         if (!prices) {
-           console.error('[fetchBinanceAssets] Failed to fetch prices (returned null/undefined).');
-           throw new Error('Failed to fetch prices.');
-         }
+        // Only fetch prices if we have symbols to fetch for
+        if (symbolsToFetchPrices.size > 0) {
+            prices = await binance.prices();
+             if (!prices) {
+               console.error('[fetchBinanceAssets] Failed to fetch prices (returned null/undefined).');
+               throw new Error('Failed to fetch prices.');
+             }
+         } else {
+            console.log('[fetchBinanceAssets] No symbols require price fetching.');
+        }
     } catch (priceError: any) {
         // Log the error but potentially continue if some prices were fetched before error
          console.error('[fetchBinanceAssets] Error during price fetch:', priceError.message || priceError);
@@ -170,8 +189,6 @@ export async function fetchBinanceAssets(
 
     const getPrice = (symbol: string): number => parseFloat(filteredPrices[symbol] || '0');
     const btcUsdtPrice = getPrice('BTCUSDT');
-    const ethUsdtPrice = getPrice('ETHUSDT');
-    const bnbUsdtPrice = getPrice('BNBUSDT');
 
 
     // 4. Calculate total value for each asset
@@ -190,27 +207,11 @@ export async function fetchBinanceAssets(
             valueInUsd = quantity * getPrice(`${assetSymbol}USDT`);
         } else if (getPrice(`${assetSymbol}BTC`) > 0 && btcUsdtPrice > 0) {
             valueInUsd = quantity * getPrice(`${assetSymbol}BTC`) * btcUsdtPrice;
-        } else if (getPrice(`${assetSymbol}ETH`) > 0 && ethUsdtPrice > 0) {
-            valueInUsd = quantity * getPrice(`${assetSymbol}ETH`) * ethUsdtPrice;
-        } else if (getPrice(`${assetSymbol}BNB`) > 0 && bnbUsdtPrice > 0) {
-             valueInUsd = quantity * getPrice(`${assetSymbol}BNB`) * bnbUsdtPrice;
-        } else if (assetSymbol === 'BTC' && btcUsdtPrice > 0) {
-             valueInUsd = quantity * btcUsdtPrice;
-        } else if (assetSymbol === 'ETH' && ethUsdtPrice > 0) {
-            valueInUsd = quantity * ethUsdtPrice;
-        } else if (assetSymbol === 'BNB' && bnbUsdtPrice > 0) {
-             valueInUsd = quantity * bnbUsdtPrice;
         }
-         // Add more conversion logic here if needed (e.g., via other stablecoins if USDT pair fails)
-         // Example: check USDC pair if USDT failed
-         else if (getPrice(`${assetSymbol}USDC`) > 0) {
-             // Assuming USDC is roughly 1 USD
-             valueInUsd = quantity * getPrice(`${assetSymbol}USDC`);
-         }
+        // Add more conversion logic here if needed (e.g., via other stablecoins if USDT pair fails)
 
 
         // Add logic here to fetch full asset names if desired (might require another API or mapping)
-        // e.g., const nameMap = { BTC: 'Bitcoin', ETH: 'Ethereum' }; assetName = nameMap[assetSymbol] || assetSymbol;
 
 
         if (valueInUsd > 0.01) { // Only include assets with a minimum value (e.g., $0.01)
@@ -287,14 +288,14 @@ export async function fetchBinanceTradeHistory(
         // recvWindow: 60000, // Consider increasing if timeouts occur
     });
 
-    // Check if the myTrades function exists on the binance instance BEFORE trying to use it
+    // ** ADDED CHECK: Verify if myTrades function exists **
     if (typeof binance.myTrades !== 'function') {
       const errorMsg = 'Internal Server Error: Could not access trade history function (myTrades method not found on Binance client). Check library version or initialization.';
       console.error(`[fetchBinanceTradeHistory] ${errorMsg}`);
-      console.error('[fetchBinanceTradeHistory] Binance client instance:', binance); // Log the instance for inspection
+      console.error('[fetchBinanceTradeHistory] Binance client instance properties:', Object.keys(binance)); // Log available properties/methods for inspection
       return { success: false, data: [], error: errorMsg };
     }
-
+    // ** END ADDED CHECK **
 
     try {
         // The `symbols` are already provided in the input as `tradingPairsToFetch`
@@ -314,7 +315,9 @@ export async function fetchBinanceTradeHistory(
         const fetchPromises = tradingPairsToFetch.map(symbol => {
             return new Promise<Trade[]>(async (resolve) => { // Make inner function async
                try {
+                   // Now we know binance.myTrades exists (or the check above would have returned)
                    const trades: any[] = await binance.myTrades(symbol, { limit: limit });
+
                     if (Array.isArray(trades)) {
                         // console.log(`[fetchBinanceTradeHistory] Fetched ${trades.length} trades for ${symbol}`);
 
