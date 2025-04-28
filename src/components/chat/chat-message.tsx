@@ -30,7 +30,9 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
       )}
       <div
         className={cn(
-          "max-w-[75%] rounded-lg p-3 shadow-sm", // Use theme's radius and shadow
+          "rounded-lg p-3 shadow-sm", // Use theme's radius and shadow
+           // Reduced max-width from 75% to 70%
+          "max-w-[70%]",
           isUser
             ? "bg-primary-gradient text-primary-foreground" // User message uses gradient
             : "bg-secondary text-secondary-foreground" // Bot message uses secondary theme color
