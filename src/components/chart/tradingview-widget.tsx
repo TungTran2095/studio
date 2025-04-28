@@ -8,11 +8,16 @@ export const TradingViewWidget: React.FC = memo(() => {
   const scriptAdded = useRef(false); // Ref to track if script has been added
   const widgetInstance = useRef<any>(null); // Ref to store the widget instance
 
-  // Function to update widget theme
+  // Function to update widget theme - Force dark mode
   const updateTheme = () => {
-    const currentTheme = typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? "dark" : "light";
-    if (widgetInstance.current) {
-        widgetInstance.current.changeTheme(currentTheme);
+    const currentTheme = "dark"; // Always set to dark
+    if (widgetInstance.current && typeof widgetInstance.current.changeTheme === 'function') {
+        // Ensure the changeTheme function exists before calling
+        try {
+            widgetInstance.current.changeTheme(currentTheme);
+        } catch (error) {
+            console.error("Error changing TradingView widget theme:", error);
+        }
     }
     return currentTheme;
   };
@@ -21,7 +26,7 @@ export const TradingViewWidget: React.FC = memo(() => {
     // Ensure container exists and script hasn't been added yet
     if (!container.current || scriptAdded.current) return;
 
-    const currentTheme = updateTheme(); // Get initial theme
+    const currentTheme = "dark"; // Set initial theme directly to dark
 
     // Configuration for the Advanced Real-Time Chart Widget
     const widgetConfig = {
@@ -29,7 +34,7 @@ export const TradingViewWidget: React.FC = memo(() => {
       "symbol": "BINANCE:BTCUSDT", // Primary symbol
       "interval": "D", // Default interval (Daily)
       "timezone": "Etc/UTC",
-      "theme": currentTheme, // Set initial theme
+      "theme": currentTheme, // Set initial theme to dark
       "style": "1", // 1 = Candlesticks
       "locale": "en",
       "enable_publishing": false, // Disable publishing button
@@ -48,10 +53,16 @@ export const TradingViewWidget: React.FC = memo(() => {
     script.type = "text/javascript";
     script.async = true;
     script.onload = () => {
-        if (typeof window.TradingView !== 'undefined') {
+        if (typeof window.TradingView !== 'undefined' && typeof (window as any).TradingView.widget === 'function') {
            // Store the widget instance
-           widgetInstance.current = new (window as any).TradingView.widget(widgetConfig);
-           scriptAdded.current = true; // Mark script as loaded and widget initialized
+           try {
+               widgetInstance.current = new (window as any).TradingView.widget(widgetConfig);
+               scriptAdded.current = true; // Mark script as loaded and widget initialized
+           } catch (error) {
+                console.error("Error initializing TradingView widget:", error);
+           }
+        } else {
+            console.error("TradingView library not loaded correctly.");
         }
     }
     script.onerror = () => {
@@ -60,11 +71,12 @@ export const TradingViewWidget: React.FC = memo(() => {
 
     container.current.appendChild(script);
 
-    // Setup MutationObserver to detect theme changes
+     // Setup MutationObserver to detect theme changes on HTML element
+     // Although we force dark theme, this can help if other styles depend on the class
     const observer = new MutationObserver((mutationsList) => {
         for (const mutation of mutationsList) {
             if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                updateTheme(); // Update widget theme when document class changes
+                updateTheme(); // Re-apply dark theme if needed
             }
         }
     });
@@ -74,6 +86,7 @@ export const TradingViewWidget: React.FC = memo(() => {
         observer.observe(document.documentElement, { attributes: true });
     }
 
+
     // Cleanup function
     return () => {
       // Stop observing
@@ -81,7 +94,11 @@ export const TradingViewWidget: React.FC = memo(() => {
 
       // Remove widget instance if it exists
       if (widgetInstance.current && typeof widgetInstance.current.remove === 'function') {
-        widgetInstance.current.remove();
+        try {
+            widgetInstance.current.remove();
+        } catch (error) {
+            console.error("Error removing TradingView widget:", error);
+        }
         widgetInstance.current = null;
       }
       // Clean up the container div
@@ -97,11 +114,13 @@ export const TradingViewWidget: React.FC = memo(() => {
 
    // Container div for the advanced widget
    return (
-    <div className="tradingview-widget-container h-full w-full" ref={container}>
-      {/* The widget script will target this ID */}
-      <div id="tradingview_chart_container" className="h-full w-full"></div>
-      {/* Optional: Link to TradingView can be removed or styled */}
-      {/* <div className="tradingview-widget-copyright"></div> */}
+    <div className="middle-column h-full w-full">
+        <div id="chart-container" className="h-full w-full">
+            <div id="tradingview_btcusdt" className="tradingview-widget-container h-full w-full" ref={container}>
+                {/* The widget script will target this ID */}
+                <div id="tradingview_chart_container" className="h-full w-full"></div>
+            </div>
+        </div>
     </div>
   );
 });
