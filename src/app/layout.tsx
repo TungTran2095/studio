@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // Add 'dark' class here for default dark mode
+    // Add 'dark' class here for default dark mode, matching Firebase Studio
     <html lang="en" className="dark">
        {/* Apply Roboto font variable */}
       <body className={cn(roboto.variable, "font-sans antialiased")}>

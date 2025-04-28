@@ -22,7 +22,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
     >
       {!isUser && (
         <Avatar className="h-8 w-8 border border-border">
-           {/* Use secondary for bot avatar fallback background */}
+           {/* Use secondary for bot avatar fallback background to contrast with bot message */}
           <AvatarFallback className="bg-secondary text-secondary-foreground">
             <Bot className="h-5 w-5" />
           </AvatarFallback>
@@ -32,11 +32,12 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
         className={cn(
           "max-w-[75%] rounded-lg p-3 shadow-sm", // Use theme's radius and shadow
           isUser
-            ? "bg-primary text-primary-foreground" // User message uses primary color
-            : "bg-secondary text-secondary-foreground" // Bot message uses secondary background for contrast in dark mode
+            ? "bg-primary text-primary-foreground" // User message uses primary theme color
+            : "bg-secondary text-secondary-foreground" // Bot message uses secondary theme color
         )}
       >
-        <p className="text-sm whitespace-pre-wrap">{content}</p>
+         {/* Use foreground color for text within the bubble, let the parent div set the correct color */}
+        <p className="text-sm whitespace-pre-wrap text-current">{content}</p>
       </div>
        {isUser && (
         <Avatar className="h-8 w-8 border border-border">

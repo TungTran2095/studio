@@ -3,81 +3,82 @@
 @tailwind utilities;
 
 body {
-  font-family: "Roboto", Arial, Helvetica, sans-serif; /* Using Roboto, common in Google products */
+  font-family: "Roboto", Arial, Helvetica, sans-serif; /* Ensure Roboto font is applied */
 }
 
 @layer base {
   :root {
-    /* Firebase Studio Inspired Theme - Light Mode (kept for reference/toggle) */
-    --background: 210 17% 98%; /* Light Gray (#F8F9FA) */
-    --foreground: 220 7% 16%; /* Dark Gray Text (#202124) */
+    /* Firebase Studio Inspired Theme - Light Mode */
+    --background: 210 20% 98%; /* Slightly off-white like Firebase Console */
+    --foreground: 220 15% 25%; /* Dark Gray Text (#202124) */
     --card: 0 0% 100%; /* White (#FFFFFF) */
-    --card-foreground: 220 7% 16%; /* Dark Gray Text */
+    --card-foreground: 220 15% 25%; /* Dark Gray Text */
     --popover: 0 0% 100%; /* White */
-    --popover-foreground: 220 7% 16%; /* Dark Gray Text */
-    --primary: 217 89% 61%; /* Google Blue (#1A73E8) */
+    --popover-foreground: 220 15% 25%; /* Dark Gray Text */
+    --primary: 217 91% 60%; /* Firebase Blue (#1A73E8) */
     --primary-foreground: 0 0% 100%; /* White text on blue */
-    --secondary: 220 14% 96%; /* Lighter Gray (#E8EAED) */
-    --secondary-foreground: 220 7% 16%; /* Dark Gray Text */
-    --muted: 220 14% 96%; /* Lighter Gray (#E8EAED) */
-    --muted-foreground: 216 5% 44%; /* Medium Gray Text (#5F6368) */
-    --accent: 220 14% 96%; /* Lighter Gray for subtle accents */
-    --accent-foreground: 220 7% 16%; /* Dark Gray Text */
-    --destructive: 0 84.2% 60.2%; /* Default Red */
-    --destructive-foreground: 0 0% 98%; /* Default Light Text on Red */
-    --border: 220 13% 91%; /* Gray Border (#DADCE0) */
-    --input: 220 13% 91%; /* Gray Input BG (#DADCE0) */
-    --ring: 217 89% 61%; /* Google Blue for focus rings */
+    --secondary: 210 16% 93%; /* Lighter Gray (#E8EAED) */
+    --secondary-foreground: 220 15% 25%; /* Dark Gray Text */
+    --muted: 210 16% 93%; /* Lighter Gray (#E8EAED) */
+    --muted-foreground: 215 14% 47%; /* Medium Gray Text (#6E7177) */
+    --accent: 210 16% 96%; /* Very Light Gray for subtle accents */
+    --accent-foreground: 217 91% 60%; /* Firebase Blue for accent text */
+    --destructive: 0 72% 51%; /* Standard Red */
+    --destructive-foreground: 0 0% 98%; /* Light text on red */
+    --border: 214 20% 87%; /* Gray Border (#DADCE0) */
+    --input: 214 20% 91%; /* Lighter Gray Input BG (#EAECEF) */
+    --ring: 217 91% 60%; /* Firebase Blue for focus rings */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem; /* Slightly less rounded than default ShadCN */
-    --sidebar-background: 210 17% 98%; /* Consistent with main background */
-    --sidebar-foreground: 220 7% 16%; /* Consistent with main foreground */
-    --sidebar-primary: 217 89% 61%; /* Google Blue */
-    --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 220 14% 90%; /* Slightly darker gray for sidebar accent */
-    --sidebar-accent-foreground: 220 7% 16%; /* Dark Gray Text */
-    --sidebar-border: 220 13% 85%; /* Slightly darker border for sidebar */
-    --sidebar-ring: 217 89% 61%; /* Google Blue */
+    --radius: 0.5rem; /* Standard border radius */
+    --sidebar-background: 210 17% 98%; /* Match background */
+    --sidebar-foreground: 220 7% 16%;
+    --sidebar-primary: 217 89% 61%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 90%;
+    --sidebar-accent-foreground: 220 7% 16%;
+    --sidebar-border: 220 13% 85%;
+    --sidebar-ring: 217 89% 61%;
   }
+
   .dark {
-    /* Firebase Studio Inspired Theme - Dark Mode (Based on Screenshot) */
-    --background: 220 12% 10%; /* Very Dark Gray/Almost Black (#1A1A1D) */
-    --foreground: 210 40% 98%; /* Light Gray/White Text (#F7FAFC) */
-    --card: 220 10% 15%; /* Dark Gray (#22252A) */
-    --card-foreground: 210 40% 98%; /* Light Gray/White Text */
-    --popover: 220 10% 15%; /* Dark Gray */
-    --popover-foreground: 210 40% 98%; /* Light Gray/White Text */
-    --primary: 217 89% 61%; /* Google Blue (#1A73E8) - Kept for user messages */
-    --primary-foreground: 0 0% 100%; /* White text on blue */
-    --secondary: 220 8% 20%; /* Slightly Lighter Dark Gray (#2E3035) */
-    --secondary-foreground: 210 40% 98%; /* Light Gray/White Text */
-    --muted: 220 8% 20%; /* Slightly Lighter Dark Gray */
-    --muted-foreground: 215 15% 65%; /* Lighter Gray Text (#949CA5) */
-    --accent: 220 8% 25%; /* Medium Dark Gray for accents (#3A3D42) */
-    --accent-foreground: 210 40% 98%; /* Light Gray/White Text */
-    --destructive: 0 62.8% 50.6%; /* Adjusted Red */
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 8% 25%; /* Medium Dark Gray Border (#3A3D42) */
-    --input: 220 10% 15%; /* Dark Gray Input BG (Same as card) */
-    --ring: 217 89% 61%; /* Google Blue for focus rings */
+    /* Firebase Studio Inspired Theme - Dark Mode */
+    --background: 222 47% 11%; /* Dark Blue/Gray (#111827 -> adjusted darker) */
+    --foreground: 210 40% 98%; /* Almost White Text */
+    --card: 222 43% 16%; /* Slightly lighter dark blue/gray (#1A202E) */
+    --card-foreground: 210 40% 98%; /* Almost White Text */
+    --popover: 222 43% 16%; /* Dark Gray */
+    --popover-foreground: 210 40% 98%; /* Almost White Text */
+    --primary: 217 91% 72%; /* Lighter Blue for user messages in dark mode (#589AF3) */
+    --primary-foreground: 222 47% 11%; /* Dark text on the lighter blue */
+    --secondary: 222 40% 22%; /* Medium Dark Blue/Gray (#252D3E) - For bot messages */
+    --secondary-foreground: 210 40% 96%; /* Light Gray Text for bot messages */
+    --muted: 222 40% 22%; /* Medium Dark Blue/Gray */
+    --muted-foreground: 215 28% 60%; /* Lighter Gray Text (#828FA1) */
+    --accent: 222 40% 22%; /* Medium Dark Blue/Gray */
+    --accent-foreground: 210 40% 98%; /* Almost White Text */
+    --destructive: 0 63% 51%; /* Red */
+    --destructive-foreground: 0 0% 98%; /* Light text on red */
+    --border: 217 33% 25%; /* Slightly lighter border (#303A4F) */
+    --input: 222 40% 18%; /* Darker Input BG (#1F2635) */
+    --ring: 217 91% 72%; /* Lighter Blue for focus rings */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --radius: 0.5rem;
-    --sidebar-background: 220 12% 10%; /* Consistent with main background */
-    --sidebar-foreground: 210 40% 98%; /* Consistent with main foreground */
-    --sidebar-primary: 217 89% 61%; /* Google Blue */
-    --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 220 8% 25%; /* Medium dark gray for sidebar accent */
-    --sidebar-accent-foreground: 210 40% 98%; /* Light Gray/White Text */
-    --sidebar-border: 220 8% 25%; /* Medium dark gray border for sidebar */
-    --sidebar-ring: 217 89% 61%; /* Google Blue */
+    --radius: 0.5rem; /* Standard border radius */
+     --sidebar-background: 222 47% 11%; /* Match background */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 72%; /* Match primary */
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 222 40% 22%; /* Match accent/secondary */
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 25%; /* Match border */
+    --sidebar-ring: 217 91% 72%; /* Match ring */
   }
 }
 
