@@ -28,15 +28,31 @@ export interface Database {
 }
 
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rxahcmtrbndxoqmhwzpl.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4YWhjbXRyYm5keG9xbWh3enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU4MzUwMjEsImV4cCI6MjA2MTQxMTAyMX0.bDhDF6CChWoGKppMmLZlg3eQUCvE9_pNQPYN4oJz6Bw';
 
 if (!supabaseUrl) {
-  throw new Error('Missing environment variable NEXT_PUBLIC_SUPABASE_URL');
+  console.error('Missing environment variable NEXT_PUBLIC_SUPABASE_URL');
 }
+
+if (!isValidUrl(supabaseUrl)) {
+  console.error('Invalid URL in NEXT_PUBLIC_SUPABASE_URL');
+}
+
 if (!supabaseAnonKey) {
-  throw new Error('Missing environment variable NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  console.error('Missing environment variable NEXT_PUBLIC_SUPABASE_ANON_KEY');
 }
+
+// Helper function to validate URL format
+function isValidUrl(string: string) {
+  try {
+    new URL(string);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 
 // Initialize the Supabase client
 // Pass the Database generic for type safety
