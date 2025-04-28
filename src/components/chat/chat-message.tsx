@@ -21,7 +21,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
       )}
     >
       {!isUser && (
-        <Avatar className="h-8 w-8 border border-border">
+        <Avatar className="h-8 w-8 border border-border flex-shrink-0"> {/* Added flex-shrink-0 */}
            {/* Use accent for bot avatar fallback background to contrast with bot message */}
           <AvatarFallback className="bg-accent text-accent-foreground">
             <Bot className="h-5 w-5" />
@@ -37,10 +37,11 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
         )}
       >
          {/* Use foreground color for text within the bubble, let the parent div set the correct color */}
-        <p className="text-sm whitespace-pre-wrap text-current">{content}</p>
+         {/* Added break-words to ensure long words wrap */}
+        <p className="text-sm whitespace-pre-wrap break-words text-current">{content}</p>
       </div>
        {isUser && (
-        <Avatar className="h-8 w-8 border border-border">
+        <Avatar className="h-8 w-8 border border-border flex-shrink-0"> {/* Added flex-shrink-0 */}
            {/* Use accent for user avatar fallback background */}
           <AvatarFallback className="bg-accent text-accent-foreground">
             <User className="h-5 w-5" />
