@@ -54,7 +54,7 @@ interface AssetSummaryProps {
 }
 
 // Define the list of symbols to ALWAYS check for trade history and display assets for
-const TARGET_SYMBOLS = ['BTC', 'USDT', 'USDC', 'BNB', 'ETH'];
+const TARGET_SYMBOLS = ['BTC', 'USDT']; // UPDATED: Only BTC and USDT
 
 export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) => {
   // Use state from Zustand store
@@ -64,7 +64,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     isLoadingAssets,
     isLoadingTrades,
     isConnected,
-    ownedSymbols, // Still keep track of all owned symbols internally if needed, but UI shows filtered
+    ownedSymbols, // Keep track of all owned symbols internally for potential full balance checks
     activeTab,
     apiKey,
     apiSecret,
@@ -116,7 +116,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
    // Function to fetch trade history using the Server Action and update store
    const handleFetchTrades = useCallback(async (
         credentials: z.infer<typeof formSchema>,
-        // `actuallyOwnedSymbols` is no longer used for pair construction, but kept for potential future use or logging
+        // `actuallyOwnedSymbols` is not currently used for pair construction, but kept for logging/potential future use
         actuallyOwnedSymbols: string[] // Symbols user actually owns with balance
     ) => {
         if (!credentials.apiKey || !credentials.apiSecret) {
@@ -130,46 +130,31 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         console.log("Symbols being used for trade history pair construction:", symbolsToUseForPairConstruction);
 
         // --- Construct potential trading pairs based ONLY on TARGET_SYMBOLS ---
-        const quoteAssets = ['USDT', 'BTC', 'ETH', 'BNB', 'USDC', 'TUSD', 'FDUSD']; // Common quote assets
+        // Primarily focus on BTC/USDT pair, but include potential reverse if needed or other pairs involving ONLY BTC/USDT
         const potentialPairs = new Set<string>();
 
-        symbolsToUseForPairConstruction.forEach(asset => {
-            quoteAssets.forEach(quote => {
-                if (asset !== quote) {
-                    // Add ASSET/QUOTE pair only if the asset is one of the target symbols
-                    if (TARGET_SYMBOLS.includes(asset)) {
-                         potentialPairs.add(`${asset}${quote}`);
-                    }
-                    // Add QUOTE/ASSET pair only if BOTH are target symbols OR if quote is a common quote asset and asset is a target symbol
-                    if (TARGET_SYMBOLS.includes(asset) && (TARGET_SYMBOLS.includes(quote) || quoteAssets.includes(quote))) {
-                         potentialPairs.add(`${quote}${asset}`);
-                    }
-                }
-            });
-        });
+        if (symbolsToUseForPairConstruction.includes('BTC') && symbolsToUseForPairConstruction.includes('USDT')) {
+            potentialPairs.add('BTCUSDT');
+            // Add other direct pairs involving only these two if they exist, e.g., USDTBTC (less common)
+            // potentialPairs.add('USDTBTC'); // Uncomment if needed, Binance API might reject non-existent pairs
+        }
 
-         // Ensure core pairs involving TARGET_SYMBOLS are included
-         TARGET_SYMBOLS.forEach(base => {
-            if (base !== 'USDT' && TARGET_SYMBOLS.includes('USDT')) potentialPairs.add(`${base}USDT`);
-            if (base !== 'BTC' && TARGET_SYMBOLS.includes('BTC')) potentialPairs.add(`${base}BTC`);
-            if (base !== 'ETH' && TARGET_SYMBOLS.includes('ETH')) potentialPairs.add(`${base}ETH`);
-             if (base !== 'BNB' && TARGET_SYMBOLS.includes('BNB')) potentialPairs.add(`${base}BNB`);
-              if (base !== 'USDC' && TARGET_SYMBOLS.includes('USDC')) potentialPairs.add(`${base}USDC`);
-        });
-
+        // Add individual pairs against common stablecoins if needed for completeness, though filtering later is primary
+        // Example: If only BTC was target, you might add BTCUSDC, BTCTUSD etc.
+        // But since we target BTC & USDT, BTCUSDT is the main one.
 
         const tradingPairsToFetch = Array.from(potentialPairs);
 
         if (tradingPairsToFetch.length === 0) {
-            console.log("Could not construct any potential trading pairs from target symbols:", symbolsToUseForPairConstruction);
+            console.log("Could not construct any relevant trading pairs from target symbols:", symbolsToUseForPairConstruction);
             setTrades([]);
-            toast({ title: "No Pairs", description: "Could not determine relevant trading pairs for target symbols." });
+            toast({ title: "No Relevant Pairs", description: "Could not determine relevant trading pairs for target symbols (BTC, USDT)." });
             return;
         }
         // --- End constructing pairs ---
 
 
-        console.log(`Attempting to fetch trade history for ${tradingPairsToFetch.length} potential pairs (TARGET SYMBOLS ONLY):`, tradingPairsToFetch.slice(0, 10).join(', ') + (tradingPairsToFetch.length > 10 ? '...' : '')); // Log first few pairs
+        console.log(`Attempting to fetch trade history for ${tradingPairsToFetch.length} potential pairs (TARGET SYMBOLS ONLY):`, tradingPairsToFetch.join(', ')); // Log pairs
         setIsLoadingTrades(true);
         setTrades([]); // Clear previous trades in store
 
@@ -179,50 +164,35 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 apiKey: credentials.apiKey,
                 apiSecret: credentials.apiSecret,
                 isTestnet: credentials.isTestnet,
-                symbols: tradingPairsToFetch, // Pass the generated trading pairs
-                limit: 100, // Fetch a bit more per pair if needed
+                symbols: tradingPairsToFetch, // Pass the generated trading pairs (likely just ['BTCUSDT'])
+                limit: 100, // Fetch a reasonable number per pair
             });
 
             console.log("fetchBinanceTradeHistory result:", result);
 
             if (result.success) {
-                // Filter trades to only include those involving the TARGET_SYMBOLS
+                // Filter trades to only include those involving the TARGET_SYMBOLS (BTC or USDT as base or quote)
+                // This is an extra layer of safety, main pair should be BTCUSDT
                 const targetSymbolsSet = new Set(TARGET_SYMBOLS);
                 const filteredTrades = result.data.filter(trade => {
+                    // Determine base and quote - simplified logic for BTC/USDT
                     let baseAsset = "";
                     let quoteAsset = "";
-                    // More robust pair splitting logic
-                    const knownQuoteAssets = ['USDT', 'USDC', 'TUSD', 'BUSD', 'FDUSD', 'BTC', 'ETH', 'BNB']; // Add more if needed
-
-                    for (const quote of knownQuoteAssets) {
-                         if (trade.symbol.endsWith(quote) && trade.symbol.length > quote.length) {
-                           const potentialBase = trade.symbol.substring(0, trade.symbol.length - quote.length);
-                            // Basic check if potential base looks like a valid asset symbol (e.g., not just numbers)
-                           if (/^[A-Z0-9]+$/.test(potentialBase)) {
-                               baseAsset = potentialBase;
-                               quoteAsset = quote;
-                               break;
-                           }
+                    if (trade.symbol === 'BTCUSDT') {
+                        baseAsset = 'BTC';
+                        quoteAsset = 'USDT';
+                    } else {
+                        // Add more robust parsing if other pairs were included in fetch
+                         const knownQuoteAssets = ['USDT']; // Focus on USDT as quote for simplicity now
+                         for (const quote of knownQuoteAssets) {
+                            if (trade.symbol.endsWith(quote) && trade.symbol.length > quote.length) {
+                                baseAsset = trade.symbol.substring(0, trade.symbol.length - quote.length);
+                                quoteAsset = quote;
+                                break;
+                            }
                          }
+                         if(!baseAsset) baseAsset = trade.symbol; // Fallback
                     }
-
-                     // Fallback if no known quote asset matched at the end
-                     if (!baseAsset && trade.symbol.length > 3) {
-                         // Assume common 3 or 4 letter quote assets
-                         const potentialQuote = trade.symbol.substring(trade.symbol.length - (trade.symbol.endsWith('USDT') || trade.symbol.endsWith('FDUSD') ? 4 : 3));
-                          const potentialBase = trade.symbol.substring(0, trade.symbol.length - potentialQuote.length);
-                          if (/^[A-Z0-9]+$/.test(potentialBase) && /^[A-Z]+$/.test(potentialQuote)) {
-                               baseAsset = potentialBase;
-                               quoteAsset = potentialQuote;
-                          }
-                     }
-
-                     // If splitting failed, maybe it's a simple symbol like BTC? (Less likely for trades but handle)
-                     if (!baseAsset) {
-                         baseAsset = trade.symbol;
-                         quoteAsset = ""; // Or try to infer if possible
-                     }
-
 
                     // Include the trade if EITHER the base OR quote asset is in our target list
                     return targetSymbolsSet.has(baseAsset) || targetSymbolsSet.has(quoteAsset);
@@ -242,7 +212,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 console.error("Error fetching trade history from action:", result.error);
                 toast({
                 title: "Error Fetching Trades",
-                description: `Failed to fetch trade history: ${result.error}. Some symbols might be invalid.`,
+                description: `Failed to fetch trade history: ${result.error}.`, // Simplified error
                 variant: "destructive",
                 });
             }
@@ -257,7 +227,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         } finally {
             setIsLoadingTrades(false);
         }
-    }, [isConnected, setIsLoadingTrades, setTrades, toast /* No setOwnedSymbols needed here anymore */]); // Removed setOwnedSymbols from deps
+    }, [isConnected, setIsLoadingTrades, setTrades, toast]);
 
 
   // Function to fetch assets using the Server Action and update store
@@ -285,13 +255,14 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         const targetSymbolsSet = new Set(TARGET_SYMBOLS);
         const filteredAssets = result.data.filter(asset => targetSymbolsSet.has(asset.symbol));
 
-        setAssets(filteredAssets); // Set the filtered assets
+        setAssets(filteredAssets); // Set the filtered assets (BTC, USDT)
         // Store all originally owned symbols if needed elsewhere, or filter this too
-        setOwnedSymbols(result.ownedSymbols || []); // Keep the original owned symbols list from the API response
+        setOwnedSymbols(result.ownedSymbols || []); // Keep the original owned symbols list from the API response for context
         setIsConnected(true);
         toast({
           title: "Success",
-          description: `Fetched ${filteredAssets.length} target assets (${TARGET_SYMBOLS.join(', ')}) from Binance. Total assets checked: ${result.data.length}.`,
+          // Updated message
+          description: `Fetched assets. Displaying balances for ${TARGET_SYMBOLS.join(' and ')}.`,
         });
 
         // Automatically fetch trades IF on history tab and connection was successful
@@ -329,7 +300,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     } finally {
       setIsLoadingAssets(false);
     }
-    // Add handleFetchTrades to dependency array if it uses state that changes here
+    // Add handleFetchTrades to dependency array
   }, [setIsLoadingAssets, setAssets, setTrades, setOwnedSymbols, setIsConnected, setCredentials, toast, activeTab, handleFetchTrades]);
 
    // Handle tab change - update store
@@ -354,13 +325,13 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         }
     };
 
-   // Recalculate total portfolio value based on the FILTERED assets shown
+   // Recalculate total portfolio value based on the FILTERED assets shown (BTC, USDT)
    const totalPortfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
 
    const isLoading = isLoadingAssets || isLoadingTrades; // Combined loading state
 
 
-    // Helper function to render asset rows (uses the filtered 'assets' state)
+    // Helper function to render asset rows (uses the filtered 'assets' state: BTC, USDT)
     const renderAssetRows = () => {
         if (isLoadingAssets) {
             // Show skeletons based on TARGET_SYMBOLS count for consistency
@@ -373,7 +344,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 </TableRow>
             ));
         }
-        // 'assets' state already contains only the filtered assets
+        // 'assets' state already contains only the filtered assets (BTC, USDT)
         if (isConnected && assets.length > 0) {
             return assets.map((asset) => (
                 <TableRow key={asset.symbol} className="border-border">
@@ -388,7 +359,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
              return (
                 <TableRow className="border-border">
                     <TableCell colSpan={4} className="h-24 text-center text-muted-foreground text-xs">
-                        No balance found for {TARGET_SYMBOLS.join(', ')}.
+                        No balance found for {TARGET_SYMBOLS.join(' or ')}.
                     </TableCell>
                 </TableRow>
             );
@@ -403,7 +374,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
          );
     };
 
-    // Helper function to render trade rows (uses the filtered 'trades' state)
+    // Helper function to render trade rows (uses the filtered 'trades' state involving BTC/USDT)
     const renderTradeRows = () => {
         if (isLoadingTrades) {
             return Array.from({ length: 5 }).map((_, index) => (
@@ -437,7 +408,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
              return (
                 <TableRow className="border-border">
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
-                        No recent trade history found involving {TARGET_SYMBOLS.join(', ')}.
+                        No recent trade history found involving {TARGET_SYMBOLS.join(' or ')}.
                     </TableCell>
                 </TableRow>
              );
@@ -599,17 +570,17 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                   <TableBody>
                     {renderAssetRows()}
                   </TableBody>
-                   {/* Use store state for condition (based on filtered assets) */}
+                   {/* Use store state for condition (based on filtered assets: BTC, USDT) */}
                   {isConnected && assets.length > 0 && !isLoadingAssets && (
                     <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                        Total Value ({TARGET_SYMBOLS.join(', ')}): ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        Total Value ({TARGET_SYMBOLS.join(' & ')}): ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         <br />
                         <span className="text-xs opacity-70">Value calculated based on current market prices.</span>
                     </TableCaption>
                   )}
                    {isConnected && assets.length === 0 && !isLoadingAssets && (
                      <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                         No balance found for {TARGET_SYMBOLS.join(', ')}. Check Binance account or API key permissions.
+                         No balance found for {TARGET_SYMBOLS.join(' or ')}. Check Binance account or API key permissions.
                      </TableCaption>
                    )}
                     {!isConnected && !isLoadingAssets && (
@@ -642,12 +613,12 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                      {/* Use store state for condition */}
                     {isConnected && trades.length > 0 && !isLoadingTrades && (
                          <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             Showing last {trades.length} relevant trades involving {TARGET_SYMBOLS.join(', ')}. Refresh for latest.
+                             Showing last {trades.length} relevant trades involving {TARGET_SYMBOLS.join(' or ')}. Refresh for latest.
                          </TableCaption>
                     )}
                       {isConnected && trades.length === 0 && !isLoadingTrades && apiKey && apiSecret && ( // Only show 'No trades found' if tried and finished loading
                          <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                             No recent relevant trades found involving {TARGET_SYMBOLS.join(', ')}.
+                             No recent relevant trades found involving {TARGET_SYMBOLS.join(' or ')}.
                          </TableCaption>
                     )}
                      {!isConnected && !isLoadingTrades && ( // Show prompt if not connected
