@@ -17,33 +17,44 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
   return (
     <div
       className={cn(
-        "flex gap-3", // Keep gap for spacing between messages
+        "flex items-end gap-2", // Use items-end for potential tail alignment, adjust gap
         isUser ? "justify-end" : "justify-start"
       )}
     >
+      {/* Avatar outside the bubble for bot messages */}
+      {!isUser && (
+        <Avatar className="h-8 w-8 border border-border flex-shrink-0">
+          <AvatarFallback className="bg-accent text-accent-foreground">
+            <Bot className="h-5 w-5" />
+          </AvatarFallback>
+        </Avatar>
+      )}
+
       {/* Bubble container */}
       <div
         className={cn(
-          "rounded-lg p-3 shadow-sm flex items-start gap-2", // Add flex, items-start, gap-2 here
-          // Let the chat bubble take up to 70% width, text should wrap inside
-          "max-w-[80%]", // Allow slightly more width if needed
+          "rounded-lg p-2.5 shadow-sm", // Adjusted padding
+          // Let the chat bubble take up to 80% width, text should wrap inside
+          "max-w-[80%]",
           isUser
-            ? "bg-primary-gradient text-primary-foreground flex-row-reverse" // Reverse order for user
-            : "bg-secondary text-secondary-foreground flex-row" // Standard order for bot
+            ? "bg-primary text-primary-foreground rounded-br-none" // User bubble color (using theme primary), slight shape adjustment
+            : "bg-secondary text-secondary-foreground rounded-bl-none" // Bot bubble color (using theme secondary), slight shape adjustment
         )}
       >
-        {/* Avatar now inside the bubble */}
-        <Avatar className="h-8 w-8 border border-border flex-shrink-0">
-          <AvatarFallback className="bg-accent text-accent-foreground">
-            {isUser ? <User className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
-          </AvatarFallback>
-        </Avatar>
-
         {/* Text content */}
-        <p className="text-sm whitespace-pre-wrap break-words text-current flex-1 pt-0.5"> {/* Add pt-0.5 for slight vertical alignment */}
+        <p className="text-sm whitespace-pre-wrap break-words text-current">
           {content}
         </p>
       </div>
+
+       {/* Avatar outside the bubble for user messages */}
+       {isUser && (
+        <Avatar className="h-8 w-8 border border-border flex-shrink-0">
+          <AvatarFallback className="bg-accent text-accent-foreground">
+             <User className="h-5 w-5" />
+          </AvatarFallback>
+        </Avatar>
+      )}
     </div>
   );
 };
