@@ -111,20 +111,23 @@ export async function fetchBinanceAssets(
 
     // Add "BTC" and "USDT" if needed for price calculations, among others
     const symbolsForPricing = new Set(ownedAssetSymbolsWithBalance);
-    // Use TARGET_SYMBOLS constant to define the core assets we need prices for
-    const TARGET_SYMBOLS = ['BTC', 'USDT']; // Define target symbols
+    // Define target symbols - ONLY FOCUS ON BTC and USDT as requested
+    const TARGET_SYMBOLS_PRICING = ['BTC', 'USDT'];
     const essentialQuoteAssets = ['USDT']; // Primarily need USDT for pricing
 
-    // Ensure TARGET_SYMBOLS are included if we own anything
-    if (ownedAssetSymbolsWithBalance.length > 0) {
-        TARGET_SYMBOLS.forEach(asset => symbolsForPricing.add(asset));
-    }
-    // Ensure essential quote assets are added
-    essentialQuoteAssets.forEach(asset => {
-        if (ownedAssetSymbolsWithBalance.length > 0) { // Only add if we own something
-              symbolsForPricing.add(asset);
+    // Ensure TARGET_SYMBOLS are included if we own anything relevant for pricing (BTC or USDT)
+     TARGET_SYMBOLS_PRICING.forEach(asset => {
+        if (ownedAssetSymbolsWithBalance.includes(asset)) {
+             symbolsForPricing.add(asset);
         }
-    });
+     });
+
+     // Ensure essential quote assets are added if needed for pair construction
+     essentialQuoteAssets.forEach(asset => {
+         if (ownedAssetSymbolsWithBalance.length > 0) { // Only add if we own something
+               symbolsForPricing.add(asset);
+         }
+     });
 
 
     const symbolsToFetchPrices = new Set<string>();
@@ -201,12 +204,14 @@ export async function fetchBinanceAssets(
         let valueInUsd = 0;
         let assetName = assetSymbol; // Default name to symbol
 
-        if (assetSymbol === 'USDT' || assetSymbol === 'USDC' || assetSymbol === 'FDUSD' || assetSymbol === 'TUSD' /* Add other stables */) {
+        if (assetSymbol === 'USDT' /* Add other stables like USDC if needed */) {
             valueInUsd = quantity; // Assume 1:1 USD value for stablecoins
         } else if (getPrice(`${assetSymbol}USDT`) > 0) {
             valueInUsd = quantity * getPrice(`${assetSymbol}USDT`);
-        } else if (getPrice(`${assetSymbol}BTC`) > 0 && btcUsdtPrice > 0) {
-            valueInUsd = quantity * getPrice(`${assetSymbol}BTC`) * btcUsdtPrice;
+        } else if (assetSymbol === 'BTC') { // Explicitly check BTC/USDT if direct BTC/USDT pair missing
+            if (btcUsdtPrice > 0) {
+                valueInUsd = quantity * btcUsdtPrice;
+            }
         }
         // Add more conversion logic here if needed (e.g., via other stablecoins if USDT pair fails)
 
@@ -288,14 +293,14 @@ export async function fetchBinanceTradeHistory(
         // recvWindow: 60000, // Consider increasing if timeouts occur
     });
 
-    // ** ADDED CHECK: Verify if myTrades function exists **
+    // ** REINFORCED CHECK: Verify if myTrades function exists **
     if (typeof binance.myTrades !== 'function') {
       const errorMsg = 'Internal Server Error: Could not access trade history function (myTrades method not found on Binance client). Check library version or initialization.';
       console.error(`[fetchBinanceTradeHistory] ${errorMsg}`);
       console.error('[fetchBinanceTradeHistory] Binance client instance properties:', Object.keys(binance)); // Log available properties/methods for inspection
       return { success: false, data: [], error: errorMsg };
     }
-    // ** END ADDED CHECK **
+    // ** END REINFORCED CHECK **
 
     try {
         // The `symbols` are already provided in the input as `tradingPairsToFetch`
