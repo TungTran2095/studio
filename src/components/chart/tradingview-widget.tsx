@@ -12,47 +12,50 @@ export const TradingViewWidget: React.FC = memo(() => {
     if (!container.current || scriptAdded.current) return;
 
     // Determine the theme *before* creating the JSON string
-    const currentTheme = document.documentElement.classList.contains('dark') ? "dark" : "light";
+    // Check if document is available (client-side)
+    const currentTheme = typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? "dark" : "light";
+
+    const widgetConfig = {
+      "symbols": [
+        [
+          "BINANCE:BTCUSDT|1D"
+        ]
+      ],
+      "chartOnly": true,
+      "width": "100%",
+      "height": "100%",
+      "locale": "en",
+      "colorTheme": currentTheme, // Use variable directly
+      "autosize": true,
+      "showVolume": false,
+      "showMA": false,
+      "hideDateRanges": false,
+      "hideMarketStatus": true,
+      "hideSymbolLogo": true,
+      "scalePosition": "right",
+      "scaleMode": "Normal",
+      "fontFamily": "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
+      "fontSize": "10",
+      "noTimeScale": false,
+      "valuesTracking": "1",
+      "changeMode": "price-and-percent",
+      "chartType": "candlestick",
+      "maLineColor": "#2962FF",
+      "maLineWidth": 1,
+      "maLength": 9,
+      "lineWidth": 2,
+      "lineType": 0,
+      "dateFormat": "dd MMM yy" // Removed single quotes, ensure keys are quoted
+    };
+
 
     const script = document.createElement("script");
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
     script.type = "text/javascript";
     script.async = true;
-    // Inject the determined theme directly into the JSON string
-    // Changed chartType to "candlestick"
-    script.innerHTML = `
-      {
-        "symbols": [
-          [
-            "BINANCE:BTCUSDT|1D"
-          ]
-        ],
-        "chartOnly": true,
-        "width": "100%",
-        "height": "100%",
-        "locale": "en",
-        "colorTheme": "${currentTheme}",
-        "autosize": true,
-        "showVolume": false,
-        "showMA": false,
-        "hideDateRanges": false,
-        "hideMarketStatus": true,
-        "hideSymbolLogo": true,
-        "scalePosition": "right",
-        "scaleMode": "Normal",
-        "fontFamily": "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
-        "fontSize": "10",
-        "noTimeScale": false,
-        "valuesTracking": "1",
-        "changeMode": "price-and-percent",
-        "chartType": "candlestick", // Changed from "area" to "candlestick"
-        "maLineColor": "#2962FF",
-        "maLineWidth": 1,
-        "maLength": 9,
-        "lineWidth": 2,
-        "lineType": 0,
-        "dateFormat": "dd MMM 'yy"
-      }`;
+    // Use JSON.stringify to ensure valid JSON format
+    script.innerHTML = JSON.stringify(widgetConfig);
+
 
     container.current.appendChild(script);
     scriptAdded.current = true; // Mark script as added
@@ -64,6 +67,8 @@ export const TradingViewWidget: React.FC = memo(() => {
          scriptAdded.current = false; // Reset script added status on unmount
       }
     };
+    // Add currentTheme to dependency array if it might change dynamically
+    // For now, assuming theme is set on initial load based on class
   }, []); // Empty dependency array ensures this runs only once on mount
 
    // Use Tailwind classes for styling the container
