@@ -99,7 +99,7 @@ const generateResponseFlow = ai.defineFlow<
   inputSchema: GenerateResponseInputSchema,
   outputSchema: GenerateResponseOutputSchema,
 }, async (input) => {
-    console.log("generateResponseFlow input:", JSON.stringify(input, null, 2));
+    console.log("[generateResponseFlow] Input:", JSON.stringify(input, null, 2));
 
     // Construct the prompt input, including potentially insecure credentials if passed.
     // In production, remove apiKey and apiSecret from here. The tools would fetch them.
@@ -108,26 +108,41 @@ const generateResponseFlow = ai.defineFlow<
       chatHistory: input.chatHistory,
        ...(input.apiKey && { apiKey: input.apiKey }),
        ...(input.apiSecret && { apiSecret: input.apiSecret }),
-       isTestnet: input.isTestnet
+       isTestnet: input.isTestnet ?? false // Ensure boolean is passed
     };
 
-    const response = await prompt(promptInput); // Pass potentially insecure credentials
+    let response;
+    try {
+        console.log("[generateResponseFlow] Calling prompt with input:", JSON.stringify(promptInput, null, 2));
+        response = await prompt(promptInput); // Pass potentially insecure credentials
+        console.log("[generateResponseFlow] Received response from prompt:", JSON.stringify(response, null, 2)); // Log the raw response object
+
+    } catch (error: any) {
+        console.error("[generateResponseFlow] Error calling prompt:", error);
+         // Handle errors during the prompt/tool execution itself
+        return { response: `Sorry, I encountered an error processing your request: ${error.message || 'Unknown error'}` };
+    }
+
 
     // Check if the model decided to use a tool
-    if (response.toolRequests && response.toolRequests.length > 0) {
-        console.log("Tool requests generated:", JSON.stringify(response.toolRequests, null, 2));
-        // Normally, you would execute the tools here and return their output to the model.
-        // Genkit handles this automatically when using definePrompt with tools.
-        // The final 'response.output' will contain the model's response *after* considering the tool results.
+    if (response?.toolRequests?.length > 0) {
+        console.log("[generateResponseFlow] Tool requests were generated and likely handled by Genkit.");
+        // Genkit handles tool execution and feeding results back to the model automatically.
+        // The 'response' object here *should* contain the final output *after* tool use.
     } else {
-         console.log("No tool requests generated.");
+         console.log("[generateResponseFlow] No tool requests generated.");
     }
 
-    if (!response.output) {
-      console.error("Error: Flow did not return output.", response);
-      return { response: "Sorry, I encountered an error. Please try again." };
+    // **** Explicitly check if the output is null or undefined ****
+    // The error message "Provided data: null" suggests response.output might be null.
+    if (response?.output === null || response?.output === undefined) {
+      console.error("[generateResponseFlow] Error: Flow returned null or undefined output. Raw response:", JSON.stringify(response, null, 2));
+      // Provide a more specific error message related to the schema validation failure
+      return { response: "Sorry, I couldn't generate a valid response in the expected format. Please try rephrasing your request." };
     }
 
-    console.log("Final AI Response:", response.output.response);
-    return response.output;
+     // The Zod schema validation should happen automatically based on outputSchema.
+     // If it passed validation, response.output should be valid.
+    console.log("[generateResponseFlow] Final AI Response (validated):", response.output.response);
+    return response.output; // Return the validated output
 });
