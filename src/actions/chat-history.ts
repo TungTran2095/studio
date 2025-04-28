@@ -50,6 +50,11 @@ export async function fetchChatHistory(): Promise<FetchHistoryResult> {
 
     if (error) {
       console.error('[fetchChatHistory] Supabase error:', error);
+      // Check specifically for RLS errors
+      if (error.message.includes('new row violates row-level security policy')) {
+           console.error('[fetchChatHistory] RLS policy might be preventing reads. Check Supabase table policies.');
+           return { success: false, data: [], error: 'Permission denied. Check RLS policies.' };
+      }
       return { success: false, data: [], error: error.message };
     }
 
@@ -84,19 +89,25 @@ export async function saveChatMessage(
   const { role, content } = validationResult.data;
 
   try {
+    console.log('[saveChatMessage] Preparing to insert into Supabase:', { role, content: content.substring(0, 50) + '...' });
     const { error } = await supabase
       .from('message_history')
       .insert([{ role, content }]); // Insert the validated data
 
     if (error) {
-      console.error('[saveChatMessage] Supabase error:', error);
+      console.error('[saveChatMessage] Supabase insert error:', error);
+       // Check specifically for RLS errors during insert
+       if (error.message.includes('new row violates row-level security policy')) {
+           console.error('[saveChatMessage] RLS policy prevented insert. Check Supabase table policies.');
+           return { success: false, error: 'Permission denied. Check RLS policies.' };
+       }
       return { success: false, error: error.message };
     }
 
-    console.log('[saveChatMessage] Message saved successfully.');
+    console.log('[saveChatMessage] Message saved successfully to Supabase.');
     return { success: true };
   } catch (err: any) {
-    console.error('[saveChatMessage] Unexpected error:', err);
+    console.error('[saveChatMessage] Unexpected error during insert:', err);
     return { success: false, error: err.message || 'An unknown error occurred.' };
   }
 }

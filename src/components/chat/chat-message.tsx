@@ -18,14 +18,17 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
     <div
       className={cn(
         // Align avatar and bubble to the top
-        "flex items-start gap-2 w-full",
+        "flex items-start gap-2 w-full mb-1", // Add margin-bottom for spacing
         isUser ? "justify-end" : "justify-start"
       )}
     >
       {/* Bot Avatar */}
       {!isUser && (
-        // Consistent margin for avatar
-        <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
+        // Consistent margin for avatar, make invisible for user messages to maintain layout
+        <Avatar className={cn(
+            "h-8 w-8 border border-border flex-shrink-0 mt-1",
+             // isUser && "invisible" // Keep space but hide for user
+            )}>
           <AvatarFallback className="bg-accent text-accent-foreground">
             <Bot className="h-5 w-5" />
           </AvatarFallback>
@@ -35,15 +38,16 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
       {/* Bubble */}
       <div
         className={cn(
-           // Standard padding, adjusted max-width if needed
-          "rounded-lg p-2.5 shadow-sm max-w-[90%]", // Consistent padding
-          "min-w-[40px]",
+           // Standard padding, remove max-width to allow expansion
+          "rounded-lg p-2 shadow-sm", // Adjusted padding
+          "min-w-[40px]", // Minimum width for small messages
+           "max-w-[75%]", // Limit max width slightly more than before
           isUser
-            ? "bg-primary text-primary-foreground rounded-br-none"
-            : "bg-secondary text-secondary-foreground rounded-bl-none"
+            ? "bg-primary text-primary-foreground rounded-br-none" // User: Primary color, rounded bottom-right none
+            : "bg-secondary text-secondary-foreground rounded-bl-none" // Bot: Secondary color, rounded bottom-left none
         )}
       >
-        {/* Text Content */}
+        {/* Text Content - Allow wrapping and breaking */}
         <p className="text-sm whitespace-pre-wrap break-words text-left text-current">
           {content}
         </p>

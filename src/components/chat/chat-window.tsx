@@ -18,7 +18,8 @@ import type { MessageHistory } from "@/lib/supabase-client"; // Import the type 
 
 
 // Use MessageHistory type for consistency
-type Message = MessageHistory;
+// Add a temporary client-side ID for rendering keys before DB ID exists
+type Message = MessageHistory & { clientId?: string };
 
 interface ChatWindowProps {}
 
@@ -42,14 +43,14 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
       setIsLoadingHistory(true);
       const result = await fetchChatHistory();
       if (result.success) {
-        console.log(`[ChatWindow] Successfully fetched ${result.data.length} messages.`);
+        console.log(`[ChatWindow] Successfully fetched ${result.data.length} messages from DB.`);
         // Map roles if necessary, assuming DB roles match 'user' | 'bot'
         setMessages(result.data);
       } else {
         console.error("[ChatWindow] Error fetching chat history:", result.error);
         toast({
           title: "Error Loading History",
-          description: `Failed to fetch chat history: ${result.error}`,
+          description: `Failed to fetch chat history: ${result.error}. Check console & Supabase RLS policies.`,
           variant: "destructive",
         });
       }
@@ -70,18 +71,33 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
   }, [messages, isLoading, isLoadingHistory]); // Include isLoadingHistory
 
   const handleSendMessage = async (messageContent: string) => {
-    const newUserMessage: Message = { role: "user", content: messageContent };
+    const userMessageClientId = `user-${Date.now()}`; // Simple client ID
+    const newUserMessage: Message = { role: "user", content: messageContent, clientId: userMessageClientId };
+
     // Immediately display the user message
     setMessages((prevMessages) => [...prevMessages, newUserMessage]);
     setIsLoading(true); // Start loading for AI response
 
-    // Save user message to Supabase (don't wait for it to finish to show AI response)
-    saveChatMessage(newUserMessage).catch(err => {
-      console.error("Failed to save user message:", err);
-      toast({ title: "Error", description: "Could not save your message.", variant: "destructive" });
-      // Optionally remove the message from UI if saving fails critically
-      // setMessages(prev => prev.filter(m => m !== newUserMessage));
-    });
+    // --- Save user message to Supabase ---
+    console.log("[ChatWindow] Attempting to save user message to Supabase:", newUserMessage.clientId);
+    saveChatMessage({ role: newUserMessage.role, content: newUserMessage.content })
+      .then(result => {
+        if (result.success) {
+          console.log("[ChatWindow] User message saved successfully:", newUserMessage.clientId);
+          // Optionally update the message in state with DB ID if needed, but usually not necessary
+        } else {
+          console.error("[ChatWindow] Failed to save user message:", newUserMessage.clientId, result.error);
+          toast({ title: "Error Saving Message", description: `Could not save your message: ${result.error}. Check console & Supabase RLS policies.`, variant: "destructive" });
+          // Optionally remove the message from UI if saving fails critically
+          // setMessages(prev => prev.filter(m => m.clientId !== newUserMessage.clientId));
+        }
+      })
+      .catch(err => {
+        console.error("[ChatWindow] Unexpected error calling saveChatMessage for user:", err);
+        toast({ title: "Error", description: "An unexpected error occurred while saving your message.", variant: "destructive" });
+      });
+    // --- End save user message ---
+
 
     // Prepare for AI
     const credentialsAvailable = apiKey && apiSecret;
@@ -91,10 +107,10 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
       console.log("[ChatWindow] API credentials found in store. Passing to generateResponse flow.");
     }
 
-    // Get history for AI (use current UI state for context)
-    const chatHistoryForAI = messages.map(msg => ({
-      role: msg.role,
-      content: msg.content,
+    // Get history for AI (use current UI state for context, exclude clientIds)
+    const chatHistoryForAI = messages.map(({ role, content }) => ({
+      role,
+      content,
     }));
 
     const input: GenerateResponseInput = {
@@ -109,27 +125,39 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
       const result = await generateResponse(input);
       console.log("[ChatWindow] Received response from generateResponse:", result);
 
-      const aiResponse: Message = { role: "bot", content: result.response };
+      const botMessageClientId = `bot-${Date.now()}`;
+      const aiResponse: Message = { role: "bot", content: result.response, clientId: botMessageClientId };
       // Display AI response
       setMessages((prevMessages) => [...prevMessages, aiResponse]);
 
-      // Save AI response to Supabase
-      saveChatMessage(aiResponse).catch(err => {
-        console.error("Failed to save AI response:", err);
-        toast({ title: "Error", description: "Could not save the bot's response.", variant: "destructive" });
-        // UI already shows the message, so no need to remove it on save failure typically
+      // --- Save AI response to Supabase ---
+      console.log("[ChatWindow] Attempting to save AI response to Supabase:", aiResponse.clientId);
+      saveChatMessage({ role: aiResponse.role, content: aiResponse.content })
+      .then(saveResult => {
+        if (saveResult.success) {
+          console.log("[ChatWindow] AI response saved successfully:", aiResponse.clientId);
+        } else {
+          console.error("[ChatWindow] Failed to save AI response:", aiResponse.clientId, saveResult.error);
+          toast({ title: "Error Saving Response", description: `Could not save the bot's response: ${saveResult.error}. Check console & Supabase RLS policies.`, variant: "destructive" });
+        }
+      })
+      .catch(err => {
+        console.error("[ChatWindow] Unexpected error calling saveChatMessage for AI:", err);
+        toast({ title: "Error", description: "An unexpected error occurred while saving the bot's response.", variant: "destructive" });
       });
+      // --- End save AI response ---
+
 
     } catch (error: any) {
-      console.error("Error generating AI response:", error);
+      console.error("[ChatWindow] Error generating AI response:", error);
       const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
       toast({
-        title: "Error",
+        title: "Error Generating Response",
         description: errorMessage,
         variant: "destructive",
       });
        // Remove the user message if AI fails? Optional.
-       // setMessages((prevMessages) => prevMessages.slice(0, -1));
+       // setMessages((prevMessages) => prevMessages.filter(m => m.clientId !== newUserMessage.clientId));
 
     } finally {
       setIsLoading(false); // Stop loading indicator
@@ -143,8 +171,10 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
       </CardHeader>
 
       <CardContent className="flex-1 p-0 overflow-hidden">
+         {/* Added horizontal scroll */}
         <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both">
-          <div className="space-y-2 p-3 min-w-max"> {/* Reduced space-y */}
+           {/* Added min-w-max to allow horizontal scrolling */}
+          <div className="space-y-1 p-3 min-w-max"> {/* Reduced space-y, consistent padding */}
             {/* Show loading skeletons for history */}
             {isLoadingHistory && (
               <>
@@ -154,15 +184,17 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
               </>
             )}
              {/* Render actual messages once loaded */}
-            {!isLoadingHistory && messages.map((msg, index) => (
-               // Use msg.id as key if available and unique, otherwise index
-              <ChatMessage key={msg.id ?? index} role={msg.role} content={msg.content} />
+            {!isLoadingHistory && messages.map((msg) => (
+               // Use db id if available, fallback to client id
+              <ChatMessage key={msg.id ?? msg.clientId} role={msg.role} content={msg.content} />
             ))}
             {/* Loading indicator for AI response */}
             {isLoading && (
-              <div className="flex items-start gap-2 justify-start pt-2"> {/* Adjusted gap and added padding */}
-                <Skeleton className="h-8 w-8 rounded-full bg-muted flex-shrink-0 mt-1" />
-                <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted" /> {/* Use similar padding */}
+              <div className="flex items-start gap-2 justify-start pt-1"> {/* Consistent spacing */}
+                 <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1 invisible"> {/* Placeholder for alignment */}
+                  <AvatarFallback></AvatarFallback>
+                </Avatar>
+                <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" /> {/* Match bubble style */}
               </div>
             )}
           </div>
