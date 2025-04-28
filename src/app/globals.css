@@ -3,80 +3,81 @@
 @tailwind utilities;
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Roboto", Arial, Helvetica, sans-serif; /* Using Roboto, common in Google products */
 }
 
 @layer base {
   :root {
-    /* Custom Theme for EchoBot */
-    --background: 0 0% 96.1%; /* Light Gray (#F5F5F5) */
-    --foreground: 0 0% 3.9%; /* Default black */
+    /* Firebase Studio Inspired Theme - Light Mode */
+    --background: 210 17% 98%; /* Light Gray (#F8F9FA) */
+    --foreground: 220 7% 16%; /* Dark Gray Text (#202124) */
     --card: 0 0% 100%; /* White (#FFFFFF) */
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 217 91% 60%; /* Blue (#2196F3) - Used for user messages & interactive elements */
+    --card-foreground: 220 7% 16%; /* Dark Gray Text */
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 220 7% 16%; /* Dark Gray Text */
+    --primary: 217 89% 61%; /* Google Blue (#1A73E8) */
     --primary-foreground: 0 0% 100%; /* White text on blue */
-    --secondary: 0 0% 98%; /* Slightly off-white for secondary elements if needed */
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 90%; /* Muted gray */
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 98%; /* Using a subtle accent different from primary */
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 217 91% 60%; /* Blue for focus rings */
+    --secondary: 220 14% 96%; /* Lighter Gray (#E8EAED) */
+    --secondary-foreground: 220 7% 16%; /* Dark Gray Text */
+    --muted: 220 14% 96%; /* Lighter Gray (#E8EAED) */
+    --muted-foreground: 216 5% 44%; /* Medium Gray Text (#5F6368) */
+    --accent: 220 14% 96%; /* Lighter Gray for subtle accents */
+    --accent-foreground: 220 7% 16%; /* Dark Gray Text */
+    --destructive: 0 84.2% 60.2%; /* Default Red */
+    --destructive-foreground: 0 0% 98%; /* Default Light Text on Red */
+    --border: 220 13% 91%; /* Gray Border (#DADCE0) */
+    --input: 220 13% 91%; /* Gray Input BG (#DADCE0) */
+    --ring: 217 89% 61%; /* Google Blue for focus rings */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --radius: 0.5rem; /* Slightly less rounded than default ShadCN */
+    --sidebar-background: 210 17% 98%; /* Consistent with main background */
+    --sidebar-foreground: 220 7% 16%; /* Consistent with main foreground */
+    --sidebar-primary: 217 89% 61%; /* Google Blue */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 220 14% 90%; /* Slightly darker gray for sidebar accent */
+    --sidebar-accent-foreground: 220 7% 16%; /* Dark Gray Text */
+    --sidebar-border: 220 13% 85%; /* Slightly darker border for sidebar */
+    --sidebar-ring: 217 89% 61%; /* Google Blue */
   }
   .dark {
-    /* Define dark mode colors if needed, otherwise inherit or adjust */
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 10%; /* Darker card */
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 217 91% 60%; /* Blue remains the same */
+    /* Firebase Studio Inspired Theme - Dark Mode */
+    --background: 220 7% 16%; /* Very Dark Gray (#202124) */
+    --foreground: 220 14% 96%; /* Light Gray Text (#E8EAED) */
+    --card: 225 4% 22%; /* Darker Gray (#303134) */
+    --card-foreground: 220 14% 96%; /* Light Gray Text */
+    --popover: 225 4% 22%; /* Darker Gray */
+    --popover-foreground: 220 14% 96%; /* Light Gray Text */
+    --primary: 217 89% 61%; /* Google Blue (#1A73E8) */
     --primary-foreground: 0 0% 100%; /* White text on blue */
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --secondary: 216 4% 27%; /* Medium Dark Gray (#3C4043) */
+    --secondary-foreground: 220 14% 96%; /* Light Gray Text */
+    --muted: 216 4% 27%; /* Medium Dark Gray (#3C4043) */
+    --muted-foreground: 216 5% 64%; /* Lighter Gray Text (#9AA0A6) */
+    --accent: 216 4% 27%; /* Medium Dark Gray for accents */
+    --accent-foreground: 220 14% 96%; /* Light Gray Text */
+    --destructive: 0 62.8% 50.6%; /* Slightly adjusted Red */
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 217 91% 60%; /* Blue for focus rings */
+    --border: 216 5% 44%; /* Medium Gray Border (#5F6368) */
+    --input: 216 5% 44%; /* Medium Gray Input BG (#5F6368) */
+    --ring: 217 89% 61%; /* Google Blue for focus rings */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --radius: 0.5rem;
+    --sidebar-background: 220 7% 16%; /* Consistent with main background */
+    --sidebar-foreground: 220 14% 96%; /* Consistent with main foreground */
+    --sidebar-primary: 217 89% 61%; /* Google Blue */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 216 4% 30%; /* Slightly lighter gray for dark sidebar accent */
+    --sidebar-accent-foreground: 220 14% 96%; /* Light Gray Text */
+    --sidebar-border: 216 5% 35%; /* Slightly lighter border for dark sidebar */
+    --sidebar-ring: 217 89% 61%; /* Google Blue */
   }
 }
 

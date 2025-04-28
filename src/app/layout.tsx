@@ -1,21 +1,20 @@
 import type {Metadata} from 'next';
-import {Geist, Geist_Mono} from 'next/font/google';
+import { Roboto } from 'next/font/google'; // Import Roboto
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+// Configure Roboto font
+const roboto = Roboto({
+  weight: ['400', '500', '700'], // Include desired weights
   subsets: ['latin'],
+  variable: '--font-roboto', // Define CSS variable
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
 
 export const metadata: Metadata = {
   title: 'EchoBot',
-  description: 'An AI powered chatbot',
+  description: 'An AI powered chatbot inspired by Firebase Studio', // Updated description
 };
 
 export default function RootLayout({
@@ -25,7 +24,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+       {/* Apply Roboto font variable */}
+      <body className={`${roboto.variable} font-sans antialiased`}>
         {children}
         <Toaster />
       </body>

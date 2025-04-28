@@ -68,11 +68,12 @@ export const ChatWindow: FC = () => {
   };
 
   return (
-    <Card className="flex flex-col h-[calc(100vh-4rem)] max-h-[800px] w-full max-w-2xl mx-auto my-8 shadow-lg rounded-lg overflow-hidden">
+    // Adjusted styling: remove explicit shadow, rely on theme's card style
+    <Card className="flex flex-col h-[calc(100vh-4rem)] max-h-[800px] w-full max-w-2xl mx-auto my-8 rounded-lg overflow-hidden border">
       <CardHeader className="border-b">
         <CardTitle className="text-center text-lg font-semibold">EchoBot</CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 p-0 overflow-hidden">
+      <CardContent className="flex-1 p-0 overflow-hidden bg-background"> {/* Ensure content background matches theme */}
         <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
           <div className="space-y-4">
             {messages.map((msg, index) => (
@@ -80,13 +81,14 @@ export const ChatWindow: FC = () => {
             ))}
              {isLoading && (
                 <div className="flex items-start gap-3 justify-start">
-                  <Skeleton className="h-8 w-8 rounded-full border border-border" />
-                  <Skeleton className="h-10 rounded-lg p-3 shadow-sm w-1/4" />
+                   <Skeleton className="h-8 w-8 rounded-full" />
+                   <Skeleton className="h-10 rounded-lg p-3 w-1/4" />
               </div>
              )}
           </div>
         </ScrollArea>
       </CardContent>
+      {/* Use card background for input area for consistency */}
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
     </Card>
   );
