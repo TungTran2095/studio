@@ -1,6 +1,6 @@
 'use server';
 
-import { supabase, type MessageHistory } from '@/lib/supabase-client';
+import { supabase } from '@/lib/supabase-client';
 import { z } from 'zod';
 
 // --- Types and Schemas ---
@@ -14,7 +14,12 @@ const SaveMessageSchema = z.object({
 // Define the return type for fetching messages
 interface FetchHistoryResult {
   success: boolean;
-  data: MessageHistory[];
+  data: {
+    id: number;
+    created_at: string;
+    role: 'user' | 'bot';
+    content: string;
+  }[];
   error?: string;
 }
 
@@ -87,3 +92,4 @@ export async function saveChatMessage(
     return { success: false, error: err.message || 'An unknown error occurred.' };
   }
 }
+
