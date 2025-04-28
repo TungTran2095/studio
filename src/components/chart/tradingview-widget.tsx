@@ -19,6 +19,7 @@ export const TradingViewWidget: React.FC = memo(() => {
     script.type = "text/javascript";
     script.async = true;
     // Inject the determined theme directly into the JSON string
+    // Changed chartType to "candlestick"
     script.innerHTML = `
       {
         "symbols": [
@@ -44,7 +45,7 @@ export const TradingViewWidget: React.FC = memo(() => {
         "noTimeScale": false,
         "valuesTracking": "1",
         "changeMode": "price-and-percent",
-        "chartType": "area",
+        "chartType": "candlestick", // Changed from "area" to "candlestick"
         "maLineColor": "#2962FF",
         "maLineWidth": 1,
         "maLength": 9,
