@@ -119,6 +119,8 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      // Apply gradient on focus/selected state, ensure text remains visible
+      "data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground",
       className
     )}
     {...props}

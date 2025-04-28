@@ -34,7 +34,11 @@ const RadioGroupItem = React.forwardRef<
       {...props}
     >
       <RadioGroupPrimitive.Indicator className="flex items-center justify-center">
-        <Circle className="h-2.5 w-2.5 fill-current text-current" />
+        {/* Apply gradient fill using a background clip trick */}
+        <div className="h-2.5 w-2.5 rounded-full bg-primary-gradient">
+            <Circle className="h-2.5 w-2.5 fill-current text-current hidden" /> {/* Keep Circle for structure but hide visually */}
+        </div>
+
       </RadioGroupPrimitive.Indicator>
     </RadioGroupPrimitive.Item>
   )
