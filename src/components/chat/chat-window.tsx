@@ -1,7 +1,9 @@
+// src/components/chat/chat-window.tsx
 "use client";
 
 import type { FC } from "react";
 import { useState, useRef, useEffect } from "react";
+import { ChevronDown, ChevronUp } from 'lucide-react'; // Import icons
 import { CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Keep Card parts for structure
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
@@ -10,14 +12,22 @@ import { generateResponse } from "@/ai/flows/generate-response";
 import type { GenerateResponseInput } from "@/ai/flows/generate-response";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button"; // Import Button
+import { cn } from '@/lib/utils';
+
 
 interface Message {
   role: "user" | "bot";
   content: string;
 }
 
-// Removed export default for named export if needed elsewhere, ensure FC type is correct
-export const ChatWindow: FC = () => {
+// Define props including isExpanded and onToggle
+interface ChatWindowProps {
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -25,16 +35,13 @@ export const ChatWindow: FC = () => {
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      // Attempt to find the viewport element within the ScrollArea
+    if (isExpanded && scrollAreaRef.current) { // Only scroll if expanded
       const scrollViewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
       if (scrollViewport) {
-        // Use requestAnimationFrame to ensure scrolling happens after DOM updates
         requestAnimationFrame(() => {
             scrollViewport.scrollTop = scrollViewport.scrollHeight;
         });
       } else {
-         // Fallback if viewport selector doesn't work (might depend on ShadCN version)
          requestAnimationFrame(() => {
              if(scrollAreaRef.current) {
                 scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
@@ -42,16 +49,14 @@ export const ChatWindow: FC = () => {
          });
       }
     }
-  }, [messages, isLoading]); // Add isLoading dependency to scroll after skeleton disappears
+  }, [messages, isLoading, isExpanded]); // Add isExpanded dependency
 
 
   const handleSendMessage = async (messageContent: string) => {
     const newUserMessage: Message = { role: "user", content: messageContent };
-    // Immediately add user message and set loading state
     setMessages((prevMessages) => [...prevMessages, newUserMessage]);
     setIsLoading(true);
 
-    // Prepare history *before* adding the new user message for the AI request
     const chatHistoryForAI = messages.map(msg => ({
       role: msg.role,
       content: msg.content,
@@ -65,8 +70,6 @@ export const ChatWindow: FC = () => {
     try {
       const result = await generateResponse(input);
       const aiResponse: Message = { role: "bot", content: result.response };
-       // Add AI response *after* the API call completes
-       // Use functional update to ensure we're working with the latest state
        setMessages((prevMessages) => [...prevMessages, aiResponse]);
     } catch (error) {
       console.error("Error generating AI response:", error);
@@ -75,43 +78,43 @@ export const ChatWindow: FC = () => {
         description: "Failed to get response from AI. Please try again.",
         variant: "destructive",
       });
-       // Optionally remove the user's message if the AI fails
-      // setMessages((prevMessages) => prevMessages.filter(msg => msg !== newUserMessage));
     } finally {
-       // Set loading to false *after* AI response is added or error occurs
       setIsLoading(false);
     }
   };
 
   return (
-    // Use flex-col and height full to fill the parent div (which is h-1/2)
-    <div className="flex flex-col h-full w-full bg-card"> {/* Ensure card background */}
-      {/* Keep header structure, ensure it doesn't grow, adjust padding */}
-      <CardHeader className="border-b flex-shrink-0 p-3">
-        {/* Rename EchoBot to YINSEN */}
-        <CardTitle className="text-center text-lg font-medium text-foreground">YINSEN</CardTitle>
+    // Ensure the container takes full height of its parent div
+    <div className="flex flex-col h-full w-full bg-card overflow-hidden">
+      <CardHeader className="border-b flex-shrink-0 p-3 flex flex-row items-center justify-between">
+        <CardTitle className="text-lg font-medium text-foreground">YINSEN</CardTitle>
+         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6">
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+             <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
+        </Button>
       </CardHeader>
-      {/* Content area should grow and allow scrolling */}
-      <CardContent className="flex-1 p-0 overflow-hidden"> {/* flex-1 to grow, removed bg-card */}
-        <ScrollArea className="h-full" ref={scrollAreaRef}>
-           {/* Add padding within the scroll area content, adjusted padding */}
-          <div className="space-y-4 p-3">
-            {messages.map((msg, index) => (
-              <ChatMessage key={index} role={msg.role} content={msg.content} />
-            ))}
-             {isLoading && (
-                <div className="flex items-start gap-3 justify-start">
-                   {/* Use accent for skeleton bg */}
-                   <Skeleton className="h-8 w-8 rounded-full bg-accent" />
-                   {/* Use secondary for bot message skeleton */}
-                   <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-secondary" />
+
+      {/* Conditionally render content based on isExpanded */}
+      {isExpanded && (
+        <>
+          <CardContent className="flex-1 p-0 overflow-hidden">
+            <ScrollArea className="h-full" ref={scrollAreaRef}>
+              <div className="space-y-4 p-3">
+                {messages.map((msg, index) => (
+                  <ChatMessage key={index} role={msg.role} content={msg.content} />
+                ))}
+                {isLoading && (
+                    <div className="flex items-start gap-3 justify-start">
+                      <Skeleton className="h-8 w-8 rounded-full bg-accent" />
+                      <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-secondary" />
+                  </div>
+                )}
               </div>
-             )}
-          </div>
-        </ScrollArea>
-      </CardContent>
-      {/* Input area stays at the bottom */}
-      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+            </ScrollArea>
+          </CardContent>
+          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+        </>
+      )}
     </div>
   );
 };
