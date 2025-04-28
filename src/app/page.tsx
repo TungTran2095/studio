@@ -1,3 +1,4 @@
+// src/app/page.tsx
 import { AssetSummary } from "@/components/assets/asset-summary";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
@@ -20,7 +21,8 @@ export default function Home() {
       {/* Container for Asset Summary and Chat */}
       <aside className="w-96 border border-border flex flex-col bg-card rounded-lg shadow-md overflow-hidden flex-shrink-0">
          {/* Asset Summary Section - Top Half */}
-         <div className="h-1/2 border-b border-border flex flex-col">
+         {/* Let AssetSummary control its own height within its container */}
+         <div className="h-1/2 border-b border-border flex flex-col overflow-hidden">
             <AssetSummary />
          </div>
          {/* Chat Window Section - Bottom Half */}
@@ -31,3 +33,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
