@@ -8,7 +8,7 @@ body {
 
 @layer base {
   :root {
-    /* Firebase Studio Inspired Theme - Light Mode */
+    /* Firebase Studio Inspired Theme - Light Mode (kept for reference/toggle) */
     --background: 210 17% 98%; /* Light Gray (#F8F9FA) */
     --foreground: 220 7% 16%; /* Dark Gray Text (#202124) */
     --card: 0 0% 100%; /* White (#FFFFFF) */
@@ -44,25 +44,25 @@ body {
     --sidebar-ring: 217 89% 61%; /* Google Blue */
   }
   .dark {
-    /* Firebase Studio Inspired Theme - Dark Mode */
-    --background: 220 7% 16%; /* Very Dark Gray (#202124) */
-    --foreground: 220 14% 96%; /* Light Gray Text (#E8EAED) */
-    --card: 225 4% 22%; /* Darker Gray (#303134) */
-    --card-foreground: 220 14% 96%; /* Light Gray Text */
-    --popover: 225 4% 22%; /* Darker Gray */
-    --popover-foreground: 220 14% 96%; /* Light Gray Text */
-    --primary: 217 89% 61%; /* Google Blue (#1A73E8) */
+    /* Firebase Studio Inspired Theme - Dark Mode (Based on Screenshot) */
+    --background: 220 12% 10%; /* Very Dark Gray/Almost Black (#1A1A1D) */
+    --foreground: 210 40% 98%; /* Light Gray/White Text (#F7FAFC) */
+    --card: 220 10% 15%; /* Dark Gray (#22252A) */
+    --card-foreground: 210 40% 98%; /* Light Gray/White Text */
+    --popover: 220 10% 15%; /* Dark Gray */
+    --popover-foreground: 210 40% 98%; /* Light Gray/White Text */
+    --primary: 217 89% 61%; /* Google Blue (#1A73E8) - Kept for user messages */
     --primary-foreground: 0 0% 100%; /* White text on blue */
-    --secondary: 216 4% 27%; /* Medium Dark Gray (#3C4043) */
-    --secondary-foreground: 220 14% 96%; /* Light Gray Text */
-    --muted: 216 4% 27%; /* Medium Dark Gray (#3C4043) */
-    --muted-foreground: 216 5% 64%; /* Lighter Gray Text (#9AA0A6) */
-    --accent: 216 4% 27%; /* Medium Dark Gray for accents */
-    --accent-foreground: 220 14% 96%; /* Light Gray Text */
-    --destructive: 0 62.8% 50.6%; /* Slightly adjusted Red */
+    --secondary: 220 8% 20%; /* Slightly Lighter Dark Gray (#2E3035) */
+    --secondary-foreground: 210 40% 98%; /* Light Gray/White Text */
+    --muted: 220 8% 20%; /* Slightly Lighter Dark Gray */
+    --muted-foreground: 215 15% 65%; /* Lighter Gray Text (#949CA5) */
+    --accent: 220 8% 25%; /* Medium Dark Gray for accents (#3A3D42) */
+    --accent-foreground: 210 40% 98%; /* Light Gray/White Text */
+    --destructive: 0 62.8% 50.6%; /* Adjusted Red */
     --destructive-foreground: 0 0% 98%;
-    --border: 216 5% 44%; /* Medium Gray Border (#5F6368) */
-    --input: 216 5% 44%; /* Medium Gray Input BG (#5F6368) */
+    --border: 220 8% 25%; /* Medium Dark Gray Border (#3A3D42) */
+    --input: 220 10% 15%; /* Dark Gray Input BG (Same as card) */
     --ring: 217 89% 61%; /* Google Blue for focus rings */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -70,13 +70,13 @@ body {
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     --radius: 0.5rem;
-    --sidebar-background: 220 7% 16%; /* Consistent with main background */
-    --sidebar-foreground: 220 14% 96%; /* Consistent with main foreground */
+    --sidebar-background: 220 12% 10%; /* Consistent with main background */
+    --sidebar-foreground: 210 40% 98%; /* Consistent with main foreground */
     --sidebar-primary: 217 89% 61%; /* Google Blue */
     --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 216 4% 30%; /* Slightly lighter gray for dark sidebar accent */
-    --sidebar-accent-foreground: 220 14% 96%; /* Light Gray Text */
-    --sidebar-border: 216 5% 35%; /* Slightly lighter border for dark sidebar */
+    --sidebar-accent: 220 8% 25%; /* Medium dark gray for sidebar accent */
+    --sidebar-accent-foreground: 210 40% 98%; /* Light Gray/White Text */
+    --sidebar-border: 220 8% 25%; /* Medium dark gray border for sidebar */
     --sidebar-ring: 217 89% 61%; /* Google Blue */
   }
 }

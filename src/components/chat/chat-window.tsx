@@ -68,12 +68,13 @@ export const ChatWindow: FC = () => {
   };
 
   return (
-    // Adjusted styling: remove explicit shadow, rely on theme's card style
-    <Card className="flex flex-col h-[calc(100vh-4rem)] max-h-[800px] w-full max-w-2xl mx-auto my-8 rounded-lg overflow-hidden border">
+    // Use card styling, ensure background matches theme, adjust max height/width
+    <Card className="flex flex-col h-[calc(100vh-4rem)] max-h-[800px] w-full max-w-3xl mx-auto my-8 rounded-lg overflow-hidden bg-card border"> {/* Increased max-width */}
       <CardHeader className="border-b">
         <CardTitle className="text-center text-lg font-semibold">EchoBot</CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 p-0 overflow-hidden bg-background"> {/* Ensure content background matches theme */}
+       {/* Ensure content background matches theme card background */}
+      <CardContent className="flex-1 p-0 overflow-hidden bg-card">
         <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
           <div className="space-y-4">
             {messages.map((msg, index) => (
@@ -81,14 +82,14 @@ export const ChatWindow: FC = () => {
             ))}
              {isLoading && (
                 <div className="flex items-start gap-3 justify-start">
-                   <Skeleton className="h-8 w-8 rounded-full" />
-                   <Skeleton className="h-10 rounded-lg p-3 w-1/4" />
+                   <Skeleton className="h-8 w-8 rounded-full bg-muted" /> {/* Use muted for skeleton bg */}
+                   <Skeleton className="h-10 rounded-lg p-3 w-1/4 bg-muted" /> {/* Use muted for skeleton bg */}
               </div>
              )}
           </div>
         </ScrollArea>
       </CardContent>
-      {/* Use card background for input area for consistency */}
+      {/* Input area uses card styling */}
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
     </Card>
   );

@@ -33,7 +33,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
           "max-w-[75%] rounded-lg p-3 shadow-sm", // Use theme's radius and shadow
           isUser
             ? "bg-primary text-primary-foreground" // User message uses primary color
-            : "bg-card text-card-foreground" // Bot message uses card background
+            : "bg-secondary text-secondary-foreground" // Bot message uses secondary background for contrast in dark mode
         )}
       >
         <p className="text-sm whitespace-pre-wrap">{content}</p>

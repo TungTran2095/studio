@@ -25,14 +25,14 @@ export const ChatInput: FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   };
 
   return (
-    // Use card background for consistency with the chat window's card theme
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 border-t bg-card">
+    // Use card background for consistency, ensure border matches theme
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 border-t bg-card border-border">
       <Input
         ref={inputRef}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         placeholder="Type your message..."
-        className="flex-1" // Input background will inherit from theme
+        className="flex-1 bg-input text-foreground placeholder:text-muted-foreground" // Explicitly set background to input color
         disabled={isLoading}
         aria-label="Chat message input"
       />

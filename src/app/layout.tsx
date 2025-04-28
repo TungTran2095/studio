@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import { Roboto } from 'next/font/google'; // Import Roboto
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
+import { cn } from '@/lib/utils'; // Import cn utility
 
 // Configure Roboto font
 const roboto = Roboto({
@@ -23,9 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // Add 'dark' class here for default dark mode
+    <html lang="en" className="dark">
        {/* Apply Roboto font variable */}
-      <body className={`${roboto.variable} font-sans antialiased`}>
+      <body className={cn(roboto.variable, "font-sans antialiased")}>
         {children}
         <Toaster />
       </body>
