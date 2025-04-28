@@ -315,13 +315,12 @@ export async function fetchBinanceTradeHistory(
      }
 
 
-    // ** REINFORCED CHECK: Verify if myTrades function exists **
-    // Add extra logging here to confirm the state of `binance` and `binance.myTrades`
-    console.log('[fetchBinanceTradeHistory] Checking for binance.myTrades method...');
-    console.log('[fetchBinanceTradeHistory] typeof binance.myTrades:', typeof binance?.myTrades); // Use optional chaining for safety
+    // ** REINFORCED CHECK: Verify if `trades` function exists (as `myTrades` seems incorrect for v0.13.x) **
+    console.log('[fetchBinanceTradeHistory] Checking for binance.trades method...');
+    console.log('[fetchBinanceTradeHistory] typeof binance.trades:', typeof binance?.trades); // Check for `trades`
 
-    if (typeof binance?.myTrades !== 'function') { // Use optional chaining here too
-      const errorMsg = 'Internal Server Error: Could not access trade history function (myTrades method not found on Binance client). Check library version or initialization.';
+    if (typeof binance?.trades !== 'function') { // Check for `trades`
+      const errorMsg = 'Internal Server Error: Could not access trade history function (trades method not found on Binance client). Check library version (v0.13.x expected) or initialization.';
       console.error(`[fetchBinanceTradeHistory] ${errorMsg}`);
        // Log available properties/methods for inspection IF binance object exists
       if (binance) {
@@ -331,7 +330,7 @@ export async function fetchBinanceTradeHistory(
       }
       return { success: false, data: [], error: errorMsg };
     }
-     console.log('[fetchBinanceTradeHistory] binance.myTrades method found. Proceeding...');
+     console.log('[fetchBinanceTradeHistory] binance.trades method found. Proceeding...');
     // ** END REINFORCED CHECK **
 
     try {
@@ -352,80 +351,92 @@ export async function fetchBinanceTradeHistory(
         const fetchPromises = tradingPairsToFetch.map(symbol => {
             return new Promise<Trade[]>(async (resolve) => { // Make inner function async
                try {
-                   // Now we know binance.myTrades exists (or the check above would have returned)
-                   console.log(`[fetchBinanceTradeHistory] Calling binance.myTrades for ${symbol}...`);
-                   const trades: any[] = await binance.myTrades(symbol, { limit: limit });
+                   // Now we know binance.trades exists
+                   console.log(`[fetchBinanceTradeHistory] Calling binance.trades for ${symbol}...`);
+                   // Use binance.trades() which should be correct for v0.13.x
+                   const trades: any[] = await binance.trades(symbol, (error: any, trades: any[], symbol: string) => {
+                       if (error) {
+                           // Handle errors within the callback as well
+                           if (error?.body?.includes('-1121') || error?.message?.includes('Invalid symbol')) {
+                                // console.warn(`[fetchBinanceTradeHistory Callback] Skipping invalid symbol: ${symbol}`);
+                                resolve([]);
+                           } else if (error?.message?.includes('Duplicate') || error?.body?.includes('-1104')) {
+                               console.warn(`[fetchBinanceTradeHistory Callback] Duplicate request warning for ${symbol}, skipping: ${error.message}`);
+                               resolve([]);
+                           } else if (error?.message?.includes('Too many requests') || error?.body?.includes('-1003')) {
+                               console.warn(`[fetchBinanceTradeHistory Callback] Rate limited fetching trades for ${symbol}, skipping.`);
+                               resolve([]);
+                           } else if (error?.message?.includes('permissions') || error?.body?.includes('-2008')) {
+                                console.error(`[fetchBinanceTradeHistory Callback] Permission or API Key error for ${symbol}:`, error.message);
+                                resolve([]);
+                           }
+                           else {
+                                console.error(`[fetchBinanceTradeHistory Callback] Error fetching trades for ${symbol}:`, error);
+                                resolve([]); // Resolve empty to allow other symbols to proceed
+                           }
+                           return; // Exit callback on error
+                       }
 
-                    if (Array.isArray(trades)) {
-                        // console.log(`[fetchBinanceTradeHistory] Fetched ${trades.length} trades for ${symbol}`);
+                       // --- Process successful trades ---
+                        if (Array.isArray(trades)) {
+                            // console.log(`[fetchBinanceTradeHistory Callback] Fetched ${trades.length} trades for ${symbol}`);
 
-                        // --- Determine Base and Quote Asset ---
-                        const knownQuoteAssets = ['USDT', 'USDC', 'TUSD', 'BUSD', 'FDUSD', 'BTC', 'ETH', 'BNB']; // More extensive list
-                        let baseAsset = symbol; // Default assumption
-                        let quoteAsset = '';
-
-                         for (const quote of knownQuoteAssets) {
-                            if (symbol.endsWith(quote) && symbol.length > quote.length) {
-                                const potentialBase = symbol.substring(0, symbol.length - quote.length);
-                                if (/^[A-Z0-9]+$/.test(potentialBase)) { // Basic validation
-                                    baseAsset = potentialBase;
-                                    quoteAsset = quote;
-                                    break;
+                            // Determine Base and Quote Asset
+                            const knownQuoteAssets = ['USDT', 'USDC', 'TUSD', 'BUSD', 'FDUSD', 'BTC', 'ETH', 'BNB'];
+                            let baseAsset = symbol;
+                            let quoteAsset = '';
+                            for (const quote of knownQuoteAssets) {
+                                if (symbol.endsWith(quote) && symbol.length > quote.length) {
+                                    const potentialBase = symbol.substring(0, symbol.length - quote.length);
+                                    if (/^[A-Z0-9]+$/.test(potentialBase)) {
+                                        baseAsset = potentialBase;
+                                        quoteAsset = quote;
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                         // Fallback if no known quote asset matched (less likely for trade pairs)
-                        if (!quoteAsset && symbol.length > 3) {
-                            const potentialQuote = symbol.substring(symbol.length - 3); // Assume 3-char quote
-                            const potentialBase = symbol.substring(0, symbol.length - 3);
-                             if (/^[A-Z0-9]+$/.test(potentialBase) && /^[A-Z]+$/.test(potentialQuote)) {
-                                 baseAsset = potentialBase;
-                                 quoteAsset = potentialQuote;
-                             }
-                        }
-                        // --- End Base/Quote Determination ---
+                            if (!quoteAsset && symbol.length > 3) {
+                                const potentialQuote = symbol.substring(symbol.length - 3);
+                                const potentialBase = symbol.substring(0, symbol.length - 3);
+                                if (/^[A-Z0-9]+$/.test(potentialBase) && /^[A-Z]+$/.test(potentialQuote)) {
+                                    baseAsset = potentialBase;
+                                    quoteAsset = potentialQuote;
+                                }
+                            }
 
-                        resolve(trades.map((trade: any) => ({
-                            symbol: trade.symbol,
-                            id: trade.id,
-                            orderId: trade.orderId,
-                            price: trade.price,
-                            qty: trade.qty,
-                            quoteQty: trade.quoteQty,
-                            commission: trade.commission,
-                            commissionAsset: trade.commissionAsset,
-                            time: trade.time,
-                            isBuyer: trade.isBuyer,
-                            isMaker: trade.isMaker,
-                            baseAsset: baseAsset, // Add determined base asset
-                            quoteAsset: quoteAsset, // Add determined quote asset
-                        } as Trade)));
-                    } else {
-                        console.warn(`[fetchBinanceTradeHistory] Received non-array response for ${symbol} trades:`, trades);
-                        resolve([]); // Return empty array if response is not as expected
-                    }
+                            resolve(trades.map((trade: any) => ({
+                                symbol: trade.symbol,
+                                id: trade.id,
+                                orderId: trade.orderId,
+                                price: trade.price,
+                                qty: trade.qty,
+                                quoteQty: trade.quoteQty,
+                                commission: trade.commission,
+                                commissionAsset: trade.commissionAsset,
+                                time: trade.time,
+                                isBuyer: trade.isBuyer,
+                                isMaker: trade.isMaker,
+                                baseAsset: baseAsset,
+                                quoteAsset: quoteAsset,
+                            } as Trade)));
+                        } else {
+                            console.warn(`[fetchBinanceTradeHistory Callback] Received non-array response for ${symbol} trades:`, trades);
+                            resolve([]); // Return empty array if response is not as expected
+                        }
+                   }, { limit: limit }); // Pass limit as options object
+
+                   // The `await binance.trades` above might not directly return the trades
+                   // if the library uses callbacks primarily. The promise resolves
+                   // inside the callback. Let's check if the promise resolves immediately
+                   // or if we rely solely on the callback's resolve().
+                   // For safety, we primarily rely on the callback's resolve().
+
                } catch (error: any) {
-                     // Handle specific errors, e.g., "Invalid symbol" (-1121)
-                    if (error?.body?.includes('-1121') || error?.message?.includes('Invalid symbol')) {
-                        // console.warn(`[fetchBinanceTradeHistory] Skipping invalid symbol for trade history: ${symbol}`);
-                        resolve([]); // Resolve with empty array for ignored errors (symbol doesn't exist or no trades)
-                    } else if (error?.message?.includes('Duplicate') || error?.body?.includes('-1104')) {
-                        console.warn(`[fetchBinanceTradeHistory] Duplicate request warning for ${symbol}, skipping: ${error.message}`);
-                        resolve([]);
-                    } else if (error?.message?.includes('Too many requests') || error?.body?.includes('-1003')) {
-                        console.warn(`[fetchBinanceTradeHistory] Rate limited fetching trades for ${symbol}, skipping.`);
-                        // Implement backoff/retry later if needed
-                        resolve([]);
-                    } else if (error?.message?.includes('permissions') || error?.body?.includes('-2008')) { // -2008 Invalid Api-Key ID
-                         console.error(`[fetchBinanceTradeHistory] Permission or API Key error for ${symbol}:`, error.message);
-                         // Resolve empty, but maybe bubble up the error if it's key-related?
-                         resolve([]);
-                    }
-                    else {
-                        console.error(`[fetchBinanceTradeHistory] Error fetching trades for ${symbol}:`, error);
-                         // Resolve empty to allow other symbols to proceed
-                         resolve([]);
-                    }
+                     // This catch block handles errors *during the initiation* of the `binance.trades` call,
+                     // NOT errors handled within the callback.
+                    console.error(`[fetchBinanceTradeHistory Outer Catch] Error initiating trades fetch for ${symbol}:`, error);
+                     // Resolve empty to allow other symbols to proceed
+                     resolve([]);
                }
             });
         });
@@ -468,10 +479,10 @@ export async function fetchBinanceTradeHistory(
             } else if (error.message.includes('permissions') || error.message.includes('permission')) {
                 errorMessage = 'API key lacks permissions (requires trade history access).';
             }
-             // Explicitly check for the function existence error here as well, though the initial check should catch it
-            else if (error.message.includes('binance.myTrades is not a function')) {
-                 errorMessage = 'Internal Server Error: Trade history feature unavailable (function missing).';
-                 console.error('[fetchBinanceTradeHistory] Caught error confirming myTrades is not a function.');
+             // Explicitly check for the function existence error here as well
+            else if (error.message.includes('binance.trades is not a function')) { // Check for `trades`
+                 errorMessage = 'Internal Server Error: Trade history feature unavailable (function missing). Check library version.';
+                 console.error('[fetchBinanceTradeHistory] Caught error confirming trades function is missing.');
             }
             else {
                  errorMessage = `API Error: ${error.message}`;
