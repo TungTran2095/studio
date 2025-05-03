@@ -6,12 +6,13 @@ import { AssetSummary } from "@/components/assets/asset-summary";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
 import { AnalysisPanel } from "@/components/analysis/analysis-panel";
+import { TradingPanel } from "@/components/trading/trading-panel"; // Import the new TradingPanel
 import { cn } from '@/lib/utils';
 
 export default function Home() {
   const [isAssetExpanded, setIsAssetExpanded] = useState(true);
   const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
-  // New state for chat sidebar
+  // State for chat sidebar expansion
   const [isChatExpanded, setIsChatExpanded] = useState(false); // Default to collapsed
 
   // Toggle for asset summary
@@ -40,34 +41,39 @@ export default function Home() {
         <AnalysisPanel isExpanded={isAnalysisExpanded} onToggle={handleAnalysisToggle} />
       </aside>
 
-      {/* Center content area: Takes remaining space, stacks chart and assets */}
+      {/* Center content area: Takes remaining space, stacks chart and lower panels */}
       <main className="flex-1 flex flex-col gap-4 overflow-hidden">
-        {/* Chart Container: Takes available space, flex column */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border">
+        {/* Top Chart Container: Takes most space initially */}
+        <div className="flex-[3] flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border"> {/* Increased flex-grow */}
           <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
-          {/* Inner div for widget takes remaining space */}
           <div className="flex-1 p-0 overflow-hidden">
             <TradingViewWidget />
           </div>
         </div>
 
-        {/* Asset Summary Container: Below chart, defined height when expanded */}
-        <div className={cn(
-          "flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card",
-           // Dynamic height based on expansion
-           isAssetExpanded ? 'flex-1' : 'h-auto flex-shrink-0', // Adjusted to flex-1 when expanded
-           // Add min-height if needed when collapsed, e.g., 'min-h-16'
-        )}>
-          <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} />
+        {/* Bottom Container: Holds Assets and Trading side-by-side */}
+        <div className="flex-[2] flex gap-4 overflow-hidden"> {/* Reduced flex-grow, horizontal layout */}
+            {/* Asset Summary Container: Takes half the space */}
+            <div className={cn(
+                "flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card", // Takes half width
+            )}>
+              {/* AssetSummary might not need expansion toggle anymore if height is fixed */}
+              <AssetSummary isExpanded={true} onToggle={() => {}} />
+              {/* Or keep toggle if desired */}
+              {/* <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} /> */}
+            </div>
+
+            {/* New Trading Panel Container: Takes the other half */}
+            <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card">
+              <TradingPanel />
+            </div>
         </div>
       </main>
 
       {/* Right Chat Panel: Shrinkable width, full height */}
       <aside className={cn(
         "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out h-full", // Ensure full height
-        // Make collapsed width smaller (w-16 is 64px, adjust if needed)
-        // Keep w-96 for expanded state
-        isChatExpanded ? 'w-96' : 'w-16' // Using w-16, which should be narrow enough for just an icon
+        isChatExpanded ? 'w-96' : 'w-16'
       )}>
          {/* Pass props to ChatWindow to handle its own toggle/state */}
         <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle} />
