@@ -89,7 +89,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       setIsFetchingIndicators(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFetchingIndicators, toast]);
+  }, [isFetchingIndicators, toast]); // Removed fetchIndicators from dependencies to prevent infinite loop
 
   // Effect to fetch initially and set interval
   useEffect(() => {
@@ -109,6 +109,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
         clearInterval(intervalIdRef.current);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchIndicators]); // Depend on fetchIndicators function
 
 
@@ -214,7 +215,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     <TableCell className="font-medium text-foreground text-xs py-1.5">{key}</TableCell>
                                     <TableCell className="text-right text-foreground text-xs py-1.5">
                                         {/* Show skeleton if loading OR if value is 'Loading...' or 'Error' */}
-                                        {isFetchingIndicators || value === "Loading..." || value === "Error" ? (
+                                        {value === "Loading..." || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") || value === "Error" ? ( // Check first indicator loading as proxy
                                             value === "Error" ? <span className="text-destructive">Error</span> : <Skeleton className="h-4 w-20 ml-auto bg-muted" />
                                         ) : (
                                             value === "N/A" ? <span className="text-muted-foreground">N/A</span> : value // Handle "N/A"
@@ -235,3 +236,5 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     </Card>
   );
 };
+
+    
