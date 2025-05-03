@@ -1,7 +1,7 @@
 // src/components/chat/chat-window.tsx
 "use client";
 
-import type { FC } from "react";
+import type { FC, MouseEvent, TouchEvent } from "react"; // Added touch event
 import { useState, useRef, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Import Card for structure
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,7 +17,7 @@ import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
 import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // Import Supabase actions
 import type { MessageHistory } from "@/lib/supabase-client"; // Import the type for messages from DB
 import { Button } from "@/components/ui/button"; // Import Button
-import { ChevronLeft, Bot as BotIcon } from "lucide-react"; // Use BotIcon for collapsed state
+import { ChevronLeft, ChevronRight, Bot as BotIcon, MessageSquare } from "lucide-react"; // Use BotIcon for collapsed state, added MessageSquare
 
 // Use MessageHistory type for consistency
 // Add a temporary client-side ID for rendering keys before DB ID exists
@@ -111,17 +111,9 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     const credentialsAvailable = isConnected && apiKey && apiSecret; // Check connection status too
     if (!credentialsAvailable) {
       console.warn("[ChatWindow] Binance not connected or API credentials NOT available in store. Trading intent might fail.");
-      const tradeKeywords = ['buy', 'sell', 'order', 'trade', 'binance'];
-      if (tradeKeywords.some(keyword => messageContent.toLowerCase().includes(keyword))) {
-          toast({
-            title: "Credentials Required",
-            description: "Please connect your Binance account and ensure API Key/Secret are entered to enable trading via chat.",
-            variant: "destructive",
-          });
-          // Stop processing if credentials needed for trade are missing
-          setIsLoading(false);
-          return;
-      }
+      // Removed the automatic check and toast for trade keywords as requested
+      // const tradeKeywords = ['buy', 'sell', 'order', 'trade', 'binance'];
+      // if (tradeKeywords.some(keyword => messageContent.toLowerCase().includes(keyword))) { ... }
     } else {
       console.log("[ChatWindow] Binance connected and API credentials found in store. Passing to generateResponse flow.");
     }
@@ -140,7 +132,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       message: messageContent,
       chatHistory: chatHistoryForAI,
       // Only include credentials if they exist AND binance is connected
-      ...(credentialsAvailable && { apiKey: apiKey!, apiSecret: apiSecret! }),
+      apiKey: credentialsAvailable ? apiKey! : undefined, // Use undefined if not available
+      apiSecret: credentialsAvailable ? apiSecret! : undefined, // Use undefined if not available
       isTestnet: isTestnet ?? false, // Pass testnet status
     };
 
@@ -180,7 +173,12 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
        if (error.message && error.message.includes("Schema validation failed") && error.message.includes('Expected object, received null')) {
            displayError = "The AI returned an invalid response format (null). Please try again.";
            console.error("[ChatWindow] AI returned null output, expected { response: string }");
+       } else if (error.message && error.message.includes("I need your API Key and API Secret")) {
+            displayError = "Connect your Binance account in the 'Binance Account' panel to use trading features.";
+       } else if (error.message && error.message.includes("I do not have access to your API Key")) {
+            displayError = "Connect your Binance account in the 'Binance Account' panel to use trading features."; // More specific error
        }
+
 
       toast({
         title: "Error Generating Response",
@@ -198,21 +196,20 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   return (
     // Use Card for consistent styling with other panels
     <Card className={cn(
-        // Removed width transition classes, Panel handles resizing
-        "flex flex-col h-full w-full overflow-hidden border border-border shadow-md bg-card"
+        "flex flex-col h-full w-full overflow-hidden border-none shadow-none bg-card" // Use border-none and shadow-none as border is handled by parent div
     )}>
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
         {/* Show title only when expanded */}
         <CardTitle className={cn(
-          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out",
-          !isExpanded && "opacity-0 w-0 overflow-hidden" // Hide title when collapsed
+          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out whitespace-nowrap overflow-hidden", // Added whitespace-nowrap and overflow-hidden
+          !isExpanded && "opacity-0 w-0" // Hide title when collapsed
         )}>
           YINSEN
         </CardTitle>
         {/* Toggle Button */}
         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground flex-shrink-0">
-           {/* Show ChevronLeft when expanded (to indicate collapse), BotIcon when collapsed */}
-           {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <BotIcon className="h-4 w-4" />}
+           {/* Show ChevronLeft when expanded (to indicate collapse), ChevronRight when collapsed */}
+           {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
         </Button>
       </CardHeader>
@@ -220,16 +217,14 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       {/* Conditionally render content based on isExpanded */}
       <CardContent className={cn(
         "flex-1 p-0 overflow-hidden flex flex-col", // Use flex-col for inner structure
-        // Ensure content visibility matches expansion state (controlled by Panel externally)
-        // For internal toggle logic (if Panel wasn't used), this would be needed:
-        // !isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
+        // Hide content based on isExpanded state
+        !isExpanded && "opacity-0 p-0"
       )}>
-         {/* Content is always rendered, Panel handles visibility/collapse */}
+         {/* Content is always rendered, but hidden via parent class */}
            <>
             {/* Enable horizontal and vertical scrolling */}
             <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="both">
               {/* Wrap messages in a div that can expand horizontally */}
-               {/* Only render content fully when expanded */}
               <div className={cn("space-y-1 p-3 min-w-max", !isExpanded && "hidden")}>
                 {isLoadingHistory && (
                   <>

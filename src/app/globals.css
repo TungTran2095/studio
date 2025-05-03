@@ -106,55 +106,5 @@ body {
     @apply hover:bg-gradient-to-r hover:from-red-600 hover:via-orange-600 hover:to-yellow-500;
   }
 
-  /* Styling for react-resizable-panels handles */
-  [data-panel-resize-handle-id] {
-      /* Default transparent background */
-      background-color: transparent;
-      /* Transition background color */
-      transition: background-color 0.2s ease-in-out;
-      position: relative; /* Needed for pseudo-element */
-  }
-
-   [data-panel-resize-handle-id][data-resize-handle-active],
-   [data-panel-resize-handle-id]:hover {
-       /* Visible border color on hover or active drag */
-       background-color: hsl(var(--border) / 0.5);
-   }
-
-   [data-panel-resize-handle-id][data-panel-group-direction="vertical"] {
-       height: 0.25rem; /* Adjust thickness as needed */
-       width: 100%;
-   }
-
-   [data-panel-resize-handle-id][data-panel-group-direction="horizontal"] {
-       width: 0.25rem; /* Adjust thickness as needed */
-       height: 100%;
-   }
-
-   /* Optional: Add a visual indicator line inside the handle */
-    [data-panel-resize-handle-id]::after {
-        content: '';
-        position: absolute;
-        background-color: hsl(var(--border));
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
-    }
-    [data-panel-resize-handle-id]:hover::after,
-    [data-panel-resize-handle-id][data-resize-handle-active]::after {
-        opacity: 1;
-    }
-     [data-panel-resize-handle-id][data-panel-group-direction="vertical"]::after {
-         top: 50%;
-         left: 0;
-         right: 0;
-         height: 1px; /* Line thickness */
-         transform: translateY(-50%);
-     }
-     [data-panel-resize-handle-id][data-panel-group-direction="horizontal"]::after {
-          left: 50%;
-         top: 0;
-         bottom: 0;
-         width: 1px; /* Line thickness */
-         transform: translateX(-50%);
-     }
+  /* Removed styling for react-resizable-panels handles */
 }

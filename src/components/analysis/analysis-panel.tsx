@@ -120,7 +120,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
          setCollectionStatus('collecting-historical');
          setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}... (this may take a while)`);
     } else {
-        // This part should ideally not be reachable if the button is removed, but keep logic for safety
+        // Logic for 'latest' data collection (currently not triggered by UI)
         console.log("[AnalysisPanel] Collecting latest data...");
          setCollectionStatus('collecting-latest');
          setCollectionMessage('Collecting latest 1m data...');
@@ -175,14 +175,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   return (
     <Card className={cn(
-      // Removed width transition classes, panel handles resizing
-      "flex flex-col h-full w-full overflow-hidden border border-border shadow-md bg-card"
+      "flex flex-col h-full w-full overflow-hidden border-none shadow-none bg-card" // Use border-none and shadow-none as border is handled by parent div
     )}>
       {/* Header */}
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
         <CardTitle className={cn(
-          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out",
-          !isExpanded && "opacity-0 w-0 overflow-hidden"
+          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out whitespace-nowrap overflow-hidden", // Added whitespace-nowrap and overflow-hidden
+          !isExpanded && "opacity-0 w-0" // Keep hiding when collapsed
         )}>
           Analysis Tools
         </CardTitle>
@@ -195,8 +194,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
      {/* Content Area */}
       <CardContent className={cn(
         "flex-1 p-3 overflow-hidden flex flex-col gap-4 transition-opacity duration-300 ease-in-out",
-        // Hide content based on isExpanded state for internal toggle,
-        // Panel component handles hiding when externally collapsed.
+        // Hide content based on isExpanded state
         !isExpanded && "opacity-0 p-0"
       )}>
         {isExpanded && (
@@ -253,10 +251,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                             selected={dateRange}
                                             onSelect={setDateRange}
                                             numberOfMonths={2} // Show two months
-                                            // Remove dropdown props
-                                            // captionLayout="dropdown-buttons"
-                                            // fromYear={2017}
-                                            // toYear={currentYear}
                                             disabled={(date) => date > new Date()}
                                         />
                                     </PopoverContent>
@@ -323,28 +317,29 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                 {/* Section 3: Indicators */}
                 <AccordionItem value="item-3" className="border-b-0">
-                     <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md relative group"> {/* Add relative and group */}
+                     <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md relative group">
                         <div className="flex justify-between items-center w-full">
                             <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                                 <BarChart className="h-4 w-4 text-primary" />
                                 BTC/USDT Indicators
                             </h4>
-                             {/* Moved Refresh Button inside the div, but outside the h4 */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Prevent accordion toggle
-                                    fetchIndicators();
-                                }}
-                                disabled={isFetchingIndicators}
-                                className="h-5 w-5 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity" // Simplified positioning, rely on flex
-                                title="Refresh Indicators"
-                            >
-                                <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
-                                <span className="sr-only">Refresh Indicators</span>
-                            </Button>
+                            {/* Refresh Button (Now correctly outside the AccordionTrigger's default button) */}
                         </div>
+                        {/* Separate Refresh Button */}
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent accordion toggle
+                                fetchIndicators();
+                            }}
+                            disabled={isFetchingIndicators}
+                            className="h-5 w-5 text-muted-foreground hover:text-foreground absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" // Positioned absolute
+                            title="Refresh Indicators"
+                        >
+                            <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
+                            <span className="sr-only">Refresh Indicators</span>
+                        </Button>
                     </AccordionTrigger>
 
 
@@ -356,7 +351,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                              <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 Last updated:{" "}
                                 {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") ? (
-                                    <span className="inline-block animate-pulse">
+                                    <span className="inline-block">
                                         <Skeleton className="h-3 w-14 inline-block bg-muted" />
                                     </span>
                                 ) : (
