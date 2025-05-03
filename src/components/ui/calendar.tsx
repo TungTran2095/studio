@@ -3,12 +3,11 @@
 
 import * as React from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker, DropdownProps } from "react-day-picker"
+import { DayPicker } from "react-day-picker" // Removed DropdownProps import
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area" // Import ScrollArea
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" // Import Select components
+// Removed ScrollArea and Select component imports
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
@@ -16,26 +15,25 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
+  numberOfMonths = 1, // Keep default as 1, can be overridden by props
   ...props
 }: CalendarProps) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      numberOfMonths={numberOfMonths} // Use prop to control number of months
       className={cn("p-3", className)}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: cn(
-          "text-sm font-medium",
-          props.captionLayout?.includes("dropdown") && "hidden" // Hide label for dropdown layout
-        ),
-         caption_dropdowns: "flex justify-center gap-1", // Style for dropdown container
+        caption_label: "text-sm font-medium", // Reverted caption_label style
+         // Removed caption_dropdowns style
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
-           props.captionLayout?.includes("dropdown") && "hidden" // Hide nav buttons for dropdown layout
+          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
+          // Removed conditional hiding based on dropdown layout
         ),
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
@@ -59,65 +57,13 @@ function Calendar({
         day_range_middle:
           "aria-selected:bg-accent aria-selected:text-accent-foreground",
         day_hidden: "invisible",
-         // Add class for dropdowns if needed
-        dropdown: "rdp-dropdown bg-background", // Base style for dropdown
-        dropdown_month: "rdp-dropdown_month", // Style month dropdown
-        dropdown_year: "rdp-dropdown_year", // Style year dropdown
+         // Removed dropdown-related classes
         ...classNames,
       }}
       components={{
-        IconLeft: ({ className, ...props }) => (
-          <ChevronLeft className={cn("h-4 w-4", className)} {...props} />
-        ),
-        IconRight: ({ className, ...props }) => (
-          <ChevronRight className={cn("h-4 w-4", className)} {...props} />
-        ),
-         // Custom Dropdown component using shadcn/ui Select
-        Dropdown: ({ value, onChange, children, ...rest }: DropdownProps) => {
-          const options = React.Children.toArray(
-            children
-          ) as React.ReactElement<React.HTMLProps<HTMLOptionElement>>[]
-          const selected = options.find((child) => child.props.value === value)
-          const handleChange = (value: string) => {
-            const changeEvent = {
-              target: { value },
-            } as React.ChangeEvent<HTMLSelectElement>
-            onChange?.(changeEvent)
-          }
-          return (
-            <Select
-              value={value?.toString()}
-              onValueChange={(value) => {
-                handleChange(value)
-              }}
-            >
-              {/* Removed onPointerDown to allow Popover closure */}
-              <SelectTrigger
-                 className="pr-1.5 focus:ring-0 h-7 text-xs w-fit" // Use w-fit for auto width
-                 aria-label={rest.name} // Add aria-label for accessibility
-              >
-                <SelectValue>{selected?.props?.children}</SelectValue>
-              </SelectTrigger>
-              <SelectContent position="popper">
-                 {/* Use ScrollArea for long year lists */}
-                 <ScrollArea className={cn(
-                   "h-auto", // Auto height for scroll area
-                   // Apply max height only to year dropdown
-                    rest.name === "years" ? "max-h-48" : "max-h-60" // Shorter for years, taller for months
-                  )}>
-                    {options.map((option, id: number) => (
-                      <SelectItem
-                        key={`${option.props.value}-${id}`}
-                        value={option.props.value?.toString() ?? ""}
-                      >
-                        {option.props.children}
-                      </SelectItem>
-                    ))}
-                 </ScrollArea>
-              </SelectContent>
-            </Select>
-          )
-        },
+        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
+        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+        // Removed custom Dropdown component override
       }}
       {...props}
     />

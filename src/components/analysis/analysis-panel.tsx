@@ -246,14 +246,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                         <Calendar
                                             initialFocus
                                             mode="range"
-                                            defaultMonth={dateRange?.from ?? subYears(new Date(), 1)} // Default to 1 year ago if no range selected
+                                            defaultMonth={dateRange?.from}
                                             selected={dateRange}
                                             onSelect={setDateRange}
-                                            numberOfMonths={1} // Show one month for dropdown layout
-                                            captionLayout="dropdown-buttons" // Use dropdowns for month/year
-                                            fromYear={2017} // Set earliest year (Binance launch)
-                                            toYear={currentYear} // Set latest year
-                                            // Optional: disable future dates if needed
+                                            numberOfMonths={2} // Show two months
+                                            // Remove dropdown props
+                                            // captionLayout="dropdown-buttons"
+                                            // fromYear={2017}
+                                            // toYear={currentYear}
                                             disabled={(date) => date > new Date()}
                                         />
                                     </PopoverContent>
