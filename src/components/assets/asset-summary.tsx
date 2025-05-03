@@ -55,6 +55,7 @@ interface AssetSummaryProps {
 
 // Define the list of symbols to ALWAYS check for trade history and display assets for
 const TARGET_SYMBOLS = ['BTC', 'USDT']; // UPDATED: Only BTC and USDT
+const REFRESH_INTERVAL_MS = 5000; // 5 seconds
 
 export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) => {
   // Use state from Zustand store
@@ -64,7 +65,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     isLoadingAssets,
     isLoadingTrades,
     isConnected,
-    ownedSymbols, // Keep track of all owned symbols internally for potential full balance checks
+    ownedSymbols,
     activeTab,
     apiKey,
     apiSecret,
@@ -77,13 +78,16 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     setOwnedSymbols,
     setActiveTab,
     setCredentials,
-    clearState, // Function to clear store state
+    clearState,
   } = useAssetStore();
 
   const { toast } = useToast();
-  const summaryViewportRef = useRef<HTMLDivElement>(null); // Ref for summary scroll area
-  const historyViewportRef = useRef<HTMLDivElement>(null); // Ref for history scroll area
-  const [isCredentialsVisible, setIsCredentialsVisible] = useState(true); // State for credentials visibility
+  const summaryViewportRef = useRef<HTMLDivElement>(null);
+  const historyViewportRef = useRef<HTMLDivElement>(null);
+  const [isCredentialsVisible, setIsCredentialsVisible] = useState(true);
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null); // Ref for the interval timer
+  // State to track if the current fetch is manual (for toast control)
+  const isManualFetchRef = useRef(false);
 
    // Initialize the form with values from the store
    const form = useForm<z.infer<typeof formSchema>>({
@@ -95,17 +99,20 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     },
   });
 
-  // Watch form values to update the store dynamically (optional, but useful for persistence)
+  // Watch form values to update the store dynamically
    const watchedApiKey = useWatch({ control: form.control, name: 'apiKey' });
    const watchedApiSecret = useWatch({ control: form.control, name: 'apiSecret' });
    const watchedIsTestnet = useWatch({ control: form.control, name: 'isTestnet' });
 
-   // Update store when form values change (debounced or on blur might be better in real app)
+   // Update store when form values change
    useEffect(() => {
-     setCredentials(watchedApiKey, watchedApiSecret, watchedIsTestnet);
+     // Only update credentials if they are valid according to schema (basic check)
+     if (watchedApiKey && watchedApiKey.length > 1 && watchedApiSecret && watchedApiSecret.length > 1) {
+       setCredentials(watchedApiKey, watchedApiSecret, watchedIsTestnet);
+     }
    }, [watchedApiKey, watchedApiSecret, watchedIsTestnet, setCredentials]);
 
-   // Reset form if store credentials change externally (e.g., cleared)
+   // Reset form if store credentials change externally
    useEffect(() => {
      form.reset({
        apiKey: apiKey || "",
@@ -119,117 +126,90 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
    // Function to fetch trade history using the Server Action and update store
    const handleFetchTrades = useCallback(async (
         credentials: z.infer<typeof formSchema>,
-        // `actuallyOwnedSymbols` is not currently used for pair construction, but kept for logging/potential future use
-        actuallyOwnedSymbols: string[] // Symbols user actually owns with balance
+        actuallyOwnedSymbols: string[],
+        isManual: boolean = false // Flag to indicate manual refresh
     ) => {
-        if (!credentials.apiKey || !credentials.apiSecret) {
-             console.warn("Cannot fetch trades: Credentials missing.");
-             toast({ title: "Credentials Missing", description: "API credentials not provided.", variant: "destructive" });
+        if (!isConnected || !credentials.apiKey || !credentials.apiSecret) {
+             // Don't toast on automatic refresh if not connected
+             if (isManual) {
+                 console.warn("Cannot fetch trades: Not connected or credentials missing.");
+                 toast({ title: "Cannot Fetch Trades", description: "Connect to Binance and ensure API credentials are provided.", variant: "destructive" });
+             }
+             setIsLoadingTrades(false); // Ensure loading state is reset
+             setTrades([]); // Clear trades if not connected
              return;
         }
 
-        // --- Use ONLY the TARGET_SYMBOLS for pair construction ---
         const symbolsToUseForPairConstruction = TARGET_SYMBOLS;
-        console.log("Symbols being used for trade history pair construction:", symbolsToUseForPairConstruction);
-
-        // --- Construct potential trading pairs based ONLY on TARGET_SYMBOLS ---
-        // Primarily focus on BTC/USDT pair, but include potential reverse if needed or other pairs involving ONLY BTC/USDT
         const potentialPairs = new Set<string>();
-
         if (symbolsToUseForPairConstruction.includes('BTC') && symbolsToUseForPairConstruction.includes('USDT')) {
             potentialPairs.add('BTCUSDT');
-            // Add other direct pairs involving only these two if they exist, e.g., USDTBTC (less common)
-            // potentialPairs.add('USDTBTC'); // Uncomment if needed, Binance API might reject non-existent pairs
         }
-
-        // Add individual pairs against common stablecoins if needed for completeness, though filtering later is primary
-        // Example: If only BTC was target, you might add BTCUSDC, BTCTUSD etc.
-        // But since we target BTC & USDT, BTCUSDT is the main one.
-
         const tradingPairsToFetch = Array.from(potentialPairs);
 
         if (tradingPairsToFetch.length === 0) {
-            console.log("Could not construct any relevant trading pairs from target symbols:", symbolsToUseForPairConstruction);
-            setTrades([]);
-            toast({ title: "No Relevant Pairs", description: "Could not determine relevant trading pairs for target symbols (BTC, USDT)." });
+            if (isManual) {
+                 console.log("Could not construct any relevant trading pairs from target symbols:", symbolsToUseForPairConstruction);
+                 toast({ title: "No Relevant Pairs", description: "Could not determine relevant trading pairs for target symbols (BTC, USDT)." });
+            }
+             setIsLoadingTrades(false);
+             setTrades([]);
             return;
         }
-        // --- End constructing pairs ---
 
+        if (!isManual && isLoadingTrades) {
+            // console.log("[Auto-Refresh] Skipping trade fetch: Already loading.");
+            return; // Avoid overlapping auto-refresh calls
+        }
 
-        console.log(`Attempting to fetch trade history for ${tradingPairsToFetch.length} potential pairs (TARGET SYMBOLS ONLY):`, tradingPairsToFetch.join(', ')); // Log pairs
+        console.log(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Attempting to fetch trade history for ${tradingPairsToFetch.length} pairs:`, tradingPairsToFetch.join(', '));
         setIsLoadingTrades(true);
-        setTrades([]); // Clear previous trades in store
+        // Don't clear trades immediately on auto-refresh, only on manual or error
 
         try {
-             // Call the action with the CONSTRUCTED TRADING PAIRS
              const result = await fetchBinanceTradeHistory({
                 apiKey: credentials.apiKey,
                 apiSecret: credentials.apiSecret,
                 isTestnet: credentials.isTestnet,
-                symbols: tradingPairsToFetch, // Pass the generated trading pairs (likely just ['BTCUSDT'])
-                limit: 100, // Fetch a reasonable number per pair
+                symbols: tradingPairsToFetch,
+                limit: 100,
             });
 
-            console.log("fetchBinanceTradeHistory result:", result);
+            // console.log("fetchBinanceTradeHistory result:", result);
 
             if (result.success) {
-                // Filter trades to only include those involving the TARGET_SYMBOLS (BTC or USDT as base or quote)
-                // This is an extra layer of safety, main pair should be BTCUSDT
                 const targetSymbolsSet = new Set(TARGET_SYMBOLS);
                 const filteredTrades = result.data.filter(trade => {
-                    // Determine base and quote - use the properties from the trade object if available
-                    const base = trade.baseAsset || ""; // Use provided baseAsset
-                    const quote = trade.quoteAsset || ""; // Use provided quoteAsset
-
-                    // If base/quote not provided, attempt simple parse (fallback)
-                    let baseAsset = base;
-                    let quoteAsset = quote;
-                    if (!baseAsset || !quoteAsset) {
-                        // console.warn(`Trade ${trade.id} for ${trade.symbol} missing base/quote asset. Attempting fallback parse.`);
-                        if (trade.symbol === 'BTCUSDT') {
-                            baseAsset = 'BTC';
-                            quoteAsset = 'USDT';
-                        } else {
-                             // Add more robust parsing if other pairs were included in fetch
-                             const knownQuoteAssets = ['USDT']; // Focus on USDT as quote for simplicity now
-                             for (const q of knownQuoteAssets) {
-                                if (trade.symbol.endsWith(q) && trade.symbol.length > q.length) {
-                                    baseAsset = trade.symbol.substring(0, trade.symbol.length - q.length);
-                                    quoteAsset = q;
-                                    break;
-                                }
-                             }
-                             if(!baseAsset) baseAsset = trade.symbol; // Fallback if still nothing
-                        }
-                    }
-
-
-                    // Include the trade if EITHER the base OR quote asset is in our target list
+                    const baseAsset = trade.baseAsset || (trade.symbol === 'BTCUSDT' ? 'BTC' : '');
+                    const quoteAsset = trade.quoteAsset || (trade.symbol === 'BTCUSDT' ? 'USDT' : '');
                     return targetSymbolsSet.has(baseAsset) || targetSymbolsSet.has(quoteAsset);
                 });
 
+                 console.log(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Fetched ${filteredTrades.length} relevant trades involving ${TARGET_SYMBOLS.join(' or ')}.`);
+                 setTrades(filteredTrades);
 
-                 console.log(`Filtered trades from ${result.data.length} to ${filteredTrades.length} based on TARGET SYMBOLS: ${TARGET_SYMBOLS.join(', ')}`);
-                 setTrades(filteredTrades); // Update trades in store with filtered list
-
-                if (filteredTrades.length === 0) {
-                     toast({ title: "No Relevant Trades Found", description: `No recent trade history found involving ${TARGET_SYMBOLS.join(' or ')}.` });
-                } else {
-                     toast({ title: "Success", description: `Fetched ${filteredTrades.length} relevant trades for ${TARGET_SYMBOLS.join(' and ')}.` });
-                }
+                // Only show success toast on manual refresh
+                if (isManual) {
+                    if (filteredTrades.length === 0) {
+                        toast({ title: "No Relevant Trades Found", description: `No recent trade history found involving ${TARGET_SYMBOLS.join(' or ')}.` });
+                    } else {
+                        toast({ title: "Trades Refreshed", description: `Fetched ${filteredTrades.length} relevant trades.` });
+                    }
+                 }
             } else {
-                 setTrades([]); // Clear trades in store on failure
-                console.error("Error fetching trade history from action:", result.error);
+                 setTrades([]); // Clear trades on failure
+                console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error fetching trade history from action:`, result.error);
+                 // Always show error toast
                 toast({
                 title: "Error Fetching Trades",
-                description: `Failed to fetch trade history: ${result.error}. Check library version or initialization.`, // Updated error message
+                description: `Failed to fetch trade history: ${result.error}. Check API permissions or rate limits.`,
                 variant: "destructive",
                 });
             }
         } catch (error) {
-             setTrades([]); // Clear trades in store on unexpected error
-             console.error("Error calling fetchBinanceTradeHistory action:", error);
+             setTrades([]);
+             console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error calling fetchBinanceTradeHistory action:`, error);
+             // Always show error toast
             toast({
                 title: "Error",
                 description: "An unexpected error occurred while fetching trade history.",
@@ -238,19 +218,29 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         } finally {
             setIsLoadingTrades(false);
         }
-    }, [isConnected, setIsLoadingTrades, setTrades, toast, setCredentials]); // Added setCredentials dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isConnected, apiKey, apiSecret, isTestnet, toast, setTrades, setIsLoadingTrades, isLoadingTrades]); // Include state dependencies
 
 
   // Function to fetch assets using the Server Action and update store
-  const handleFetchAssets = useCallback(async (values: z.infer<typeof formSchema>) => {
-    console.log("Attempting to fetch assets with credentials:", { apiKey: '...', apiSecret: '...', isTestnet: values.isTestnet });
+  const handleFetchAssets = useCallback(async (values: z.infer<typeof formSchema>, isManual: boolean = false) => {
+    console.log(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Attempting to fetch assets...`);
+    isManualFetchRef.current = isManual; // Track if this fetch was manual
+
+     if (!isManual && isLoadingAssets) {
+        // console.log("[Auto-Refresh] Skipping asset fetch: Already loading.");
+        return; // Avoid overlapping auto-refresh calls
+     }
+
     setIsLoadingAssets(true);
-    // Clear relevant parts of the store before fetching
-    setAssets([]);
-    setTrades([]); // Clear trades when fetching new assets
-    setOwnedSymbols([]); // Clear all owned symbols first
-    setIsConnected(false);
-    setCredentials(values.apiKey, values.apiSecret, values.isTestnet); // Ensure store has latest credentials
+    if (isManual) { // Only clear state completely on manual load
+        setAssets([]);
+        setTrades([]);
+        setOwnedSymbols([]);
+        setIsConnected(false);
+    }
+    // Always ensure store has latest credentials before fetch
+    setCredentials(values.apiKey, values.apiSecret, values.isTestnet);
 
     try {
       const result = await fetchBinanceAssets({
@@ -259,36 +249,49 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         isTestnet: values.isTestnet,
       });
 
-      console.log("fetchBinanceAssets result:", result);
+      // console.log("fetchBinanceAssets result:", result);
 
       if (result.success) {
-        // Filter the fetched assets to only include TARGET_SYMBOLS before setting state
         const targetSymbolsSet = new Set(TARGET_SYMBOLS);
         const filteredAssets = result.data.filter(asset => targetSymbolsSet.has(asset.symbol));
 
-        setAssets(filteredAssets); // Set the filtered assets (BTC, USDT)
-        // Store all originally owned symbols if needed elsewhere, or filter this too
-        setOwnedSymbols(result.ownedSymbols || []); // Keep the original owned symbols list from the API response for context
-        setIsConnected(true);
-        toast({
-          title: "Success",
-          // Updated message
-          description: `Fetched assets. Displaying balances for ${TARGET_SYMBOLS.join(' and ')}.`,
-        });
+        setAssets(filteredAssets);
+        setOwnedSymbols(result.ownedSymbols || []);
+        setIsConnected(true); // Set connected state
+
+        // Only show success toast on initial manual load that successfully connects
+        if (isManual && !isConnected) { // Only if manual AND was not previously connected
+          toast({
+            title: "Connected",
+            description: `Fetched assets. Displaying balances for ${TARGET_SYMBOLS.join(' and ')}.`,
+          });
+         } else if (isManual) {
+             toast({
+                 title: "Assets Refreshed",
+                 description: `Updated balances for ${TARGET_SYMBOLS.join(' and ')}.`,
+             });
+         }
+
 
         // Automatically fetch trades IF on history tab and connection was successful
+        // Trigger immediately after assets are successfully fetched
         if (activeTab === 'history') {
-           console.log("Assets loaded, triggering trade history fetch for TARGET SYMBOLS.");
-           // Pass credentials and the *original* owned symbols (or just an empty array if not needed)
-           handleFetchTrades(values, result.ownedSymbols || []);
+           console.log(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Assets loaded, triggering trade history fetch.`);
+           // Pass isManual flag to trade fetch
+           await handleFetchTrades(values, result.ownedSymbols || [], isManual);
+        } else {
+             // If not on history tab, ensure trade loading state is false
+             setIsLoadingTrades(false);
         }
+
       } else {
-        // Clear assets, trades, owned symbols, but keep credentials
+        // Clear state on error, keep credentials
         setAssets([]);
         setTrades([]);
         setOwnedSymbols([]);
         setIsConnected(false);
-        // clearState(); // Avoid clearing credentials on error
+        console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error fetching assets from action:`, result.error);
+        // Always show error toast
         toast({
           title: "Error Fetching Assets",
           description: `Failed to fetch assets: ${result.error}. Check credentials and permissions.`,
@@ -296,13 +299,13 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         });
       }
     } catch (error) {
-      // Clear assets, trades, owned symbols, but keep credentials
+      // Clear state on error, keep credentials
       setAssets([]);
       setTrades([]);
       setOwnedSymbols([]);
       setIsConnected(false);
-      // clearState(); // Avoid clearing credentials on error
-      console.error("Error calling fetchBinanceAssets action:", error);
+      console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error calling fetchBinanceAssets action:`, error);
+      // Always show error toast
       toast({
         title: "Error",
         description: "An unexpected error occurred while fetching assets. Please try again.",
@@ -310,42 +313,100 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
       });
     } finally {
       setIsLoadingAssets(false);
+       // If not fetching trades (because not on history tab), ensure trade loading is off
+      // The check inside the success block handles the case where activeTab is 'history'
+       if (activeTab !== 'history') {
+            setIsLoadingTrades(false);
+       }
+      isManualFetchRef.current = false; // Reset manual fetch flag
     }
-    // Add handleFetchTrades to dependency array
-  }, [setIsLoadingAssets, setAssets, setTrades, setOwnedSymbols, setIsConnected, setCredentials, toast, activeTab, handleFetchTrades]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+      setIsLoadingAssets,
+      setAssets,
+      setTrades,
+      setOwnedSymbols,
+      setIsConnected,
+      setCredentials,
+      toast,
+      activeTab,
+      handleFetchTrades,
+      isConnected, // Add isConnected to re-evaluate toast logic
+      isLoadingAssets // Add to prevent overlapping calls
+      // Removed state values like apiKey, apiSecret, isTestnet - they come from 'values' arg or store
+  ]);
+
 
    // Handle tab change - update store
    const onTabChange = (value: string) => {
         console.log("Tab changed to:", value);
         setActiveTab(value);
-        // Fetch trades if switching to history tab and trades are not already loaded/loading AND we are connected
-        if (value === 'history' && trades.length === 0 && !isLoadingTrades && isConnected) {
-             // Use credentials from the store
+        // Fetch trades if switching to history tab, connected, and trades aren't loaded/loading
+        if (value === 'history' && isConnected && trades.length === 0 && !isLoadingTrades) {
              if (apiKey && apiSecret) {
-                 console.log("Switching to history tab, fetching trades for TARGET SYMBOLS.");
-                 // Pass original ownedSymbols list (might not be needed by handleFetchTrades anymore)
-                handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols);
+                 console.log("Switching to history tab, fetching initial trades.");
+                handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols, true); // Treat as manual fetch on tab switch
             } else {
                  console.warn("Switching to history tab, but credentials missing.");
-                 setTrades([]); // Clear trades if no credentials
-                 toast({ title: "Credentials Missing", description: "API credentials not found. Cannot fetch history.", variant: "destructive" });
+                 setTrades([]);
+                 toast({ title: "Credentials Missing", description: "API credentials not found.", variant: "destructive" });
             }
         } else if (value === 'history' && !isConnected) {
              toast({ title: "Not Connected", description: "Load assets first to fetch trade history.", variant: "destructive" });
-             setTrades([]); // Clear trades if not connected
+             setTrades([]);
         }
     };
+
+   // --- Real-time Update Effect ---
+   useEffect(() => {
+       // Function to perform the refresh
+       const refreshData = async () => {
+           if (isConnected && apiKey && apiSecret) {
+               console.log("[Auto-Refresh] Refreshing data...");
+               // Fetch assets first (isManual = false)
+               await handleFetchAssets({ apiKey, apiSecret, isTestnet }, false);
+               // handleFetchAssets will trigger handleFetchTrades if on the history tab
+           } else {
+                // console.log("[Auto-Refresh] Skipping refresh: Not connected or credentials missing.");
+           }
+       };
+
+       // Clear existing interval if credentials change or connection status changes
+       if (intervalIdRef.current) {
+           clearInterval(intervalIdRef.current);
+           intervalIdRef.current = null;
+           console.log("[Auto-Refresh] Interval cleared due to connection/credential change.");
+       }
+
+       // Set new interval only if connected and credentials exist
+       if (isConnected && apiKey && apiSecret) {
+           console.log(`[Auto-Refresh] Setting up refresh interval (${REFRESH_INTERVAL_MS}ms)...`);
+           intervalIdRef.current = setInterval(refreshData, REFRESH_INTERVAL_MS);
+       }
+
+       // Cleanup function to clear interval on component unmount or before re-running effect
+       return () => {
+           if (intervalIdRef.current) {
+               clearInterval(intervalIdRef.current);
+               console.log("[Auto-Refresh] Interval cleared on cleanup.");
+               intervalIdRef.current = null;
+           }
+       };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [isConnected, apiKey, apiSecret, isTestnet, handleFetchAssets]); // Dependencies that should trigger interval reset/setup
+
 
    // Recalculate total portfolio value based on the FILTERED assets shown (BTC, USDT)
    const totalPortfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
 
-   const isLoading = isLoadingAssets || isLoadingTrades; // Combined loading state
+   // Combined loading state for manual refresh button
+   const isLoadingManual = isLoadingAssets || isLoadingTrades;
 
 
     // Helper function to render asset rows (uses the filtered 'assets' state: BTC, USDT)
     const renderAssetRows = () => {
-        if (isLoadingAssets) {
-            // Show skeletons based on TARGET_SYMBOLS count for consistency
+        // Show skeletons only if explicitly loading assets AND there are no assets currently shown
+        if (isLoadingAssets && assets.length === 0) {
             return Array.from({ length: TARGET_SYMBOLS.length }).map((_, index) => (
                 <TableRow key={`asset-skeleton-${index}`} className="border-border">
                     <TableCell><Skeleton className="h-4 w-16 bg-muted" /></TableCell>
@@ -356,13 +417,13 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
             ));
         }
         // 'assets' state already contains only the filtered assets (BTC, USDT)
-        if (isConnected && assets.length > 0) {
+        if (assets.length > 0) { // Show assets even if isConnected is briefly false during refresh
             return assets.map((asset) => (
-                <TableRow key={asset.symbol} className="border-border">
-                    <TableCell className="font-medium text-foreground text-xs">{asset.asset || asset.symbol}</TableCell>
-                    <TableCell className="text-foreground text-xs">{asset.symbol}</TableCell>
-                    <TableCell className="text-right text-foreground text-xs">{asset.quantity.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
-                    <TableCell className="text-right text-foreground text-xs">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                <TableRow key={asset.symbol} className="border-border hover:bg-accent/50">
+                    <TableCell className="font-medium text-foreground text-xs py-1.5">{asset.asset || asset.symbol}</TableCell>
+                    <TableCell className="text-foreground text-xs py-1.5">{asset.symbol}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs py-1.5">{asset.quantity.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs py-1.5">${asset.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                 </TableRow>
             ));
         }
@@ -379,7 +440,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
          return (
             <TableRow className="border-border">
                 <TableCell colSpan={4} className="h-24 text-center text-muted-foreground text-xs">
-                     {isLoadingAssets ? "Loading..." : "Enter API keys to load assets."}
+                     {!apiKey || !apiSecret ? "Enter API keys to load assets." : (isLoadingAssets ? "Loading..." : "Click 'Load Assets' or check connection.")}
                  </TableCell>
              </TableRow>
          );
@@ -387,7 +448,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
     // Helper function to render trade rows (uses the filtered 'trades' state involving BTC/USDT)
     const renderTradeRows = () => {
-        if (isLoadingTrades) {
+        // Show skeletons only if explicitly loading trades AND there are no trades currently shown
+        if (isLoadingTrades && trades.length === 0) {
             return Array.from({ length: 5 }).map((_, index) => (
                 <TableRow key={`trade-skeleton-${index}`} className="border-border">
                     <TableCell><Skeleton className="h-4 w-24 bg-muted" /></TableCell>
@@ -400,22 +462,22 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
             ));
         }
         // 'trades' state already contains filtered trades
-        if (trades.length > 0 && !isLoadingTrades) {
+        if (trades.length > 0) { // Show trades even if loading in background
             return trades.map((trade) => (
-                <TableRow key={trade.id} className="border-border">
-                    <TableCell className="text-foreground text-xs whitespace-nowrap">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
-                    <TableCell className="text-foreground text-xs whitespace-nowrap">{trade.symbol}</TableCell>
-                    <TableCell className={cn("text-xs whitespace-nowrap", trade.isBuyer ? "text-green-500" : "text-red-500")}>
+                <TableRow key={trade.id} className="border-border hover:bg-accent/50">
+                    <TableCell className="text-foreground text-xs whitespace-nowrap py-1.5">{format(new Date(trade.time), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
+                    <TableCell className="text-foreground text-xs whitespace-nowrap py-1.5">{trade.symbol}</TableCell>
+                    <TableCell className={cn("text-xs whitespace-nowrap py-1.5", trade.isBuyer ? "text-green-500" : "text-red-500")}>
                         {trade.isBuyer ? 'BUY' : 'SELL'}
                     </TableCell>
-                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap">{parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
-                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap">{parseFloat(trade.qty).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
-                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap">{parseFloat(trade.quoteQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap py-1.5">{parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap py-1.5">{parseFloat(trade.qty).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}</TableCell>
+                    <TableCell className="text-right text-foreground text-xs whitespace-nowrap py-1.5">{parseFloat(trade.quoteQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                 </TableRow>
             ));
         }
          // Explicitly handle the "no relevant trades" case after loading completes
-         if (trades.length === 0 && !isLoadingTrades && isConnected) {
+         if (isConnected && trades.length === 0 && !isLoadingTrades) {
              return (
                 <TableRow className="border-border">
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
@@ -428,7 +490,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         return (
              <TableRow className="border-border">
                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground text-xs">
-                     {apiKey && apiSecret ? (isLoadingTrades ? "Loading..." : "Loading trade history or switch to this tab...") : "Enter API Keys and Load Assets first."}
+                     {!isConnected ? "Load Assets first." : (isLoadingTrades ? "Loading..." : "No history or error.")}
                  </TableCell>
              </TableRow>
         );
@@ -436,41 +498,55 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
 
   return (
-    // Ensure the container takes full height of its parent div and uses flex column layout
     <div className="flex flex-col h-full w-full overflow-hidden">
-      {/* Header remains, adjust padding and border */}
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
         <CardTitle className="text-lg font-medium text-foreground">Binance Account</CardTitle>
-         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground"> {/* Ensure button text color matches theme */}
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Binance Account</span>
-        </Button>
+        <div className="flex items-center gap-1">
+             {/* Manual Refresh Button - Added Here */}
+             <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                    if (apiKey && apiSecret) {
+                        handleFetchAssets({ apiKey, apiSecret, isTestnet }, true); // Force manual fetch
+                    } else {
+                        toast({ title: "Credentials Missing", description: "Cannot refresh without API credentials.", variant: "destructive" });
+                    }
+                }}
+                disabled={isLoadingManual || !apiKey || !apiSecret} // Disable if loading or no keys
+                className={cn("h-6 w-6 text-foreground flex-shrink-0", !isExpanded && "hidden")} // Hide when collapsed
+                title="Refresh Assets & Trades"
+             >
+                 <RotateCw className={cn("h-4 w-4", isLoadingManual && "animate-spin")} />
+                 <span className="sr-only">Refresh Data</span>
+             </Button>
+
+            {/* Existing Expand/Collapse Toggle */}
+             <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground">
+                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Binance Account</span>
+            </Button>
+         </div>
       </CardHeader>
 
-     {/* Conditionally render content based on isExpanded */}
       {isExpanded && (
-        // Content container takes remaining space, adjust padding
         <CardContent className="flex-1 p-3 overflow-hidden flex flex-col gap-4">
-          {/* API Key Form Section */}
            <div className="space-y-3 border-b border-border pb-4 mb-4">
-                {/* Header for Credentials Section with Toggle */}
                 <div
                     className="flex items-center justify-between cursor-pointer"
                     onClick={() => setIsCredentialsVisible(!isCredentialsVisible)}
                 >
-                    <Label className="text-sm font-medium text-foreground">API Credentials</Label>
+                    <Label className="text-sm font-medium text-foreground">API Credentials {isConnected ? <span className="text-green-500 text-xs">(Connected)</span> : <span className="text-red-500 text-xs">(Disconnected)</span>}</Label>
                     <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground">
                         {isCredentialsVisible ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         <span className="sr-only">{isCredentialsVisible ? 'Hide' : 'Show'} Credentials</span>
                     </Button>
                 </div>
 
-                {/* Collapsible Form Content */}
                 {isCredentialsVisible && (
                     <Form {...form}>
-                        {/* Use store credentials for the handler */}
-                        <form onSubmit={form.handleSubmit(handleFetchAssets)} className="space-y-3 pt-2">
-                            {/* Inputs remain the same */}
+                         {/* Pass true for isManual flag */}
+                        <form onSubmit={form.handleSubmit((values) => handleFetchAssets(values, true))} className="space-y-3 pt-2">
                             <FormField
                                 control={form.control}
                                 name="apiKey"
@@ -481,9 +557,9 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                                     <Input
                                     placeholder="Binance API Key"
                                     {...field}
-                                    type="password" // Hide sensitive input
-                                    className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
-                                    disabled={isLoadingAssets} // Only disable during asset load
+                                    type="password"
+                                    className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
+                                    disabled={isLoadingAssets}
                                     />
                                     </FormControl>
                                     <FormMessage className="text-xs" />
@@ -500,9 +576,9 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                                     <Input
                                         placeholder="Binance API Secret"
                                         {...field}
-                                        type="password" // Hide sensitive input
-                                        className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
-                                        disabled={isLoadingAssets} // Only disable during asset load
+                                        type="password"
+                                        className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
+                                        disabled={isLoadingAssets}
                                     />
                                     </FormControl>
                                     <FormMessage className="text-xs" />
@@ -520,8 +596,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                                         checked={field.value}
                                         onCheckedChange={field.onChange}
                                         id="testnet"
-                                        disabled={isLoadingAssets} // Only disable during asset load
-                                        className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground" // Theme colors
+                                        disabled={isLoadingAssets}
+                                        className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground"
                                         />
                                     </FormControl>
                                     <FormLabel htmlFor="testnet" className="text-xs font-normal text-foreground">
@@ -540,59 +616,23 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
            </div>
 
 
-          {/* Tabs for Summary and History */}
-           {/* Use store state for active tab and handler */}
           <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col overflow-hidden">
             <div className="flex justify-between items-center mb-2">
                 <TabsList className="grid w-full grid-cols-2 h-9">
-                    {/* Updated Tab Titles */}
                     <TabsTrigger value="summary" className="text-xs h-full">Summary</TabsTrigger>
                     <TabsTrigger value="history" className="text-xs h-full">Trade History</TabsTrigger>
                 </TabsList>
-                 {/* Refresh button for trades, only shown on history tab */}
-                {activeTab === 'history' && ( // Show refresh if on history tab
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                         // Use credentials from the store for refresh
-                        onClick={() => {
-                             // Make sure credentials exist before refreshing
-                            if(apiKey && apiSecret && isConnected) { // Only refresh if connected
-                                 console.log("Manual refresh clicked for trade history (TARGET SYMBOLS).");
-                                 // Pass original ownedSymbols list (might not be needed by handleFetchTrades anymore)
-                                handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols);
-                            }
-                             else if (!isConnected) {
-                                toast({ title: "Not Connected", description: "Load assets first to refresh trade history.", variant: "destructive" });
-                             }
-                             else {
-                                 console.warn("Cannot refresh trades: Credentials missing.");
-                                 toast({ title: "Credentials Missing", description: "Cannot refresh trades without API credentials.", variant: "destructive" });
-                            }
-                        }}
-                         // Disable if loading trades OR if credentials are missing OR not connected
-                         disabled={isLoadingTrades || !apiKey || !apiSecret || !isConnected}
-                        className="ml-2 h-8 w-8 flex-shrink-0"
-                        title="Refresh Trade History"
-                    >
-                        <RotateCw className={`h-4 w-4 ${isLoadingTrades ? 'animate-spin' : ''}`} />
-                        <span className="sr-only">Refresh Trades</span>
-                    </Button>
-                )}
+                {/* Refresh button is moved to CardHeader */}
             </div>
 
 
             {/* Asset Summary Tab Content */}
             <TabsContent value="summary" className="flex-1 overflow-hidden mt-0">
-              {/* Pass viewportRef to ScrollArea */}
-              <ScrollArea className="h-full" viewportRef={summaryViewportRef} orientation="both"> {/* Enable both orientations */}
-                {/* Wrap table in a div to allow horizontal scrolling */}
-                <div className="min-w-max"> {/* Ensure content doesn't shrink */}
-                    {/* Use store state for rendering */}
+              <ScrollArea className="h-full" viewportRef={summaryViewportRef} orientation="both">
+                <div className="min-w-max">
                     <Table>
                     <TableHeader>
                         <TableRow className="border-border">
-                        {/* Update headers slightly if needed */}
                         <TableHead className="w-[100px] text-muted-foreground text-xs">Asset</TableHead>
                         <TableHead className="text-muted-foreground text-xs">Symbol</TableHead>
                         <TableHead className="text-right text-muted-foreground text-xs">Quantity</TableHead>
@@ -602,24 +642,27 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                     <TableBody>
                         {renderAssetRows()}
                     </TableBody>
-                    {/* Use store state for condition (based on filtered assets: BTC, USDT) */}
-                    {isConnected && assets.length > 0 && !isLoadingAssets && (
-                        <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                            Total Value ({TARGET_SYMBOLS.join(' & ')}): ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            <br />
-                            <span className="text-xs opacity-70">Value calculated based on current market prices.</span>
-                        </TableCaption>
-                    )}
-                    {isConnected && assets.length === 0 && !isLoadingAssets && (
-                        <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                            No balance found for {TARGET_SYMBOLS.join(' or ')}. Check Binance account or API key permissions.
-                        </TableCaption>
-                    )}
-                        {!isConnected && !isLoadingAssets && (
-                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                                Enter API keys and click "Load Assets".
-                            </TableCaption>
+                    {/* Total Value Caption */}
+                    <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs text-left">
+                        {isLoadingAssets && assets.length > 0 && (
+                             <span className="flex items-center gap-1 animate-pulse">
+                                <RotateCw className="h-3 w-3 animate-spin" /> Updating...
+                            </span>
                         )}
+                        {!isLoadingAssets && isConnected && assets.length > 0 && (
+                            `Total Value (${TARGET_SYMBOLS.join(' & ')}): $${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        )}
+                         {!isLoadingAssets && isConnected && assets.length === 0 && (
+                            `No balance found for ${TARGET_SYMBOLS.join(' or ')}.`
+                         )}
+                         {!isConnected && !isLoadingAssets && (
+                            "Enter API keys and click 'Load Assets'."
+                         )}
+                         {/* Add a small note about auto-refresh */}
+                         <span className="text-xs opacity-70 float-right">
+                             {isConnected ? `(Auto-refreshes every ${REFRESH_INTERVAL_MS / 1000}s)` : ''}
+                         </span>
+                    </TableCaption>
                     </Table>
                  </div>
               </ScrollArea>
@@ -627,11 +670,8 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
 
             {/* Trade History Tab Content */}
             <TabsContent value="history" className="flex-1 overflow-hidden mt-0">
-              {/* Pass viewportRef to ScrollArea */}
-               <ScrollArea className="h-full" viewportRef={historyViewportRef} orientation="both"> {/* Enable both orientations */}
-                 {/* Wrap table in a div to allow horizontal scrolling */}
-                 <div className="min-w-max"> {/* Ensure content doesn't shrink */}
-                    {/* Use store state for rendering (uses filtered trades) */}
+               <ScrollArea className="h-full" viewportRef={historyViewportRef} orientation="both">
+                 <div className="min-w-max">
                     <Table>
                         <TableHeader>
                             <TableRow className="border-border">
@@ -646,27 +686,26 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                         <TableBody>
                             {renderTradeRows()}
                         </TableBody>
-                        {/* Use store state for condition */}
-                        {isConnected && trades.length > 0 && !isLoadingTrades && (
-                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                                Showing last {trades.length} relevant trades involving {TARGET_SYMBOLS.join(' or ')}. Refresh for latest.
-                            </TableCaption>
-                        )}
-                        {isConnected && trades.length === 0 && !isLoadingTrades && apiKey && apiSecret && ( // Only show 'No trades found' if tried and finished loading
-                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                                No recent relevant trades found involving {TARGET_SYMBOLS.join(' or ')}.
-                            </TableCaption>
-                        )}
-                        {!isConnected && !isLoadingTrades && ( // Show prompt if not connected
-                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                                Load Assets first to view trade history.
-                            </TableCaption>
-                        )}
-                        {!apiKey || !apiSecret && !isLoadingTrades && ( // Show prompt if no credentials
-                            <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs">
-                                Enter API Keys to view trade history.
-                            </TableCaption>
-                        )}
+                        {/* Trade History Caption */}
+                        <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs text-left">
+                            {isLoadingTrades && trades.length > 0 && (
+                                <span className="flex items-center gap-1 animate-pulse">
+                                     <RotateCw className="h-3 w-3 animate-spin" /> Updating...
+                                </span>
+                            )}
+                            {!isLoadingTrades && isConnected && trades.length > 0 && (
+                                `Showing last ${trades.length} relevant trades involving ${TARGET_SYMBOLS.join(' or ')}.`
+                            )}
+                            {!isLoadingTrades && isConnected && trades.length === 0 && (
+                                `No recent relevant trades found for ${TARGET_SYMBOLS.join(' or ')}.`
+                            )}
+                            {!isConnected && !isLoadingTrades && (
+                                "Load Assets first to view trade history."
+                            )}
+                            <span className="text-xs opacity-70 float-right">
+                                {isConnected ? `(Auto-refreshes every ${REFRESH_INTERVAL_MS / 1000}s)` : ''}
+                             </span>
+                        </TableCaption>
                     </Table>
                   </div>
                </ScrollArea>
@@ -677,3 +716,5 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     </div>
   );
 };
+
+    
