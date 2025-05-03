@@ -175,7 +175,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   return (
     <Card className={cn(
-      "flex flex-col h-full w-full overflow-hidden transition-all duration-300 ease-in-out border border-border shadow-md bg-card"
+      // Removed width transition classes, panel handles resizing
+      "flex flex-col h-full w-full overflow-hidden border border-border shadow-md bg-card"
     )}>
       {/* Header */}
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
@@ -194,6 +195,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
      {/* Content Area */}
       <CardContent className={cn(
         "flex-1 p-3 overflow-hidden flex flex-col gap-4 transition-opacity duration-300 ease-in-out",
+        // Hide content based on isExpanded state for internal toggle,
+        // Panel component handles hiding when externally collapsed.
         !isExpanded && "opacity-0 p-0"
       )}>
         {isExpanded && (
@@ -326,7 +329,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 <BarChart className="h-4 w-4 text-primary" />
                                 BTC/USDT Indicators
                             </h4>
-                            {/* Move Refresh Button here, make it appear on hover */}
+                             {/* Moved Refresh Button inside the div, but outside the h4 */}
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -335,7 +338,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     fetchIndicators();
                                 }}
                                 disabled={isFetchingIndicators}
-                                className="h-5 w-5 text-muted-foreground hover:text-foreground absolute right-8 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" // Positioning and hover effect
+                                className="h-5 w-5 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity" // Simplified positioning, rely on flex
                                 title="Refresh Indicators"
                             >
                                 <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
@@ -353,7 +356,9 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                              <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 Last updated:{" "}
                                 {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") ? (
-                                     <Skeleton className="h-3 w-14 inline-block bg-muted" />
+                                    <span className="inline-block animate-pulse">
+                                        <Skeleton className="h-3 w-14 inline-block bg-muted" />
+                                    </span>
                                 ) : (
                                     indicators.lastUpdated
                                 )}

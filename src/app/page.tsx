@@ -2,83 +2,125 @@
 "use client";
 
 import { useState, type FC } from 'react';
+import {
+  Panel,
+  PanelGroup,
+  PanelResizeHandle,
+} from "react-resizable-panels";
 import { AssetSummary } from "@/components/assets/asset-summary";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
 import { AnalysisPanel } from "@/components/analysis/analysis-panel";
-import { TradingPanel } from "@/components/trading/trading-panel"; // Import the new TradingPanel
+import { TradingPanel } from "@/components/trading/trading-panel";
 import { cn } from '@/lib/utils';
 
 export default function Home() {
-  const [isAssetExpanded, setIsAssetExpanded] = useState(true);
+  // Keep existing state for toggling expanded/collapsed view,
+  // resizing will be handled by react-resizable-panels when expanded.
   const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
-  // State for chat sidebar expansion
-  const [isChatExpanded, setIsChatExpanded] = useState(false); // Default to collapsed
+  const [isChatExpanded, setIsChatExpanded] = useState(false); // Default chat to collapsed
 
-  // Toggle for asset summary
-  const handleAssetToggle = () => {
-    setIsAssetExpanded(!isAssetExpanded);
-  };
-
-  // Toggle for the analysis panel
   const handleAnalysisToggle = () => {
     setIsAnalysisExpanded(!isAnalysisExpanded);
+    // Ideally, you might also trigger panel collapse/expand here if using panel API
   };
 
-  // Toggle for the chat panel
   const handleChatToggle = () => {
     setIsChatExpanded(!isChatExpanded);
+    // Ideally, trigger panel collapse/expand here
   };
 
   return (
-    // Main container: flex, full height, padding, gap
-    <div className="flex h-screen bg-background overflow-hidden p-4 gap-4">
-      {/* Left Analysis Panel: Shrinkable width, full height */}
-      <aside className={cn(
-        "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out h-full", // Ensure full height
-        isAnalysisExpanded ? 'w-72' : 'w-16'
-      )}>
-        <AnalysisPanel isExpanded={isAnalysisExpanded} onToggle={handleAnalysisToggle} />
-      </aside>
+    // Main container: Use PanelGroup for horizontal resizing
+    <div className="h-screen bg-background overflow-hidden">
+        <PanelGroup direction="horizontal" className="h-full w-full">
+            {/* Left Analysis Panel */}
+            <Panel
+                defaultSize={isAnalysisExpanded ? 20 : 5} // Default size based on state
+                minSize={5} // Minimum collapsed size (adjust as needed)
+                maxSize={30}
+                collapsible={true} // Allow collapsing
+                collapsedSize={5} // Size when collapsed
+                onCollapse={() => setIsAnalysisExpanded(false)}
+                onExpand={() => setIsAnalysisExpanded(true)}
+                className={cn(
+                    "flex flex-col transition-all duration-300 ease-in-out h-full", // Ensure full height
+                     // Hide content visually when collapsed by panel, not just width
+                    !isAnalysisExpanded && "min-w-[4rem]" // Ensure collapsed width is applied
+                )}
+                id="analysis-panel"
+            >
+                {/* Render AnalysisPanel always, let Panel handle collapsing */}
+                 <AnalysisPanel isExpanded={isAnalysisExpanded} onToggle={handleAnalysisToggle} />
+            </Panel>
 
-      {/* Center content area: Takes remaining space, stacks chart and lower panels */}
-      <main className="flex-1 flex flex-col gap-4 overflow-hidden">
-        {/* Top Chart Container: Takes most space initially */}
-        <div className="flex-[3] flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border"> {/* Increased flex-grow */}
-          <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
-          <div className="flex-1 p-0 overflow-hidden">
-            <TradingViewWidget />
-          </div>
-        </div>
+            {/* Resize Handle */}
+            <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-border/50 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 transition-colors data-[resize-handle-active]:bg-border" />
 
-        {/* Bottom Container: Holds Assets and Trading side-by-side */}
-        <div className="flex-[2] flex gap-4 overflow-hidden"> {/* Reduced flex-grow, horizontal layout */}
-            {/* Asset Summary Container: Takes half the space */}
-            <div className={cn(
-                "flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card", // Takes half width
-            )}>
-              {/* AssetSummary might not need expansion toggle anymore if height is fixed */}
-              <AssetSummary isExpanded={true} onToggle={() => {}} />
-              {/* Or keep toggle if desired */}
-              {/* <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} /> */}
-            </div>
+            {/* Center Content Panel */}
+            <Panel defaultSize={60} minSize={30} id="center-panel">
+                 <PanelGroup direction="vertical" className="h-full w-full gap-1 p-1">
+                    {/* Top Chart Panel */}
+                    <Panel defaultSize={60} minSize={25} id="chart-panel">
+                        <div className="flex-[3] flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border h-full">
+                          <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
+                          <div className="flex-1 p-0 overflow-hidden">
+                            <TradingViewWidget />
+                          </div>
+                        </div>
+                    </Panel>
 
-            {/* New Trading Panel Container: Takes the other half */}
-            <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card">
-              <TradingPanel />
-            </div>
-        </div>
-      </main>
+                     {/* Resize Handle */}
+                    <PanelResizeHandle className="h-1.5 bg-transparent hover:bg-border/50 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 transition-colors data-[resize-handle-active]:bg-border" />
 
-      {/* Right Chat Panel: Shrinkable width, full height */}
-      <aside className={cn(
-        "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out h-full", // Ensure full height
-        isChatExpanded ? 'w-[32rem]' : 'w-16' // Increased width for expanded chat
-      )}>
-         {/* Pass props to ChatWindow to handle its own toggle/state */}
-        <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle} />
-      </aside>
+                     {/* Bottom Panels (Assets + Trading) */}
+                    <Panel defaultSize={40} minSize={25} id="bottom-panels">
+                         <PanelGroup direction="horizontal" className="h-full w-full gap-1">
+                             {/* Asset Summary Panel */}
+                            <Panel defaultSize={50} minSize={25} id="asset-panel">
+                                <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card h-full">
+                                    {/* Keep toggle, but it only affects internal content now */}
+                                    <AssetSummary isExpanded={true} onToggle={() => {}} />
+                                </div>
+                            </Panel>
+
+                             {/* Resize Handle */}
+                            <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-border/50 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 transition-colors data-[resize-handle-active]:bg-border" />
+
+                             {/* Trading Panel */}
+                            <Panel defaultSize={50} minSize={25} id="trading-panel">
+                                <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card h-full">
+                                    <TradingPanel />
+                                </div>
+                            </Panel>
+                         </PanelGroup>
+                    </Panel>
+                 </PanelGroup>
+            </Panel>
+
+            {/* Resize Handle */}
+            <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-border/50 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 transition-colors data-[resize-handle-active]:bg-border" />
+
+            {/* Right Chat Panel */}
+            <Panel
+                defaultSize={isChatExpanded ? 25 : 5} // Default size based on state
+                minSize={5} // Minimum collapsed size
+                maxSize={40}
+                collapsible={true}
+                collapsedSize={5} // Size when collapsed (approx 4rem)
+                onCollapse={() => setIsChatExpanded(false)}
+                onExpand={() => setIsChatExpanded(true)}
+                className={cn(
+                    "flex flex-col transition-all duration-300 ease-in-out h-full", // Full height
+                     // Ensure collapsed width is applied
+                    !isChatExpanded && "min-w-[4rem]"
+                )}
+                 id="chat-panel"
+            >
+                {/* Render ChatWindow always, let Panel handle collapsing */}
+                <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle} />
+            </Panel>
+        </PanelGroup>
     </div>
   );
 }
-

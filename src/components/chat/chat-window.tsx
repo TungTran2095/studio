@@ -17,8 +17,7 @@ import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
 import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // Import Supabase actions
 import type { MessageHistory } from "@/lib/supabase-client"; // Import the type for messages from DB
 import { Button } from "@/components/ui/button"; // Import Button
-// Updated icons: MessageCircle for collapsed state, ChevronRight for expanded
-import { ChevronLeft, MessageCircle } from "lucide-react"; // Use ChevronLeft for collapse
+import { ChevronLeft, Bot as BotIcon } from "lucide-react"; // Use BotIcon for collapsed state
 
 // Use MessageHistory type for consistency
 // Add a temporary client-side ID for rendering keys before DB ID exists
@@ -36,10 +35,11 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true); // State for loading history
   const { toast } = useToast();
   // Use credentials from the Zustand store
-  const { apiKey, apiSecret, isTestnet } = useAssetStore(state => ({
+  const { apiKey, apiSecret, isTestnet, isConnected } = useAssetStore(state => ({
     apiKey: state.apiKey,
     apiSecret: state.apiSecret,
     isTestnet: state.isTestnet,
+    isConnected: state.isConnected, // Get connection status
   }));
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -80,7 +80,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
 
   const handleSendMessage = async (messageContent: string) => {
     const userMessageClientId = `user-${Date.now()}`; // Simple client ID
-    const newUserMessage: Message = { role: "user", content: messageContent, clientId: userMessageClientId };
+    const newUserMessage: Message = { role: "user", content: messageContent, clientId: userMessageClientId, id: -1, created_at: new Date().toISOString() }; // Add dummy id/created_at
 
     // Immediately display the user message
     setMessages((prevMessages) => [...prevMessages, newUserMessage]);
@@ -108,20 +108,22 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
 
 
     // Prepare for AI
-    const credentialsAvailable = apiKey && apiSecret;
+    const credentialsAvailable = isConnected && apiKey && apiSecret; // Check connection status too
     if (!credentialsAvailable) {
-      console.warn("[ChatWindow] API credentials NOT available in store. Trading intent might fail.");
-      // Inform user if credentials are missing and a trading keyword is detected (optional enhancement)
+      console.warn("[ChatWindow] Binance not connected or API credentials NOT available in store. Trading intent might fail.");
       const tradeKeywords = ['buy', 'sell', 'order', 'trade', 'binance'];
       if (tradeKeywords.some(keyword => messageContent.toLowerCase().includes(keyword))) {
           toast({
             title: "Credentials Required",
-            description: "Please enter your Binance API Key and Secret in the 'Binance Account' section to execute trades.",
+            description: "Please connect your Binance account and ensure API Key/Secret are entered to enable trading via chat.",
             variant: "destructive",
           });
+          // Stop processing if credentials needed for trade are missing
+          setIsLoading(false);
+          return;
       }
     } else {
-      console.log("[ChatWindow] API credentials found in store. Passing to generateResponse flow.");
+      console.log("[ChatWindow] Binance connected and API credentials found in store. Passing to generateResponse flow.");
     }
 
     // Get history for AI (use current UI state for context, exclude clientIds)
@@ -137,8 +139,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
-      // Conditionally include credentials if they exist
-      ...(credentialsAvailable && { apiKey: apiKey, apiSecret: apiSecret }),
+      // Only include credentials if they exist AND binance is connected
+      ...(credentialsAvailable && { apiKey: apiKey!, apiSecret: apiSecret! }),
       isTestnet: isTestnet ?? false, // Pass testnet status
     };
 
@@ -148,7 +150,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       console.log("[ChatWindow] Received response from generateResponse:", result);
 
       const botMessageClientId = `bot-${Date.now()}`;
-      const aiResponse: Message = { role: "bot", content: result.response, clientId: botMessageClientId };
+      // Add dummy id/created_at for local rendering
+      const aiResponse: Message = { role: "bot", content: result.response, clientId: botMessageClientId, id: -2, created_at: new Date().toISOString() };
       // Display AI response
       setMessages((prevMessages) => [...prevMessages, aiResponse]);
 
@@ -172,12 +175,11 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
 
     } catch (error: any) {
       console.error("[ChatWindow] Error generating AI response:", error);
-      const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
-       // Check if the error message contains the specific JSON schema validation failure
-       let displayError = errorMessage;
-       if (errorMessage.includes("Schema validation failed") && errorMessage.includes('"response":')) {
-           displayError = "The AI returned an invalid response format. Please try rephrasing your request.";
-           console.error("[ChatWindow] AI returned null or malformed output, expected { response: string }");
+      let displayError = error?.message || "Failed to get response from AI. Please try again.";
+       // Check for the specific schema validation error from Genkit
+       if (error.message && error.message.includes("Schema validation failed") && error.message.includes('Expected object, received null')) {
+           displayError = "The AI returned an invalid response format (null). Please try again.";
+           console.error("[ChatWindow] AI returned null output, expected { response: string }");
        }
 
       toast({
@@ -196,7 +198,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   return (
     // Use Card for consistent styling with other panels
     <Card className={cn(
-        "flex flex-col h-full w-full overflow-hidden transition-all duration-300 ease-in-out border border-border shadow-md bg-card"
+        // Removed width transition classes, Panel handles resizing
+        "flex flex-col h-full w-full overflow-hidden border border-border shadow-md bg-card"
     )}>
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
         {/* Show title only when expanded */}
@@ -208,8 +211,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
         </CardTitle>
         {/* Toggle Button */}
         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground flex-shrink-0">
-           {/* Show ChevronLeft when expanded (to indicate collapse), MessageCircle when collapsed (to indicate expand) */}
-           {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+           {/* Show ChevronLeft when expanded (to indicate collapse), BotIcon when collapsed */}
+           {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <BotIcon className="h-4 w-4" />}
            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
         </Button>
       </CardHeader>
@@ -217,15 +220,17 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       {/* Conditionally render content based on isExpanded */}
       <CardContent className={cn(
         "flex-1 p-0 overflow-hidden flex flex-col", // Use flex-col for inner structure
-        // Ensure content visibility matches expansion state
-        !isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
+        // Ensure content visibility matches expansion state (controlled by Panel externally)
+        // For internal toggle logic (if Panel wasn't used), this would be needed:
+        // !isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
       )}>
-         {isExpanded ? (
+         {/* Content is always rendered, Panel handles visibility/collapse */}
            <>
             {/* Enable horizontal and vertical scrolling */}
             <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="both">
               {/* Wrap messages in a div that can expand horizontally */}
-              <div className="space-y-1 p-3 min-w-max"> {/* Use min-w-max */}
+               {/* Only render content fully when expanded */}
+              <div className={cn("space-y-1 p-3 min-w-max", !isExpanded && "hidden")}>
                 {isLoadingHistory && (
                   <>
                     {/* Skeletons for loading state */}
@@ -262,13 +267,10 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
                 )}
               </div>
             </ScrollArea>
-            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+             {/* Only render input when expanded */}
+            {isExpanded && <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />}
            </>
-         ) : (
-            // When collapsed, content is effectively hidden by the parent CardContent opacity styles.
-            // The toggle button remains in the CardHeader.
-            null // Render nothing inside CardContent when collapsed
-         )}
+
       </CardContent>
     </Card>
   );
