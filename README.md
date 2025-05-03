@@ -1,3 +1,4 @@
+
 # YINSEN Chatbot
 
 This is a Next.js application featuring an AI-powered chatbot (YINSEN) integrated with Binance for asset viewing and trading, styled similarly to Firebase Studio.
@@ -53,7 +54,7 @@ To run this project, you will need to add the following environment variables to
             *   Click **New Policy** > Choose the **Enable read access for all users** template.
             *   Review and **Save policy**.
         *   **Policy 2: Enable Insert Access (Public - For Development):**
-            *   Click **New Policy** > Choose the **Enable insert access for all users** template (if available).
+            *   Click **New Policy** > **Get started quickly** > Choose the **Enable insert access for all users** template (if available).
             *   *If template unavailable*, use the **SQL Editor** (Left Sidebar > SQL Editor > New query):
                 ```sql
                 -- Policy name: Allow public insert access for messages (DEV)
@@ -110,12 +111,30 @@ To use the Binance asset summary and trading features:
 
 ## Getting Started
 
-1.  **Install Dependencies:**
+1.  **Install Node.js Dependencies:**
     ```bash
     npm install
     ```
 2.  **Set up Environment Variables:** Create a `.env` file and add your Supabase URL/Key and optionally your Google AI Key as described above.
-3.  **Run Development Server:**
+
+3.  **Set up Python Environment (for LSTM Training):**
+    *   Ensure you have Python 3 installed (version 3.8 or higher recommended).
+    *   It's highly recommended to use a virtual environment:
+        ```bash
+        python3 -m venv venv
+        # Activate the virtual environment
+        # On macOS/Linux:
+        source venv/bin/activate
+        # On Windows (Command Prompt/PowerShell):
+        .\venv\Scripts\activate
+        ```
+    *   Install Python dependencies:
+        ```bash
+        pip install -r requirements.txt
+        ```
+        *Note: Installing TensorFlow might take some time and could require specific system dependencies (like CUDA for GPU support). Refer to the [official TensorFlow installation guide](https://www.tensorflow.org/install) if you encounter issues.*
+
+4.  **Run Development Server:**
     ```bash
     npm run dev
     ```
@@ -127,6 +146,12 @@ To use the Binance asset summary and trading features:
 *   **Binance Account Panel**: Allows users to input Binance API keys to view asset summaries (BTC/USDT) and recent trade history (BTC/USDT). Data refreshes periodically.
 *   **Trading Panel**: Allows placing Market and Limit orders for BTC/USDT using the provided Binance API keys.
 *   **YINSEN Chatbot**: An AI assistant. Chat history is stored in Supabase. (Trading functionality removed from bot).
-*   **Analysis Panel**: Displays real-time BTC/USDT technical indicators and includes a button to collect 1-minute OHLCV data into Supabase.
-
+*   **Analysis Panel**:
+    *   **Ensemble Tab**:
+        *   Collect historical 1-minute OHLCV data for BTC/USDT into Supabase.
+        *   Trigger LSTM model training using the collected data (requires Python environment setup).
+        *   View validation results (RMSE, MAE) after training.
+        *   Placeholder for model testing.
+    *   **RL Tab**: Placeholder for Reinforcement Learning agent configuration and training.
+    *   **Indicators Tab**: Displays real-time BTC/USDT technical indicators (refreshes periodically).
 ```

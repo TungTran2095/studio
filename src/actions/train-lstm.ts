@@ -1,7 +1,10 @@
+
 // src/actions/train-lstm.ts
 'use server';
 
 import { z } from 'zod';
+import { spawn } from 'child_process'; // Import spawn
+import path from 'path';
 
 // --- Schemas ---
 
@@ -21,31 +24,40 @@ export type LstmTrainingConfig = z.infer<typeof LstmTrainingConfigSchema>;
 const StartLstmTrainingJobInputSchema = z.object({
   config: LstmTrainingConfigSchema,
   trainTestSplitRatio: z.number().min(0.1).max(0.9).default(0.8), // e.g., 0.8 for 80% train
-  // Add other necessary inputs like data source identifiers if needed
 });
 export type StartLstmTrainingJobInput = z.infer<typeof StartLstmTrainingJobInputSchema>;
 
 // Output schema for the training job action
+// Matches the JSON output structure of the Python script
 const LstmTrainingResultSchema = z.object({
   success: z.boolean(),
-  message: z.string(),
-  jobId: z.string().optional(), // Optional: ID of the backend training job
+  message: z.string().optional(), // Make message optional
+  jobId: z.string().optional(), // Keep jobId for potential future async tracking
   results: z.object({
-      rmse: z.number().optional(), // Root Mean Squared Error
-      mae: z.number().optional(), // Mean Absolute Error
-      // Add other relevant metrics
+      rmse: z.number().optional(),
+      mae: z.number().optional(),
   }).optional(),
 });
 export type LstmTrainingResult = z.infer<typeof LstmTrainingResultSchema>;
 
+
+// --- Helper to find Python executable ---
+function getPythonExecutable(): string {
+    // Simple check for 'python3' first, then 'python'
+    // In production, ensure the correct Python path is configured in the environment
+    return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+
 // --- Server Action ---
 
 /**
- * Initiates an LSTM model training job.
+ * Initiates an LSTM model training job by spawning a Python script.
  *
- * IMPORTANT: This action simulates triggering an external backend process
- * (e.g., a Cloud Function, separate API) where the actual Python/TensorFlow
- * training would occur. It does NOT perform the training within the Next.js server action.
+ * IMPORTANT: This action executes a Python script locally.
+ * Ensure Python 3, TensorFlow, pandas, scikit-learn, supabase-py, python-dotenv
+ * are installed in the environment where the Next.js server runs.
+ * For production, consider a dedicated backend or serverless function for training.
  */
 export async function startLstmTrainingJob(
   input: StartLstmTrainingJobInput
@@ -59,44 +71,113 @@ export async function startLstmTrainingJob(
   }
 
   const { config, trainTestSplitRatio } = validationResult.data;
-  const jobId = `lstm-job-${Date.now()}`; // Simple simulated job ID
+  const jobId = `lstm-job-${Date.now()}`; // Simple job ID
 
-  // --- SIMULATION: Triggering External Backend ---
-  // In a real application, you would replace this section with a call to your backend:
-  // - Make an HTTP request to a Cloud Function/API endpoint.
-  // - Pass the `config` and `trainTestSplitRatio`.
-  // - The backend would queue/start the Python training script.
-  // - This action might return immediately with the jobId, and the frontend
-  //   could poll for status, or the backend could notify upon completion (e.g., via WebSocket, webhook).
+  const pythonExecutable = getPythonExecutable();
+  // Correct path assuming script is in project_root/scripts/train_lstm.py
+  const scriptPath = path.join(process.cwd(), 'scripts', 'train_lstm.py');
 
-  console.log(`[startLstmTrainingJob] Simulating call to external backend for job ${jobId}...`);
-  // Simulate processing/training time
-  await new Promise(resolve => setTimeout(resolve, 5000)); // Simulate 5 seconds
+  // Prepare arguments for the Python script
+  const args = [
+    scriptPath,
+    '--units', String(config.units),
+    '--layers', String(config.layers),
+    '--timesteps', String(config.timesteps),
+    '--dropout', String(config.dropout),
+    '--learning_rate', String(config.learningRate),
+    '--batch_size', String(config.batchSize),
+    '--epochs', String(config.epochs),
+    '--train_test_split_ratio', String(trainTestSplitRatio),
+    // Add other args if needed (e.g., --feature_columns, --target_column)
+  ];
 
-  // Simulate success or failure from the backend
-  const backendSuccess = Math.random() > 0.2; // 80% chance of success
+  console.log(`[startLstmTrainingJob] Spawning Python script: ${pythonExecutable} ${args.join(' ')}`);
 
-  if (backendSuccess) {
-    console.log(`[startLstmTrainingJob] Simulated backend job ${jobId} completed successfully.`);
-    // Simulate some results
-    const simulatedRMSE = Math.random() * 50 + 10;
-    const simulatedMAE = Math.random() * 40 + 8;
-    return {
-      success: true,
-      message: `Training job ${jobId} completed.`,
-      jobId: jobId,
-      results: {
-        rmse: simulatedRMSE,
-        mae: simulatedMAE,
-      },
-    };
-  } else {
-    console.error(`[startLstmTrainingJob] Simulated backend job ${jobId} failed.`);
-    return {
-      success: false,
-      message: `Backend training job ${jobId} failed (simulated). Check backend logs.`,
-      jobId: jobId,
-    };
-  }
-  // --- END SIMULATION ---
+  return new Promise((resolve) => {
+    let stdoutData = '';
+    let stderrData = '';
+
+    try {
+        // Spawn the Python process
+        const pythonProcess = spawn(pythonExecutable, args, {
+             // Ensure environment variables from .env are passed to the Python script
+            env: { ...process.env },
+        });
+
+        // Listen for data from stdout
+        pythonProcess.stdout.on('data', (data) => {
+            const output = data.toString();
+            stdoutData += output;
+            console.log(`[Python STDOUT] ${output}`); // Log Python output
+        });
+
+        // Listen for data from stderr
+        pythonProcess.stderr.on('data', (data) => {
+            const errorOutput = data.toString();
+            stderrData += errorOutput;
+            console.error(`[Python STDERR] ${errorOutput}`); // Log Python errors
+        });
+
+        // Listen for process exit
+        pythonProcess.on('close', (code) => {
+            console.log(`[startLstmTrainingJob] Python script finished with code ${code}`);
+
+            if (code === 0) {
+                 // Try to parse the last line of stdout as JSON
+                const lines = stdoutData.trim().split('\n');
+                const lastLine = lines[lines.length - 1];
+                try {
+                    const result: LstmTrainingResult = JSON.parse(lastLine);
+                    // Validate the parsed result against the Zod schema
+                    const validation = LstmTrainingResultSchema.safeParse(result);
+                    if (validation.success) {
+                         console.log("[startLstmTrainingJob] Parsed Python output:", validation.data);
+                         resolve({ ...validation.data, jobId }); // Add jobId
+                    } else {
+                        console.error("[startLstmTrainingJob] Failed to validate Python JSON output:", validation.error);
+                        resolve({
+                            success: false,
+                            message: `Training script finished, but output format is invalid. Check Python script output. Error: ${validation.error.message}`,
+                            jobId: jobId,
+                        });
+                    }
+                } catch (parseError: any) {
+                     console.error("[startLstmTrainingJob] Failed to parse Python output as JSON:", parseError);
+                     console.error("[startLstmTrainingJob] Raw stdout:", stdoutData);
+                    resolve({
+                        success: false,
+                        message: `Training script finished, but failed to parse output. Raw output: ${stdoutData.slice(-200)}`, // Show last part of output
+                        jobId: jobId,
+                    });
+                }
+            } else {
+                // Script exited with an error code
+                 const errorMessage = stderrData.trim() || `Python script exited with error code ${code}.`;
+                resolve({
+                    success: false,
+                    message: errorMessage,
+                    jobId: jobId,
+                });
+            }
+        });
+
+        // Handle errors during spawning (e.g., Python not found)
+        pythonProcess.on('error', (err) => {
+            console.error('[startLstmTrainingJob] Failed to start Python process:', err);
+            resolve({
+                success: false,
+                message: `Failed to start training process: ${err.message}. Is Python installed and in PATH?`,
+                jobId: jobId,
+            });
+        });
+
+    } catch (spawnError: any) {
+        console.error('[startLstmTrainingJob] Error spawning Python process:', spawnError);
+        resolve({
+            success: false,
+            message: `Error initiating training: ${spawnError.message}`,
+            jobId: jobId,
+        });
+    }
+  }); // End of Promise
 }
