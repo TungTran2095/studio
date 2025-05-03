@@ -18,7 +18,7 @@ import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // I
 import type { MessageHistory } from "@/lib/supabase-client"; // Import the type for messages from DB
 import { Button } from "@/components/ui/button"; // Import Button
 // Updated icons: MessageCircle for collapsed state, ChevronRight for expanded
-import { ChevronRight, MessageCircle } from "lucide-react";
+import { ChevronLeft, MessageCircle } from "lucide-react"; // Use ChevronLeft for collapse
 
 // Use MessageHistory type for consistency
 // Add a temporary client-side ID for rendering keys before DB ID exists
@@ -35,6 +35,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true); // State for loading history
   const { toast } = useToast();
+  // Use Supabase service key from environment variables
+  // const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY || '';
   const { apiKey, apiSecret, isTestnet } = useAssetStore(state => ({
     apiKey: state.apiKey,
     apiSecret: state.apiSecret,
@@ -194,10 +196,10 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
         )}>
           YINSEN
         </CardTitle>
-        {/* Toggle Button - No changes needed here, handled below */}
+        {/* Toggle Button */}
         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground flex-shrink-0">
-           {/* Show ChevronRight when expanded (to indicate collapse), MessageCircle when collapsed (to indicate expand) */}
-           {isExpanded ? <ChevronRight className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+           {/* Show ChevronLeft when expanded (to indicate collapse), MessageCircle when collapsed (to indicate expand) */}
+           {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
         </Button>
       </CardHeader>
@@ -210,11 +212,13 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       )}>
          {isExpanded ? (
            <>
-            <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="vertical">
-              <div className="space-y-1 p-3"> {/* Keep vertical scroll, remove min-w-max */}
+            {/* Enable horizontal and vertical scrolling */}
+            <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="both">
+              {/* Wrap messages in a div that can expand horizontally */}
+              <div className="space-y-1 p-3 min-w-max"> {/* Use min-w-max */}
                 {isLoadingHistory && (
                   <>
-                    {/* Keep skeletons for loading state */}
+                    {/* Skeletons for loading state */}
                      <div className="flex items-start gap-2 justify-end pt-1">
                         <Skeleton className="h-10 rounded-lg p-2.5 w-3/4 bg-muted rounded-br-none" />
                         <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
