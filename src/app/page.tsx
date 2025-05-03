@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import { useState, type FC } from 'react'; // Removed unused refs and event types
+import { useState, type FC } from 'react';
 import { AssetSummary } from "@/components/assets/asset-summary";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
@@ -13,8 +13,6 @@ export default function Home() {
   const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
   // New state for chat sidebar
   const [isChatExpanded, setIsChatExpanded] = useState(false); // Default to collapsed
-
-  // Removed drag-related state and effects
 
   // Toggle for asset summary
   const handleAssetToggle = () => {
@@ -67,7 +65,9 @@ export default function Home() {
       {/* Right Chat Panel: Shrinkable width, full height */}
       <aside className={cn(
         "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out h-full", // Ensure full height
-        isChatExpanded ? 'w-96' : 'w-16' // Adjust width as needed
+        // Make collapsed width smaller (w-16 is 64px, adjust if needed)
+        // Keep w-96 for expanded state
+        isChatExpanded ? 'w-96' : 'w-16' // Using w-16, which should be narrow enough for just an icon
       )}>
          {/* Pass props to ChatWindow to handle its own toggle/state */}
         <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle} />

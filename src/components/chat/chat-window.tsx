@@ -17,7 +17,8 @@ import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
 import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // Import Supabase actions
 import type { MessageHistory } from "@/lib/supabase-client"; // Import the type for messages from DB
 import { Button } from "@/components/ui/button"; // Import Button
-import { ChevronLeft, ChevronRight, MessageCircle } from "lucide-react"; // Import icons
+// Updated icons: MessageCircle for collapsed state, ChevronRight for expanded
+import { ChevronRight, MessageCircle } from "lucide-react";
 
 // Use MessageHistory type for consistency
 // Add a temporary client-side ID for rendering keys before DB ID exists
@@ -114,10 +115,13 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     }
 
     // Get history for AI (use current UI state for context, exclude clientIds)
-    const chatHistoryForAI = messages.map(({ role, content }) => ({
-      role,
-      content,
-    }));
+     // Limit history sent to AI to avoid overly large context
+     const recentMessagesLimit = 10; // Example limit
+     const chatHistoryForAI = messages.slice(-recentMessagesLimit).map(({ role, content }) => ({
+       role,
+       content,
+     }));
+
 
     const input: GenerateResponseInput = {
       message: messageContent,
@@ -157,9 +161,16 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     } catch (error: any) {
       console.error("[ChatWindow] Error generating AI response:", error);
       const errorMessage = error?.message || "Failed to get response from AI. Please try again.";
+       // Check if the error message contains the specific JSON schema validation failure
+       let displayError = errorMessage;
+       if (errorMessage.includes("Schema validation failed") && errorMessage.includes('"response":')) {
+           displayError = "The AI returned an invalid response format. Please try rephrasing your request.";
+           console.error("[ChatWindow] AI returned null or malformed output, expected { response: string }");
+       }
+
       toast({
         title: "Error Generating Response",
-        description: errorMessage,
+        description: displayError, // Show potentially simplified error
         variant: "destructive",
       });
        // Remove the user message if AI fails? Optional.
@@ -183,37 +194,53 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
         )}>
           YINSEN
         </CardTitle>
-        {/* Toggle Button */}
+        {/* Toggle Button - No changes needed here, handled below */}
         <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground flex-shrink-0">
-            {/* Show different icon based on expansion state */}
-            {isExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
+           {/* Show ChevronRight when expanded (to indicate collapse), MessageCircle when collapsed (to indicate expand) */}
+           {isExpanded ? <ChevronRight className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+           <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
         </Button>
       </CardHeader>
 
       {/* Conditionally render content based on isExpanded */}
       <CardContent className={cn(
         "flex-1 p-0 overflow-hidden flex flex-col", // Use flex-col for inner structure
-        !isExpanded && "p-0 opacity-0" // Hide content when collapsed
+        // Ensure content visibility matches expansion state
+        !isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
       )}>
          {isExpanded ? (
            <>
-            <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="vertical"> {/* Changed orientation */}
-              <div className="space-y-1 p-3"> {/* Removed min-w-max */}
+            <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="vertical">
+              <div className="space-y-1 p-3"> {/* Keep vertical scroll, remove min-w-max */}
                 {isLoadingHistory && (
                   <>
-                    <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted ml-auto" />
-                    <Skeleton className="h-12 rounded-lg p-3 w-4/5 bg-muted" />
-                    <Skeleton className="h-10 rounded-lg p-3 w-2/3 bg-muted ml-auto" />
+                    {/* Keep skeletons for loading state */}
+                     <div className="flex items-start gap-2 justify-end pt-1">
+                        <Skeleton className="h-10 rounded-lg p-2.5 w-3/4 bg-muted rounded-br-none" />
+                        <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
+                          <AvatarFallback className="bg-accent"></AvatarFallback>
+                        </Avatar>
+                     </div>
+                      <div className="flex items-start gap-2 justify-start pt-1">
+                        <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
+                          <AvatarFallback className="bg-accent"></AvatarFallback>
+                        </Avatar>
+                        <Skeleton className="h-12 rounded-lg p-2.5 w-4/5 bg-muted rounded-bl-none" />
+                     </div>
+                     <div className="flex items-start gap-2 justify-end pt-1">
+                        <Skeleton className="h-10 rounded-lg p-2.5 w-2/3 bg-muted rounded-br-none" />
+                        <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
+                          <AvatarFallback className="bg-accent"></AvatarFallback>
+                        </Avatar>
+                     </div>
                   </>
                 )}
                 {!isLoadingHistory && messages.map((msg) => (
                   <ChatMessage key={msg.id ?? msg.clientId} role={msg.role} content={msg.content} />
                 ))}
                 {isLoading && (
-                  <div className="flex items-start gap-2 justify-start pt-1">
-                    {/* Avatar Skeleton for bot response loading */}
-                     <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
+                  <div className="flex items-start gap-2 justify-start pt-1"> {/* Loading indicator for bot response */}
+                    <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
                       <AvatarFallback className="bg-accent"></AvatarFallback>
                     </Avatar>
                     <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" />
@@ -224,13 +251,9 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
             <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
            </>
          ) : (
-           // Show only an icon when collapsed, centered vertically
-           <div className="flex-1 flex items-center justify-center p-3">
-             <Button variant="ghost" size="icon" onClick={onToggle} className="h-8 w-8 text-foreground">
-               <MessageCircle className="h-5 w-5" />
-               <span className="sr-only">Expand Chat</span>
-             </Button>
-           </div>
+            // When collapsed, content is effectively hidden by the parent CardContent opacity styles.
+            // The toggle button remains in the CardHeader.
+            null // Render nothing inside CardContent when collapsed
          )}
       </CardContent>
     </Card>
