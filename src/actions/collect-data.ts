@@ -106,10 +106,22 @@ export async function collectBinanceOhlcvData(
         const apiOptions = {
           limit: limit,
           startTime: currentStartTime,
-           // Fetch up to the original endTime on the last chunk if needed
-           // However, relying on startTime and limit is usually sufficient
-           // endTime: Math.min(currentStartTime + (limit * intervalMs), endTime), // Optional: Can also set chunk endTime explicitly
+           // Binance API requires endTime for historical requests to be effective with startTime and limit > 500
+           // Calculate a potential endTime for the chunk, but don't exceed the user's overall endTime
+           endTime: Math.min(currentStartTime + (limit * intervalMs) -1, endTime), // -1 because Binance includes the candle at endTime
         };
+
+        // Ensure endTime is always greater than startTime for the API call
+        if (apiOptions.endTime <= apiOptions.startTime) {
+            console.log(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Calculated endTime (${new Date(apiOptions.endTime).toISOString()}) is not after startTime (${new Date(apiOptions.startTime).toISOString()}). Adjusting or ending.`);
+             // If endTime calculation results in being equal or before startTime, it usually means we've reached the end.
+             // Or, if startTime is already exactly the user's endTime, the first candle might be included, then we stop.
+             // Let's break cleanly.
+             break;
+        }
+
+        console.log(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: API options:`, { startTime: new Date(apiOptions.startTime).toISOString(), endTime: new Date(apiOptions.endTime).toISOString(), limit: apiOptions.limit });
+
 
         let ticks: any[] = [];
         try {
@@ -144,8 +156,15 @@ export async function collectBinanceOhlcvData(
                   console.warn(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Skipping malformed tick:`, tick);
                   return null;
               }
+              // Additional Check: Ensure the open time is within the overall requested range
+              const openTimeMs = tick[0];
+              if (openTimeMs < startTime || openTimeMs > endTime) {
+                   console.warn(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Skipping tick outside requested range (${new Date(openTimeMs).toISOString()})`);
+                   return null;
+              }
+
               return {
-                  open_time: new Date(tick[0]).toISOString(),
+                  open_time: new Date(openTimeMs).toISOString(),
                   open: parseFloat(tick[1]),
                   high: parseFloat(tick[2]),
                   low: parseFloat(tick[3]),
@@ -160,7 +179,7 @@ export async function collectBinanceOhlcvData(
           }).filter((item): item is OhlcvData => item !== null);
 
           if (dataToInsert.length === 0 && ticks.length > 0) {
-              console.warn(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: All fetched ticks failed transformation. Skipping chunk.`);
+              console.warn(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: All fetched ticks failed transformation or filtering. Skipping chunk.`);
               // Continue to next chunk? Or error out? Let's continue for now.
           }
         } catch (transformError: any) {
@@ -175,7 +194,7 @@ export async function collectBinanceOhlcvData(
           try {
             const { data, error, count } = await supabase
               .from('OHLCV_BTC_USDT_1m')
-              .upsert(dataToInsert, { onConflict: 'open_time' });
+              .upsert(dataToInsert, { onConflict: 'open_time' }); // Use upsert to handle potential overlaps or retries
 
             if (error) {
               console.error(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Supabase upsert error:`, error);
@@ -188,7 +207,8 @@ export async function collectBinanceOhlcvData(
               // For other errors, maybe log and continue? For now, let's stop.
               return { success: false, message: `Supabase error in chunk ${chunkNumber}: ${error.message}`, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
             }
-            const insertedCount = count ?? data?.length ?? 0;
+            // Supabase upsert with { count: 'exact' } might be needed for accurate count if default isn't exact
+            const insertedCount = count ?? dataToInsert.length; // Fallback if count isn't returned precisely
             totalInserted += insertedCount;
             console.log(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Successfully inserted/upserted ${insertedCount} records.`);
 
@@ -199,14 +219,16 @@ export async function collectBinanceOhlcvData(
         }
 
         // Update start time for the next chunk
-        // Use the open_time of the last fetched candle + interval duration
+        // Use the open_time of the *last* fetched candle + interval duration
+        // Important: Binance API might return less than `limit` candles, even if more exist.
+        // The correct way to advance is based on the last candle received.
         const lastCandleOpenTime = ticks[ticks.length - 1][0];
         currentStartTime = lastCandleOpenTime + intervalMs;
 
-         // Optional check: If the last candle's time is already beyond the requested endTime, break.
-         // Note: Binance API might return candles starting *before* startTime, so check last candle time.
-         if (lastCandleOpenTime >= endTime) {
-             console.log(`[collectBinanceOhlcvData] Last candle time (${new Date(lastCandleOpenTime).toISOString()}) reached or exceeded requested end time (${new Date(endTime).toISOString()}). Finishing.`);
+
+         // Check if the *next* startTime would exceed the requested endTime
+         if (currentStartTime > endTime) {
+             console.log(`[collectBinanceOhlcvData] Next fetch start time (${new Date(currentStartTime).toISOString()}) would exceed requested end time (${new Date(endTime).toISOString()}). Finishing.`);
              break;
          }
 
@@ -306,7 +328,7 @@ export async function collectBinanceOhlcvData(
               return { success: false, message: `Supabase error saving latest data: ${error.message}`, totalFetchedCount: dataToInsert.length };
             }
 
-            const insertedCount = count ?? data?.length ?? 0;
+            const insertedCount = count ?? dataToInsert.length; // Fallback if count not exact
             console.log(`[collectBinanceOhlcvData] Successfully inserted/upserted ${insertedCount} latest records.`);
             const message = `Successfully collected ${dataToInsert.length} and saved ${insertedCount} latest data points.`;
             return { success: true, message: message, totalFetchedCount: dataToInsert.length, totalInsertedCount: insertedCount };

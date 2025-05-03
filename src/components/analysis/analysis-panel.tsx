@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, CalendarIcon } from 'lucide-react'; // Added DatabaseZap, Loader2, CalendarIcon
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide } from 'lucide-react'; // Renamed Calendar import
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -22,7 +22,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover
-import { Calendar } from "@/components/ui/calendar"; // Import Calendar
+import { Calendar } from "@/components/ui/calendar"; // Import Calendar component
 import { format, startOfDay } from 'date-fns'; // Import date-fns for formatting
 import type { DateRange } from "react-day-picker"; // Import DateRange type
 import { Label } from "@/components/ui/label"; // Import Label
@@ -129,10 +129,11 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
     try {
       // Call the server action - pass time range if historical
+      // The action 'collectBinanceOhlcvData' already handles chunking internally for historical data.
       const result = await collectBinanceOhlcvData({
         symbol: 'BTCUSDT',
         interval: '1m',
-        limit: 1000, // Use default/max limit for chunking in the action
+        limit: 1000, // Limit per API request (action handles multiple requests)
         ...(type === 'historical' && { startTime: startTimeMs, endTime: endTimeMs }),
       });
 
@@ -140,7 +141,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
         setCollectionStatus('success');
         setCollectionMessage(result.message || 'Collection successful.');
         // Use totalFetchedCount and totalInsertedCount from the action result
-        toast({ title: "Data Collection", description: `${result.message} (Fetched: ${result.totalFetchedCount}, Saved: ${result.totalInsertedCount})` });
+        toast({ title: "Data Collection", description: `${result.message} (Fetched: ${result.totalFetchedCount ?? 0}, Saved: ${result.totalInsertedCount ?? 0})` });
         console.log("[AnalysisPanel] Data collection successful:", result.message);
         // Clear date range after successful historical collection
         // if (type === 'historical') setDateRange(undefined);
@@ -229,7 +230,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             </div>
 
                             {/* Historical Data Collection */}
-                             <div className="flex items-center gap-2">
+                             <div className="flex flex-wrap items-center gap-2"> {/* Use flex-wrap */}
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <Button
@@ -237,12 +238,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                         variant={"outline"}
                                         size="sm"
                                         className={cn(
-                                            "w-[260px] justify-start text-left font-normal h-7 text-xs",
+                                            "w-[260px] justify-start text-left font-normal h-7 text-xs", // Fixed width for consistency
                                             !dateRange && "text-muted-foreground"
                                         )}
                                          disabled={collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical'}
                                         >
-                                        <CalendarIcon className="mr-2 h-3 w-3" />
+                                        <CalendarIconLucide className="mr-2 h-3 w-3" /> {/* Use renamed import */}
                                         {dateRange?.from ? (
                                             dateRange.to ? (
                                             <>
@@ -301,7 +302,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     </span>
                                  </div>
                             )}
-                            <p className="text-xs text-muted-foreground pt-1">Note: Historical collection automatically fetches data in chunks. Ensure RLS policies allow upserts.</p>
+                            {/* Updated Note */}
+                             <p className="text-xs text-muted-foreground pt-1">Note: Historical collection automatically fetches data in chunks. Ensure RLS policies allow upserts.</p>
                         </div>
 
                          <Separator className="my-2" />
