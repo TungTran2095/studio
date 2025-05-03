@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import Binance from 'node-binance-api';
 import { supabase } from '@/lib/supabase-client';
+import { addMilliseconds, parse } from 'date-fns'; // Import date-fns for interval calculation
 
 // Define the structure for the OHLCV data matching the Supabase table
 // Use snake_case matching the SQL table definition
@@ -24,8 +25,8 @@ interface OhlcvData {
 // Define the input schema, adding optional startTime and endTime
 const CollectDataInputSchema = z.object({
   symbol: z.string().default('BTCUSDT'),
-  interval: z.string().default('1m'),
-  limit: z.number().int().positive().max(1000).optional().describe("Max candles per request (API limit). Used for fetching latest data or within a date range."),
+  interval: z.string().default('1m').describe("Candlestick interval (e.g., '1m', '5m', '1h')."),
+  limit: z.number().int().positive().max(1000).optional().default(1000).describe("Candles per request (API max 1000). Used for latest data or chunk size for historical."),
   startTime: z.number().int().positive().optional().describe("Start time timestamp (milliseconds) for historical data."),
   endTime: z.number().int().positive().optional().describe("End time timestamp (milliseconds) for historical data."),
 }).refine(data => !data.startTime || !data.endTime || data.endTime > data.startTime, {
@@ -38,9 +39,24 @@ const CollectDataInputSchema = z.object({
 interface CollectDataResult {
   success: boolean;
   message: string;
-  insertedCount?: number;
-  fetchedCount?: number; // Add count of fetched records
+  totalFetchedCount?: number; // Total fetched across all chunks
+  totalInsertedCount?: number; // Total inserted across all chunks
 }
+
+// Helper function to parse interval string (e.g., '1m', '5m', '1h') into milliseconds
+function intervalToMilliseconds(interval: string): number {
+    const value = parseInt(interval.slice(0, -1));
+    const unit = interval.slice(-1);
+    switch (unit) {
+        case 'm': return value * 60 * 1000;
+        case 'h': return value * 60 * 60 * 1000;
+        case 'd': return value * 24 * 60 * 60 * 1000;
+        case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+        // Add 's' for seconds if needed
+        default: throw new Error(`Unsupported interval unit: ${unit}`);
+    }
+}
+
 
 // --- Collect Binance Data Action ---
 export async function collectBinanceOhlcvData(
@@ -53,8 +69,9 @@ export async function collectBinanceOhlcvData(
     return { success: false, message: `Invalid input: ${validationResult.error.errors.map(e => e.message).join(', ')}` };
   }
 
-  const { symbol, interval, limit = 1000, startTime, endTime } = validationResult.data; // Default limit to max if not provided
-  const isHistorical = startTime && endTime;
+  const { symbol, interval, limit, startTime, endTime } = validationResult.data;
+  const isHistorical = startTime !== undefined && endTime !== undefined;
+  const CHUNK_DELAY_MS = 250; // Delay between chunk requests to avoid rate limiting
 
   // 1. Initialize Binance client (public data, no keys needed)
   let binance;
@@ -66,133 +83,240 @@ export async function collectBinanceOhlcvData(
     return { success: false, message: `Failed to initialize Binance client: ${initError.message}` };
   }
 
-  // 2. Fetch Candlestick Data
-  let ticks: any[] = [];
-  const apiOptions: { limit: number; startTime?: number; endTime?: number } = { limit };
-  if (startTime) apiOptions.startTime = startTime;
-  if (endTime) apiOptions.endTime = endTime;
+   // Ensure Supabase client is ready
+   if (!supabase) {
+     console.error('[collectBinanceOhlcvData] Supabase client is not initialized.');
+     return { success: false, message: 'Supabase client not initialized.' };
+   }
 
-  try {
-    const fetchType = isHistorical ? `historical (${new Date(startTime!).toISOString()} to ${new Date(endTime!).toISOString()})` : `latest ${limit}`;
-    console.log(`[collectBinanceOhlcvData] Fetching ${fetchType} candlesticks for ${symbol} (${interval})...`);
-    console.log(`[collectBinanceOhlcvData] API options:`, apiOptions);
+  // --- Historical Data Fetching (Chunking Logic) ---
+  if (isHistorical) {
+    let currentStartTime = startTime;
+    let totalFetched = 0;
+    let totalInserted = 0;
+    let chunkNumber = 1;
+    const intervalMs = intervalToMilliseconds(interval);
 
-    // Format: [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
-    // The third argument is the callback (pass undefined), fourth is options
-    ticks = await binance.candlesticks(symbol, interval, undefined, apiOptions);
+    console.log(`[collectBinanceOhlcvData] Starting historical data collection for ${symbol} (${interval}) from ${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()} in chunks of ${limit}...`);
 
-    if (!Array.isArray(ticks)) {
-      // Handle non-array responses, might indicate an API error not caught as exception
-      console.error(`[collectBinanceOhlcvData] Unexpected non-array response from Binance API for ${symbol}:`, ticks);
-       throw new Error(`Unexpected response format from Binance API.`);
-    }
+    try {
+      while (currentStartTime <= endTime) {
+        console.log(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Fetching data starting from ${new Date(currentStartTime).toISOString()}...`);
 
-    if (ticks.length === 0) {
-        const message = isHistorical
-            ? `No candlestick data received for ${symbol} in the specified date range.`
-            : `No candlestick data received for ${symbol}.`;
-      console.warn(`[collectBinanceOhlcvData] ${message}`);
-      // Return success=true but indicate 0 fetched if no data in range, not necessarily an error
-      return { success: true, message: message, fetchedCount: 0, insertedCount: 0 };
-    }
-    console.log(`[collectBinanceOhlcvData] Received ${ticks.length} candlesticks.`);
-     // Check if limit was reached, suggesting more data might exist for the range
-     if (isHistorical && ticks.length === limit) {
-        console.warn(`[collectBinanceOhlcvData] Reached API limit (${limit}) for historical fetch. Data might be truncated. Consider smaller date ranges or implementing chunking.`);
-        // Optionally add a note to the success message later
-     }
-
-  } catch (fetchError: any) {
-    console.error(`[collectBinanceOhlcvData] Error fetching candlesticks for ${symbol}:`, fetchError);
-     // Handle specific Binance API errors if possible
-     let userMessage = `Error fetching data from Binance: ${fetchError.message}`;
-     if (fetchError.message?.includes('startTime does not exist')) {
-         userMessage = "Binance API Error: Invalid startTime provided.";
-     } else if (fetchError.message?.includes('Timestamp for this request was 1000ms ahead of the server time')) {
-         userMessage = "Binance API Error: Clock sync issue. Check server time.";
-     }
-    return { success: false, message: userMessage };
-  }
-
-  // 3. Transform Data for Supabase
-  let dataToInsert: OhlcvData[] = [];
-  try {
-    dataToInsert = ticks.map((tick: any[]) => {
-        if (!Array.isArray(tick) || tick.length < 11) {
-            console.warn("[collectBinanceOhlcvData] Skipping malformed tick:", tick);
-            return null; // Skip malformed ticks
-        }
-        return {
-            open_time: new Date(tick[0]).toISOString(), // Convert timestamp to ISO string
-            open: parseFloat(tick[1]),
-            high: parseFloat(tick[2]),
-            low: parseFloat(tick[3]),
-            close: parseFloat(tick[4]),
-            volume: parseFloat(tick[5]),
-            close_time: new Date(tick[6]).toISOString(), // Convert timestamp to ISO string
-            quote_asset_volume: parseFloat(tick[7]),
-            number_of_trades: parseInt(tick[8], 10),
-            taker_buy_base_asset_volume: parseFloat(tick[9]),
-            taker_buy_quote_asset_volume: parseFloat(tick[10]),
+        const apiOptions = {
+          limit: limit,
+          startTime: currentStartTime,
+           // Fetch up to the original endTime on the last chunk if needed
+           // However, relying on startTime and limit is usually sufficient
+           // endTime: Math.min(currentStartTime + (limit * intervalMs), endTime), // Optional: Can also set chunk endTime explicitly
         };
-    }).filter((item): item is OhlcvData => item !== null); // Filter out nulls
 
-    if (dataToInsert.length !== ticks.length) {
-         console.warn(`[collectBinanceOhlcvData] ${ticks.length - dataToInsert.length} ticks were skipped due to formatting issues.`);
+        let ticks: any[] = [];
+        try {
+          // Format: [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
+          ticks = await binance.candlesticks(symbol, interval, undefined, apiOptions);
+        } catch (fetchError: any) {
+           console.error(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Error fetching candlesticks:`, fetchError);
+           // Decide whether to stop or continue. Let's stop on fetch error for simplicity.
+           return { success: false, message: `Error fetching data chunk ${chunkNumber}: ${fetchError.message}`, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+        }
+
+
+        if (!Array.isArray(ticks)) {
+          console.error(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Unexpected non-array response from Binance API.`, ticks);
+           // Stop processing if the API returns unexpected data
+           return { success: false, message: `Unexpected API response format in chunk ${chunkNumber}.`, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+        }
+
+        if (ticks.length === 0) {
+          console.log(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: No more data received. Ending collection.`);
+          break; // Exit loop if no data is returned
+        }
+
+        totalFetched += ticks.length;
+        console.log(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Received ${ticks.length} candlesticks.`);
+
+        // Transform Data
+        let dataToInsert: OhlcvData[] = [];
+        try {
+          dataToInsert = ticks.map((tick: any[]) => {
+              if (!Array.isArray(tick) || tick.length < 11) {
+                  console.warn(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Skipping malformed tick:`, tick);
+                  return null;
+              }
+              return {
+                  open_time: new Date(tick[0]).toISOString(),
+                  open: parseFloat(tick[1]),
+                  high: parseFloat(tick[2]),
+                  low: parseFloat(tick[3]),
+                  close: parseFloat(tick[4]),
+                  volume: parseFloat(tick[5]),
+                  close_time: new Date(tick[6]).toISOString(),
+                  quote_asset_volume: parseFloat(tick[7]),
+                  number_of_trades: parseInt(tick[8], 10),
+                  taker_buy_base_asset_volume: parseFloat(tick[9]),
+                  taker_buy_quote_asset_volume: parseFloat(tick[10]),
+              };
+          }).filter((item): item is OhlcvData => item !== null);
+
+          if (dataToInsert.length === 0 && ticks.length > 0) {
+              console.warn(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: All fetched ticks failed transformation. Skipping chunk.`);
+              // Continue to next chunk? Or error out? Let's continue for now.
+          }
+        } catch (transformError: any) {
+             console.error(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Error transforming data:`, transformError);
+             // Stop processing if transformation fails critically
+             return { success: false, message: `Error processing data in chunk ${chunkNumber}: ${transformError.message}`, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+        }
+
+
+        // Insert Data into Supabase
+        if (dataToInsert.length > 0) {
+          try {
+            const { data, error, count } = await supabase
+              .from('OHLCV_BTC_USDT_1m')
+              .upsert(dataToInsert, { onConflict: 'open_time' });
+
+            if (error) {
+              console.error(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Supabase upsert error:`, error);
+              // Check for RLS errors or other critical DB errors
+              if (error.message.includes('security policy') || error.code === '42501') {
+                return { success: false, message: 'Permission denied saving data. Check Supabase RLS policies (INSERT/UPDATE).', totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+              } else if (error.message.includes('relation "public.OHLCV_BTC_USDT_1m" does not exist')) {
+                 return { success: false, message: 'Table "OHLCV_BTC_USDT_1m" not found.', totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+              }
+              // For other errors, maybe log and continue? For now, let's stop.
+              return { success: false, message: `Supabase error in chunk ${chunkNumber}: ${error.message}`, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+            }
+            const insertedCount = count ?? data?.length ?? 0;
+            totalInserted += insertedCount;
+            console.log(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Successfully inserted/upserted ${insertedCount} records.`);
+
+          } catch (dbError: any) {
+            console.error(`[collectBinanceOhlcvData] Chunk ${chunkNumber}: Unexpected error during Supabase operation:`, dbError);
+            return { success: false, message: `Unexpected database error in chunk ${chunkNumber}: ${dbError.message}`, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+          }
+        }
+
+        // Update start time for the next chunk
+        // Use the open_time of the last fetched candle + interval duration
+        const lastCandleOpenTime = ticks[ticks.length - 1][0];
+        currentStartTime = lastCandleOpenTime + intervalMs;
+
+         // Optional check: If the last candle's time is already beyond the requested endTime, break.
+         // Note: Binance API might return candles starting *before* startTime, so check last candle time.
+         if (lastCandleOpenTime >= endTime) {
+             console.log(`[collectBinanceOhlcvData] Last candle time (${new Date(lastCandleOpenTime).toISOString()}) reached or exceeded requested end time (${new Date(endTime).toISOString()}). Finishing.`);
+             break;
+         }
+
+        chunkNumber++;
+
+        // Add a delay to prevent hitting API rate limits
+        console.log(`[collectBinanceOhlcvData] Waiting ${CHUNK_DELAY_MS}ms before next chunk...`);
+        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS));
+
+      } // End while loop
+
+      // Historical collection finished successfully
+       const finalMessage = `Successfully collected historical data for ${symbol} (${interval}) from ${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}. Total fetched: ${totalFetched}, Total saved: ${totalInserted}.`;
+       console.log(`[collectBinanceOhlcvData] ${finalMessage}`);
+      return { success: true, message: finalMessage, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
+
+    } catch (overallError: any) {
+      // Catch any unexpected errors outside the loop
+      console.error("[collectBinanceOhlcvData] Unexpected error during historical collection:", overallError);
+      return { success: false, message: `Unexpected error during historical collection: ${overallError.message}`, totalFetchedCount: totalFetched, totalInsertedCount: totalInserted };
     }
-     if (dataToInsert.length === 0 && ticks.length > 0) {
-        console.error("[collectBinanceOhlcvData] All fetched ticks failed transformation. Check data format.");
-        return { success: false, message: "Failed to process fetched data. Check data format.", fetchedCount: ticks.length };
-     }
-
-  } catch (transformError: any) {
-       console.error("[collectBinanceOhlcvData] Error transforming data:", transformError);
-       return { success: false, message: `Error processing data: ${transformError.message}`, fetchedCount: ticks.length };
   }
 
 
-  // 4. Insert Data into Supabase
-  if (!supabase) {
-    console.error('[collectBinanceOhlcvData] Supabase client is not initialized.');
-    return { success: false, message: 'Supabase client not initialized.' };
-  }
+  // --- Fetching Latest Data (No Chunking Needed) ---
+  else {
+    console.log(`[collectBinanceOhlcvData] Fetching latest ${limit} candlesticks for ${symbol} (${interval})...`);
+    let ticks: any[] = [];
+    try {
+       ticks = await binance.candlesticks(symbol, interval, undefined, { limit });
 
-  try {
-    console.log(`[collectBinanceOhlcvData] Attempting to insert/upsert ${dataToInsert.length} records into Supabase...`);
-    // Use upsert to handle potential duplicate primary keys (open_time) if re-fetching overlapping data
-    const { data, error, count } = await supabase
-      .from('OHLCV_BTC_USDT_1m') // Ensure table name matches EXACTLY (case-sensitive if quoted)
-      .upsert(dataToInsert, {
-           onConflict: 'open_time', // Specify the conflict column
-           // ignoreDuplicates: false, // Default is false, which means upsert replaces on conflict
-      });
+        if (!Array.isArray(ticks)) {
+             console.error(`[collectBinanceOhlcvData] Unexpected non-array response from Binance API for ${symbol}:`, ticks);
+             throw new Error(`Unexpected response format from Binance API.`);
+        }
+        if (ticks.length === 0) {
+             const message = `No latest candlestick data received for ${symbol}.`;
+             console.warn(`[collectBinanceOhlcvData] ${message}`);
+             return { success: true, message: message, totalFetchedCount: 0, totalInsertedCount: 0 };
+        }
+        console.log(`[collectBinanceOhlcvData] Received ${ticks.length} latest candlesticks.`);
 
-    if (error) {
-      console.error('[collectBinanceOhlcvData] Supabase insert/upsert error:', error);
-      // Check for RLS errors specifically
-      if (error.message.includes('security policy') || error.code === '42501') {
-          return { success: false, message: 'Permission denied saving data. Check Supabase RLS policies for OHLCV_BTC_USDT_1m (INSERT/UPDATE).', fetchedCount: dataToInsert.length };
-      } else if (error.message.includes('relation "public.OHLCV_BTC_USDT_1m" does not exist')) {
-          return { success: false, message: 'Table "OHLCV_BTC_USDT_1m" not found. Ensure it was created in Supabase.', fetchedCount: dataToInsert.length };
-      }
-       // Add specific check for data type mismatch if possible (e.g., based on error code/message)
-       // Example: if (error.code === '22P02') { // invalid text representation
-       //    return { success: false, message: 'Data type mismatch saving to Supabase. Check data transformation.', fetchedCount: dataToInsert.length };
-       // }
-      return { success: false, message: `Supabase error: ${error.message}`, fetchedCount: dataToInsert.length };
+    } catch (fetchError: any) {
+       console.error(`[collectBinanceOhlcvData] Error fetching latest candlesticks for ${symbol}:`, fetchError);
+       let userMessage = `Error fetching latest data from Binance: ${fetchError.message}`;
+       // Add specific error handling if needed
+       return { success: false, message: userMessage };
     }
 
-    const insertedCount = count ?? data?.length ?? 0; // Supabase v2 count might be null
-    console.log(`[collectBinanceOhlcvData] Successfully inserted/upserted ${insertedCount} records.`);
-    let message = `Successfully collected ${dataToInsert.length} and saved ${insertedCount} data points.`;
-     if (isHistorical && ticks.length === limit) {
-         message += ` (API limit reached, more data might exist for the range)`;
-     }
+    // Transform Data
+    let dataToInsert: OhlcvData[] = [];
+    try {
+        dataToInsert = ticks.map((tick: any[]) => {
+            if (!Array.isArray(tick) || tick.length < 11) {
+                console.warn("[collectBinanceOhlcvData] Skipping malformed tick:", tick);
+                return null;
+            }
+            return {
+                open_time: new Date(tick[0]).toISOString(),
+                open: parseFloat(tick[1]),
+                high: parseFloat(tick[2]),
+                low: parseFloat(tick[3]),
+                close: parseFloat(tick[4]),
+                volume: parseFloat(tick[5]),
+                close_time: new Date(tick[6]).toISOString(),
+                quote_asset_volume: parseFloat(tick[7]),
+                number_of_trades: parseInt(tick[8], 10),
+                taker_buy_base_asset_volume: parseFloat(tick[9]),
+                taker_buy_quote_asset_volume: parseFloat(tick[10]),
+            };
+        }).filter((item): item is OhlcvData => item !== null);
 
-    return { success: true, message: message, fetchedCount: dataToInsert.length, insertedCount: insertedCount };
+        if (dataToInsert.length === 0 && ticks.length > 0) {
+            console.error("[collectBinanceOhlcvData] All latest fetched ticks failed transformation.");
+            return { success: false, message: "Failed to process latest fetched data.", totalFetchedCount: ticks.length };
+        }
+    } catch (transformError: any) {
+         console.error("[collectBinanceOhlcvData] Error transforming latest data:", transformError);
+         return { success: false, message: `Error processing latest data: ${transformError.message}`, totalFetchedCount: ticks.length };
+    }
 
-  } catch (dbError: any) {
-    console.error('[collectBinanceOhlcvData] Unexpected error during Supabase operation:', dbError);
-    return { success: false, message: `Unexpected database error: ${dbError.message}`, fetchedCount: dataToInsert.length };
-  }
+    // Insert Latest Data into Supabase
+    if (dataToInsert.length > 0) {
+        try {
+            console.log(`[collectBinanceOhlcvData] Attempting to insert/upsert ${dataToInsert.length} latest records into Supabase...`);
+            const { data, error, count } = await supabase
+              .from('OHLCV_BTC_USDT_1m')
+              .upsert(dataToInsert, { onConflict: 'open_time' });
+
+            if (error) {
+              console.error('[collectBinanceOhlcvData] Supabase upsert error for latest data:', error);
+              if (error.message.includes('security policy') || error.code === '42501') {
+                return { success: false, message: 'Permission denied saving data. Check Supabase RLS policies (INSERT/UPDATE).', totalFetchedCount: dataToInsert.length };
+              } else if (error.message.includes('relation "public.OHLCV_BTC_USDT_1m" does not exist')) {
+                 return { success: false, message: 'Table "OHLCV_BTC_USDT_1m" not found.', totalFetchedCount: dataToInsert.length };
+              }
+              return { success: false, message: `Supabase error saving latest data: ${error.message}`, totalFetchedCount: dataToInsert.length };
+            }
+
+            const insertedCount = count ?? data?.length ?? 0;
+            console.log(`[collectBinanceOhlcvData] Successfully inserted/upserted ${insertedCount} latest records.`);
+            const message = `Successfully collected ${dataToInsert.length} and saved ${insertedCount} latest data points.`;
+            return { success: true, message: message, totalFetchedCount: dataToInsert.length, totalInsertedCount: insertedCount };
+
+        } catch (dbError: any) {
+            console.error('[collectBinanceOhlcvData] Unexpected error during Supabase operation for latest data:', dbError);
+            return { success: false, message: `Unexpected database error saving latest data: ${dbError.message}`, totalFetchedCount: dataToInsert.length };
+        }
+    } else {
+         return { success: true, message: "No latest data needed insertion.", totalFetchedCount: ticks.length, totalInsertedCount: 0 };
+    }
+  } // End else (latest data fetch)
 }

@@ -117,7 +117,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
          endTimeMs = startOfDay(dateRange.to).getTime() + (24 * 60 * 60 * 1000) - 1; // End of the selected day
          console.log(`[AnalysisPanel] Collecting historical data from ${new Date(startTimeMs).toISOString()} to ${new Date(endTimeMs).toISOString()}`);
          setCollectionStatus('collecting-historical');
-         setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}...`);
+         setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}... (this may take a while)`);
     } else {
         console.log("[AnalysisPanel] Collecting latest data...");
          setCollectionStatus('collecting-latest');
@@ -132,14 +132,15 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       const result = await collectBinanceOhlcvData({
         symbol: 'BTCUSDT',
         interval: '1m',
-        limit: 1000, // Always fetch max limit per request for efficiency, especially historical
+        limit: 1000, // Use default/max limit for chunking in the action
         ...(type === 'historical' && { startTime: startTimeMs, endTime: endTimeMs }),
       });
 
       if (result.success) {
         setCollectionStatus('success');
         setCollectionMessage(result.message || 'Collection successful.');
-        toast({ title: "Data Collection", description: `${result.message} (Fetched: ${result.fetchedCount}, Saved: ${result.insertedCount})` });
+        // Use totalFetchedCount and totalInsertedCount from the action result
+        toast({ title: "Data Collection", description: `${result.message} (Fetched: ${result.totalFetchedCount}, Saved: ${result.totalInsertedCount})` });
         console.log("[AnalysisPanel] Data collection successful:", result.message);
         // Clear date range after successful historical collection
         // if (type === 'historical') setDateRange(undefined);
@@ -156,12 +157,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       toast({ title: "Collection Error", description: errorMsg, variant: "destructive" });
       console.error("[AnalysisPanel] Unexpected error during data collection:", error);
     } finally {
-       // Optionally reset status after a delay only on success/error, not while collecting
-        setTimeout(() => {
-             if (collectionStatus !== 'collecting-latest' && collectionStatus !== 'collecting-historical') {
-                 setCollectionStatus('idle');
-                 setCollectionMessage('');
-             }
+       // Reset status immediately after completion (success or error)
+       // Removed the setTimeout to allow immediate interaction after completion.
+       setCollectionStatus('idle');
+       // Keep the message briefly for user feedback
+       setTimeout(() => {
+           if (collectionStatus !== 'collecting-latest' && collectionStatus !== 'collecting-historical') {
+               setCollectionMessage('');
+           }
         }, 5000); // Keep message for 5 seconds
     }
   };
@@ -283,19 +286,22 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 </Button>
                              </div>
                             {/* Status Indicator */}
-                            {(collectionStatus !== 'idle') && (
+                            {(collectionStatus !== 'idle' || collectionMessage) && ( // Show if collecting or if there's a message
                                  <div className="pt-1">
                                     <span className={cn(
                                         "text-xs px-1.5 py-0.5 rounded",
                                         (collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical') && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
-                                        collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
-                                        collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50"
+                                        collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50", // Only color if status is success
+                                        collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50", // Only color if status is error
+                                        // Default gray if message exists but status is idle
+                                        collectionStatus === 'idle' && collectionMessage && "text-muted-foreground bg-muted/50"
                                     )}>
+                                        {/* Show message if available, otherwise show status */}
                                         {collectionMessage || collectionStatus.replace('-', ' ')}
                                     </span>
                                  </div>
                             )}
-                            <p className="text-xs text-muted-foreground pt-1">Note: Historical collection might require multiple clicks if the range exceeds the API limit (1000 candles). Consider smaller ranges.</p>
+                            <p className="text-xs text-muted-foreground pt-1">Note: Historical collection automatically fetches data in chunks. Ensure RLS policies allow upserts.</p>
                         </div>
 
                          <Separator className="my-2" />
@@ -350,14 +356,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             <p className="text-xs text-muted-foreground">
                                 Technical indicators for BTC/USDT (1h interval).
                             </p>
-                             <span className="text-xs text-muted-foreground">
+                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 Last updated:{" "}
                                 {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ? (
                                     <Skeleton className="h-3 w-14 inline-block bg-muted" />
                                 ) : (
                                     indicators.lastUpdated
                                 )}
-                                (Auto ~5s)
+                                {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                             </span>
                          </div>
                         <Table>
@@ -389,7 +395,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             </TableBody>
                         </Table>
                         <p className="text-xs text-muted-foreground mt-2">
-                            Note: Indicator calculations are simplified placeholders.
+                            Note: Indicator calculations are simplified placeholders. Auto-refreshes ~5s.
                         </p>
                     </AccordionContent>
                 </AccordionItem>
