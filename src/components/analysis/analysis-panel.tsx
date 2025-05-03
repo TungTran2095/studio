@@ -30,7 +30,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch"; // Import Switch
+import { Switch } from "@/components/ui/switch";
+// Import the new server action
+import { startLstmTrainingJob } from '@/actions/train-lstm';
+import type { LstmTrainingConfig, LstmTrainingResult } from '@/actions/train-lstm';
 
 
 interface AnalysisPanelProps {
@@ -40,7 +43,7 @@ interface AnalysisPanelProps {
 
 // Type for collection status
 type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error';
-// Type for LSTM training status
+// Type for LSTM training status (client-side view)
 type LstmTrainingStatus = 'idle' | 'training' | 'completed' | 'error';
 
 // Initial state for indicators
@@ -53,11 +56,11 @@ const initialIndicators: IndicatorsData = {
     lastUpdated: "N/A",
 };
 
-// Placeholder type for validation results
-type ValidationResult = { model: string; metric: string; value: string | number };
+// Placeholder type for validation results - matches LstmTrainingResult structure
+type ValidationResult = { metric: string; value: string | number };
 
-// Default LSTM Configuration
-const defaultLstmConfig = {
+// Default LSTM Configuration - matches LstmTrainingConfig structure
+const defaultLstmConfig: LstmTrainingConfig = {
   units: 50,
   layers: 2,
   timesteps: 60,
@@ -219,11 +222,11 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     }
   };
 
-   // --- LSTM Training Logic (Simulated) ---
+   // --- LSTM Training Logic (Triggers Server Action) ---
    const handleStartLstmTraining = async () => {
     if (lstmTrainingStatus === 'training') return;
 
-    const trainingConfig = useDefaultLstmConfig
+    const config: LstmTrainingConfig = useDefaultLstmConfig
       ? defaultLstmConfig
       : {
           units: lstmUnits,
@@ -235,48 +238,59 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
           epochs: lstmEpochs,
         };
 
-    console.log(`[AnalysisPanel] Starting LSTM Training (Simulated) with ${useDefaultLstmConfig ? 'DEFAULT' : 'CUSTOM'} config:`, {
-        ...trainingConfig,
-        trainTestSplit: trainTestSplit[0],
-    });
+    const input = {
+        config: config,
+        trainTestSplitRatio: trainTestSplit[0] / 100, // Convert percentage to ratio
+    };
+
+    console.log(`[AnalysisPanel] Requesting LSTM Training Job with ${useDefaultLstmConfig ? 'DEFAULT' : 'CUSTOM'} config:`, input);
 
     setLstmTrainingStatus('training');
-    setLstmTrainingMessage(`Training LSTM model (${trainingConfig.epochs} epochs)...`);
+    setLstmTrainingMessage(`Requesting training job (${config.epochs} epochs)...`);
     setLstmValidationResults([]); // Clear previous results
 
-    // --- SIMULATION ---
-    // Replace this with your actual call to the backend (Server Action or API)
-    // The backend would handle fetching data, preprocessing, training, and returning results.
-    await new Promise(resolve => setTimeout(resolve, 5000)); // Simulate training time
+    try {
+        // --- Call the Server Action ---
+        const result = await startLstmTrainingJob(input);
+        // --- END Call ---
 
-    // Simulate success or error
-    const success = Math.random() > 0.2; // 80% success rate
-
-    if (success) {
-        setLstmTrainingStatus('completed');
-        const simulatedRMSE = (Math.random() * 50 + 10).toFixed(4); // Simulate RMSE
-        const simulatedMAE = (Math.random() * 40 + 8).toFixed(4); // Simulate MAE
-        setLstmTrainingMessage('LSTM Training Completed Successfully.');
-        setLstmValidationResults([
-            { model: 'LSTM', metric: 'RMSE', value: simulatedRMSE },
-            { model: 'LSTM', metric: 'MAE', value: simulatedMAE },
-        ]);
-        toast({ title: "LSTM Training", description: "Training completed successfully." });
-    } else {
-        setLstmTrainingStatus('error');
-        const errorMsg = 'Simulated training failure.';
-        setLstmTrainingMessage(`Error: ${errorMsg}`);
-        toast({ title: "LSTM Training Error", description: errorMsg, variant: "destructive" });
-    }
-    // --- END SIMULATION ---
-
-    // Reset status after a delay
-    setTimeout(() => {
-        if (lstmTrainingStatus !== 'training') { // Avoid resetting if a new training started
-             setLstmTrainingStatus('idle');
-             setLstmTrainingMessage('');
+        if (result.success) {
+            setLstmTrainingStatus('completed');
+            setLstmTrainingMessage(result.message || 'LSTM Training Job Completed Successfully.');
+            // Map results to the format expected by the table
+            const validationData: ValidationResult[] = [];
+            if (result.results?.rmse) {
+                validationData.push({ model: 'LSTM', metric: 'RMSE', value: result.results.rmse.toFixed(4) });
+            }
+            if (result.results?.mae) {
+                validationData.push({ model: 'LSTM', metric: 'MAE', value: result.results.mae.toFixed(4) });
+            }
+            setLstmValidationResults(validationData);
+            toast({ title: "LSTM Training", description: result.message });
+            console.log("[AnalysisPanel] LSTM Training Job successful:", result);
+        } else {
+            setLstmTrainingStatus('error');
+            const errorMsg = result.message || 'Backend training job failed.';
+            setLstmTrainingMessage(`Error: ${errorMsg}`);
+            toast({ title: "LSTM Training Error", description: errorMsg, variant: "destructive" });
+            console.error("[AnalysisPanel] LSTM Training Job failed:", result);
         }
-    }, 8000);
+    } catch (error: any) {
+        setLstmTrainingStatus('error');
+        const errorMsg = error.message || 'An unexpected error occurred.';
+        setLstmTrainingMessage(`Error: ${errorMsg}`);
+        toast({ title: "Training Request Error", description: errorMsg, variant: "destructive" });
+        console.error("[AnalysisPanel] Error calling startLstmTrainingJob action:", error);
+    } finally {
+        // Reset status after a delay (adjust as needed)
+        setTimeout(() => {
+            if (lstmTrainingStatus !== 'training') { // Avoid resetting if a new training started
+                 setLstmTrainingStatus('idle');
+                 // Keep the final message for a bit longer? Or clear it?
+                 // setLstmTrainingMessage('');
+            }
+        }, 8000);
+    }
    };
 
 
@@ -511,7 +525,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                 </span>
                                             </div>
                                          )}
-                                        <p className="text-xs text-muted-foreground pt-1">Note: Training runs on a separate backend (not implemented here). This UI simulates the process.</p>
+                                        <p className="text-xs text-muted-foreground pt-1">Note: This triggers a (simulated) backend job. Actual Python/TensorFlow training runs externally.</p>
                                     </div>
 
                                      {/* Model Validation Results */}
