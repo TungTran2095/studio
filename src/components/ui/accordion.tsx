@@ -26,12 +26,12 @@ const AccordionTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
-    {/* The Trigger itself is a button, but we render its content without an inner button tag */}
+    {/* The Trigger itself is a button */}
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
-        // Use w-full to allow inner content (like absolute positioned buttons) to align correctly
-        "flex flex-1 items-center justify-between py-2 font-medium transition-all hover:no-underline [&[data-state=open]>svg]:rotate-180 w-full", // Adjusted padding, removed underline hover, added w-full
+        // Use w-full, remove default padding, font-medium, hover:no-underline
+        "flex flex-1 items-center justify-between transition-all [&[data-state=open]>svg]:rotate-180 w-full",
         className
       )}
       {...props}

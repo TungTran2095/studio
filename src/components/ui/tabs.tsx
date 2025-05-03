@@ -14,7 +14,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      // Removed h-10, p-1 for more flexibility when used in grids
+      // Added flex shrink-0, allow overrides for grid/flex behavior
       "inline-flex items-center justify-center rounded-md bg-muted text-muted-foreground",
       className
     )}
@@ -46,7 +46,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", // Removed mt-2 for more control
       className
     )}
     {...props}

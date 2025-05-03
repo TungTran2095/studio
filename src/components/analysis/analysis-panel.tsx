@@ -15,17 +15,12 @@ import { fetchTechnicalIndicators } from '@/actions/fetch-indicators';
 import type { IndicatorsData } from '@/actions/fetch-indicators';
 import { collectBinanceOhlcvData } from '@/actions/collect-data'; // Import the new collect action
 import { useToast } from '@/hooks/use-toast';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover
 import { Calendar } from "@/components/ui/calendar"; // Import Calendar component
-import { format, startOfDay, subYears } from 'date-fns'; // Import date-fns for formatting and date manipulation
+import { format } from 'date-fns'; // Import date-fns for formatting and date manipulation
 import type { DateRange } from "react-day-picker"; // Import DateRange type
 import { Label } from "@/components/ui/label"; // Import Label
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs components
 
 
 interface AnalysisPanelProps {
@@ -34,7 +29,7 @@ interface AnalysisPanelProps {
 }
 
 // Type for collection status
-type CollectionStatus = 'idle' | 'collecting-latest' | 'collecting-historical' | 'success' | 'error';
+type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error'; // Removed 'collecting-latest'
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -51,11 +46,11 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [isFetchingIndicators, setIsFetchingIndicators] = useState(false);
   const [collectionStatus, setCollectionStatus] = useState<CollectionStatus>('idle');
   const [collectionMessage, setCollectionMessage] = useState<string>('');
+  const [activeTab, setActiveTab] = useState("ensemble"); // Default tab
   // State for date range picker
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const { toast } = useToast();
   const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
-  const currentYear = new Date().getFullYear(); // Get current year for calendar range
 
   // --- Indicator Fetching Logic ---
   const fetchIndicators = useCallback(async () => {
@@ -89,64 +84,77 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFetchingIndicators, toast]); // Removed fetchIndicators
 
-  // Effect for indicators interval
+  // Effect for indicators interval - Only run if indicators tab is active or initially
   useEffect(() => {
-    fetchIndicators(); // Fetch on mount
-    if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current);
-    indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 5000); // Refresh every 5 seconds
-    return () => { if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current); };
+    const startFetching = () => {
+        fetchIndicators(); // Fetch on start/switch
+        if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current);
+        indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 5000); // Refresh every 5 seconds
+    };
+
+    const stopFetching = () => {
+        if (indicatorsIntervalIdRef.current) {
+            clearInterval(indicatorsIntervalIdRef.current);
+            indicatorsIntervalIdRef.current = null;
+            console.log("[AnalysisPanel] Indicator refresh stopped.");
+        }
+    };
+
+    // Start fetching if the indicators tab is active
+    if (activeTab === 'indicators') {
+         console.log("[AnalysisPanel] Indicators tab active, starting refresh.");
+         startFetching();
+    } else {
+         // Stop fetching if another tab is active
+         stopFetching();
+         // Optionally fetch once when panel expands if not on indicators tab
+         if (isExpanded && indicators.lastUpdated === "N/A") {
+             console.log("[AnalysisPanel] Fetching initial indicators for non-active tab.");
+             fetchIndicators();
+         }
+    }
+
+    // Cleanup on component unmount or tab change
+    return () => stopFetching();
+
+    // Re-run effect when activeTab changes or fetchIndicators changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchIndicators]);
+  }, [activeTab, fetchIndicators, isExpanded]);
 
 
   // --- Data Collection Logic ---
-  const handleCollectData = async (type: 'latest' | 'historical') => {
-     const isCollecting = collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical';
-    if (isCollecting) return; // Prevent multiple clicks
+  const handleCollectData = async () => { // Only handles historical now
+    if (collectionStatus === 'collecting-historical') return; // Prevent multiple clicks
 
-    let startTimeMs: number | undefined = undefined;
-    let endTimeMs: number | undefined = undefined;
-
-    if (type === 'historical') {
-        if (!dateRange?.from || !dateRange?.to) {
-            toast({ title: "Date Range Required", description: "Please select a start and end date for historical data.", variant: "destructive" });
-            return;
-        }
-         // Set startTime to the beginning of the 'from' day
-         startTimeMs = startOfDay(dateRange.from).getTime();
-         // Set endTime to the *end* of the 'to' day (just before the next day starts)
-         endTimeMs = startOfDay(dateRange.to).getTime() + (24 * 60 * 60 * 1000) - 1; // End of the selected day
-         console.log(`[AnalysisPanel] Collecting historical data from ${new Date(startTimeMs).toISOString()} to ${new Date(endTimeMs).toISOString()}`);
-         setCollectionStatus('collecting-historical');
-         setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}... (this may take a while)`);
-    } else {
-        // Logic for 'latest' data collection (currently not triggered by UI)
-        console.log("[AnalysisPanel] Collecting latest data...");
-         setCollectionStatus('collecting-latest');
-         setCollectionMessage('Collecting latest 1m data...');
+    if (!dateRange?.from || !dateRange?.to) {
+        toast({ title: "Date Range Required", description: "Please select a start and end date for historical data.", variant: "destructive" });
+        return;
     }
 
+     // Set startTime to the beginning of the 'from' day
+     const startTimeMs = dateRange.from.getTime();
+     // Set endTime to the *end* of the 'to' day (just before the next day starts)
+     const endTimeMs = dateRange.to.getTime() + (24 * 60 * 60 * 1000) - 1; // End of the selected day
 
-    console.log(`[AnalysisPanel] Triggering ${type} data collection...`);
+     console.log(`[AnalysisPanel] Collecting historical data from ${new Date(startTimeMs).toISOString()} to ${new Date(endTimeMs).toISOString()}`);
+     setCollectionStatus('collecting-historical');
+     setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}... (this may take a while)`);
 
     try {
-      // Call the server action - pass time range if historical
-      // The action 'collectBinanceOhlcvData' already handles chunking internally for historical data.
       const result = await collectBinanceOhlcvData({
         symbol: 'BTCUSDT',
         interval: '1m',
-        limit: 1000, // Limit per API request (action handles multiple requests)
-        ...(type === 'historical' && { startTime: startTimeMs, endTime: endTimeMs }),
+        limit: 1000,
+        startTime: startTimeMs,
+        endTime: endTimeMs,
       });
 
       if (result.success) {
         setCollectionStatus('success');
         setCollectionMessage(result.message || 'Collection successful.');
-        // Use totalFetchedCount and totalInsertedCount from the action result
         toast({ title: "Data Collection", description: `${result.message} (Fetched: ${result.totalFetchedCount ?? 0}, Saved: ${result.totalInsertedCount ?? 0})` });
         console.log("[AnalysisPanel] Data collection successful:", result.message);
-        // Clear date range after successful historical collection
-        // if (type === 'historical') setDateRange(undefined);
+        // setDateRange(undefined); // Clear date range? Optional.
       } else {
         setCollectionStatus('error');
         setCollectionMessage(result.message || 'Collection failed.');
@@ -160,28 +168,27 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       toast({ title: "Collection Error", description: errorMsg, variant: "destructive" });
       console.error("[AnalysisPanel] Unexpected error during data collection:", error);
     } finally {
-       // Reset status immediately after completion (success or error)
-       // Removed the setTimeout to allow immediate interaction after completion.
+       // Reset status immediately after completion
        setCollectionStatus('idle');
-       // Keep the message briefly for user feedback
+       // Keep the message briefly
        setTimeout(() => {
-           if (collectionStatus !== 'collecting-latest' && collectionStatus !== 'collecting-historical') {
+           if (collectionStatus !== 'collecting-historical') {
                setCollectionMessage('');
            }
-        }, 5000); // Keep message for 5 seconds
+        }, 5000);
     }
   };
 
 
   return (
     <Card className={cn(
-      "flex flex-col h-full w-full overflow-hidden border-none shadow-none bg-card" // Use border-none and shadow-none as border is handled by parent div
+      "flex flex-col h-full w-full overflow-hidden border-none shadow-none bg-card"
     )}>
       {/* Header */}
       <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
         <CardTitle className={cn(
-          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out whitespace-nowrap overflow-hidden", // Added whitespace-nowrap and overflow-hidden
-          !isExpanded && "opacity-0 w-0" // Keep hiding when collapsed
+          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out whitespace-nowrap overflow-hidden",
+          !isExpanded && "opacity-0 w-0"
         )}>
           Analysis Tools
         </CardTitle>
@@ -193,29 +200,33 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
      {/* Content Area */}
       <CardContent className={cn(
-        "flex-1 p-3 overflow-hidden flex flex-col gap-4 transition-opacity duration-300 ease-in-out",
-        // Hide content based on isExpanded state
+        "flex-1 p-0 overflow-hidden flex flex-col transition-opacity duration-300 ease-in-out", // Removed padding p-3, added flex-col
         !isExpanded && "opacity-0 p-0"
       )}>
         {isExpanded && (
-          <ScrollArea className="h-full">
-            {/* Use Accordion for collapsible sections */}
-            <Accordion type="multiple" defaultValue={["item-1", "item-3"]} className="w-full space-y-1">
+           // Use Tabs component
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+            <TabsList className="grid w-full grid-cols-3 h-9 flex-shrink-0 rounded-none border-b border-border bg-transparent p-0">
+              <TabsTrigger value="ensemble" className="text-xs h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">
+                  <BrainCircuit className="h-3.5 w-3.5 mr-1" /> Ensemble
+              </TabsTrigger>
+              <TabsTrigger value="rl" className="text-xs h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">
+                  <Bot className="h-3.5 w-3.5 mr-1" /> RL
+              </TabsTrigger>
+              <TabsTrigger value="indicators" className="text-xs h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">
+                  <BarChart className="h-3.5 w-3.5 mr-1" /> Indicators
+              </TabsTrigger>
+            </TabsList>
 
-                {/* Section 1: Ensemble Learning (with Data Collection) */}
-                <AccordionItem value="item-1" className="border-b-0">
-                    <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md">
-                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <BrainCircuit className="h-4 w-4 text-primary" />
-                            Ensemble Learning
-                        </h4>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-2 pt-1 pb-2 space-y-3">
+            {/* Wrap TabsContent in a ScrollArea */}
+            <ScrollArea className="flex-1 overflow-y-auto">
+               <div className="p-3 space-y-4"> {/* Add padding back inside ScrollArea */}
+                    <TabsContent value="ensemble" className="mt-0 space-y-3">
                          {/* Data Collection Section */}
                         <div className="space-y-2">
                              <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
                             {/* Historical Data Collection */}
-                             <div className="flex flex-wrap items-center gap-2"> {/* Use flex-wrap */}
+                             <div className="flex flex-wrap items-center gap-2">
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <Button
@@ -223,12 +234,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                         variant={"outline"}
                                         size="sm"
                                         className={cn(
-                                            "w-[260px] justify-start text-left font-normal h-7 text-xs", // Fixed width for consistency
+                                            "w-[260px] justify-start text-left font-normal h-7 text-xs",
                                             !dateRange && "text-muted-foreground"
                                         )}
-                                         disabled={collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical'}
+                                         disabled={collectionStatus === 'collecting-historical'}
                                         >
-                                        <CalendarIconLucide className="mr-2 h-3 w-3" /> {/* Use renamed import */}
+                                        <CalendarIconLucide className="mr-2 h-3 w-3" />
                                         {dateRange?.from ? (
                                             dateRange.to ? (
                                             <>
@@ -250,7 +261,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                             defaultMonth={dateRange?.from}
                                             selected={dateRange}
                                             onSelect={setDateRange}
-                                            numberOfMonths={2} // Show two months
+                                            numberOfMonths={2}
                                             disabled={(date) => date > new Date()}
                                         />
                                     </PopoverContent>
@@ -259,8 +270,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     size="sm"
                                     variant="outline"
                                     className="text-xs h-7"
-                                    onClick={() => handleCollectData('historical')}
-                                    disabled={collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical' || !dateRange?.from || !dateRange?.to}
+                                    onClick={handleCollectData}
+                                    disabled={collectionStatus === 'collecting-historical' || !dateRange?.from || !dateRange?.to}
                                 >
                                     {(collectionStatus === 'collecting-historical') ? (
                                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -271,22 +282,19 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 </Button>
                              </div>
                             {/* Status Indicator */}
-                            {(collectionStatus !== 'idle' || collectionMessage) && ( // Show if collecting or if there's a message
+                            {(collectionStatus !== 'idle' || collectionMessage) && (
                                  <div className="pt-1">
                                     <span className={cn(
                                         "text-xs px-1.5 py-0.5 rounded",
-                                        (collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical') && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
-                                        collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50", // Only color if status is success
-                                        collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50", // Only color if status is error
-                                        // Default gray if message exists but status is idle
+                                        collectionStatus === 'collecting-historical' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
+                                        collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                                        collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
                                         collectionStatus === 'idle' && collectionMessage && "text-muted-foreground bg-muted/50"
                                     )}>
-                                        {/* Show message if available, otherwise show status */}
                                         {collectionMessage || collectionStatus.replace('-', ' ')}
                                     </span>
                                  </div>
                             )}
-                            {/* Updated Note */}
                              <p className="text-xs text-muted-foreground pt-1">Note: Historical collection automatically fetches data in chunks. Ensure RLS policies allow upserts.</p>
                         </div>
 
@@ -296,53 +304,16 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             Configure and run ensemble learning models. (Placeholder)
                         </p>
                         <Button size="sm" variant="outline" className="text-xs h-6" disabled>Configure Model</Button>
-                    </AccordionContent>
-                </AccordionItem>
+                    </TabsContent>
 
-                {/* Section 2: Reinforcement Learning */}
-                <AccordionItem value="item-2" className="border-b-0">
-                    <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md">
-                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <Bot className="h-4 w-4 text-primary" />
-                            Reinforcement Learning
-                        </h4>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-2 pt-1 pb-2">
+                    <TabsContent value="rl" className="mt-0 space-y-2">
                         <p className="text-xs text-muted-foreground mb-2">
                             Train and deploy RL agents for trading strategies. (Placeholder)
                         </p>
                         <Button size="sm" variant="outline" className="text-xs h-6" disabled>Train Agent</Button>
-                    </AccordionContent>
-                </AccordionItem>
+                    </TabsContent>
 
-                {/* Section 3: Indicators */}
-                <AccordionItem value="item-3" className="border-b-0">
-                    {/* Make the trigger container relative and add group class */}
-                     <div className="relative group">
-                         <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md w-full">
-                            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                <BarChart className="h-4 w-4 text-primary" />
-                                BTC/USDT Indicators
-                            </h4>
-                        </AccordionTrigger>
-                         {/* Separate Refresh Button, positioned absolutely */}
-                         <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                                e.stopPropagation(); // Prevent accordion toggle
-                                fetchIndicators();
-                            }}
-                            disabled={isFetchingIndicators}
-                            className="h-5 w-5 text-muted-foreground hover:text-foreground absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" // Positioned absolute within the relative parent
-                            title="Refresh Indicators"
-                        >
-                            <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
-                            <span className="sr-only">Refresh Indicators</span>
-                        </Button>
-                    </div>
-
-                    <AccordionContent className="px-2 pt-1 pb-2">
+                    <TabsContent value="indicators" className="mt-0 space-y-2">
                          <div className="flex justify-between items-center mb-2">
                             <p className="text-xs text-muted-foreground">
                                 Technical indicators for BTC/USDT (1h interval).
@@ -350,13 +321,27 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                              <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 Last updated:{" "}
                                 {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") ? (
-                                    <span className="inline-block">
-                                        <Skeleton className="h-3 w-14 inline-block bg-muted" />
-                                    </span>
+                                     <Skeleton className="h-3 w-14 inline-block bg-muted" />
                                 ) : (
                                     indicators.lastUpdated
                                 )}
-                                {isFetchingIndicators && indicators["Moving Average (50)"] !== "Loading..." && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                                {/* Show loading spinner only when actively fetching */}
+                                {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                                {/* Manual Refresh Button */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        fetchIndicators();
+                                    }}
+                                    disabled={isFetchingIndicators}
+                                    className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                                    title="Refresh Indicators"
+                                >
+                                    <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
+                                    <span className="sr-only">Refresh Indicators</span>
+                                </Button>
                             </span>
                          </div>
                         <Table>
@@ -388,12 +373,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             </TableBody>
                         </Table>
                         <p className="text-xs text-muted-foreground mt-2">
-                            Note: Indicator calculations are simplified placeholders. Auto-refreshes ~5s.
+                            Note: Indicator calculations are simplified placeholders. Auto-refreshes ~5s when tab is active.
                         </p>
-                    </AccordionContent>
-                </AccordionItem>
-            </Accordion>
-           </ScrollArea>
+                    </TabsContent>
+                </div>
+            </ScrollArea>
+          </Tabs>
         )}
       </CardContent>
     </Card>
