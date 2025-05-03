@@ -54,7 +54,7 @@ function Calendar({
           "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
         day_today: "bg-accent text-accent-foreground",
         day_outside:
-          "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
+          "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground", // Added opacity-50
         day_disabled: "text-muted-foreground opacity-50",
         day_range_middle:
           "aria-selected:bg-accent aria-selected:text-accent-foreground",
@@ -94,16 +94,17 @@ function Calendar({
               {/* Add onPointerDown to prevent Popover closure */}
               <SelectTrigger
                  onPointerDown={(e) => e.preventDefault()} // Prevent Popover closing
-                 className="pr-1.5 focus:ring-0 h-7 text-xs"
+                 className="pr-1.5 focus:ring-0 h-7 text-xs w-fit" // Use w-fit for auto width
+                 aria-label={rest.name} // Add aria-label for accessibility
               >
                 <SelectValue>{selected?.props?.children}</SelectValue>
               </SelectTrigger>
               <SelectContent position="popper">
                  {/* Use ScrollArea for long year lists */}
                  <ScrollArea className={cn(
-                   "h-auto max-h-60", // Adjust max height as needed
-                   // Apply only to year dropdown (assuming year dropdown uses specific name or class)
-                    rest.name === "years" ? "h-48" : "" // Example: Check name prop
+                   "h-auto", // Auto height for scroll area
+                   // Apply max height only to year dropdown
+                    rest.name === "years" ? "max-h-48" : "max-h-60" // Shorter for years, taller for months
                   )}>
                     {options.map((option, id: number) => (
                       <SelectItem
@@ -126,3 +127,4 @@ function Calendar({
 Calendar.displayName = "Calendar"
 
 export { Calendar }
+
