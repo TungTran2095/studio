@@ -438,7 +438,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                                     {/* LSTM Model Configuration */}
                                     <div className="space-y-3 border-t border-border pt-3">
-                                         {/* Config Toggle Switch */}
+                                         {/* Config Toggle Switch - Inverted logic */}
                                         <div className="flex items-center justify-between">
                                             <Label className="text-xs font-medium flex items-center gap-1">
                                                  {useDefaultLstmConfig ? <Settings className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}
@@ -446,18 +446,19 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                             </Label>
                                             <div className="flex items-center space-x-2">
                                                 <Label htmlFor="lstm-config-switch" className="text-xs text-muted-foreground">
-                                                    {useDefaultLstmConfig ? "Default" : "Custom"}
+                                                     {useDefaultLstmConfig ? "Default" : "Custom"}
                                                 </Label>
                                                 <Switch
                                                     id="lstm-config-switch"
-                                                    checked={!useDefaultLstmConfig} // Invert logic: checked means custom
-                                                    onCheckedChange={(checked) => setUseDefaultLstmConfig(!checked)}
+                                                    checked={useDefaultLstmConfig} // Checked means default
+                                                    onCheckedChange={setUseDefaultLstmConfig} // Direct set
                                                     disabled={lstmTrainingStatus === 'training'}
                                                 />
                                             </div>
                                         </div>
 
                                         {/* Parameter Inputs (Conditionally Disabled) */}
+                                         {/* Apply disabled styles when useDefaultLstmConfig is true */}
                                         <div className={cn("grid grid-cols-2 gap-x-4 gap-y-2 transition-opacity", useDefaultLstmConfig && "opacity-50 pointer-events-none")}>
                                             <div className="space-y-1">
                                                 <Label htmlFor="lstm-units" className="text-xs">Units/Layer</Label>
