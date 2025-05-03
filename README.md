@@ -35,31 +35,35 @@ To run this project, you will need to add the following environment variables to
         *   Click **Review**, then **Save policy**.
     *   **Policy 2: Enable Insert Access (Development vs. Production):**
         *   Click **New Policy** again for the `message_history` table.
-        *   **For Development (No Auth):** Choose the **Enable insert for all users** template. This allows anyone to insert data, making development easier without setting up full authentication. The `WITH CHECK` clause should be `(true)`.
-            ```sql
-            -- Policy name: Allow public insert access (DEV)
-            CREATE POLICY "Allow public insert access (DEV)"
-            ON "public"."message_history"
-            AS PERMISSIVE FOR INSERT
-            TO public -- Allows anonymous users
-            WITH CHECK (true);
-            ```
-        *   **For Production (Requires Auth):** If you implement Supabase Authentication, use the **Enable insert for authenticated users only** template. This ensures only logged-in users can save messages.
+        *   **For Development (No Auth):** If the UI template **"Enable insert for all users"** is not available, use the **SQL Editor**:
+            *   Navigate to the **SQL Editor** in the left sidebar of your Supabase dashboard.
+            *   Click **New query**.
+            *   Paste the following SQL command:
+                ```sql
+                -- Policy name: Allow public insert access (DEV)
+                CREATE POLICY "Allow public insert access (DEV)"
+                ON "public"."message_history"
+                AS PERMISSIVE FOR INSERT
+                TO public -- Allows anonymous users (necessary for non-authenticated chat saving)
+                WITH CHECK (true);
+                ```
+            *   Click **Run**. This creates the policy allowing anyone (including your Next.js backend using the anon key) to insert messages. This is suitable for development without user login.
+        *   **For Production (Requires Auth):** If you implement Supabase Authentication later, you should **delete** the public insert policy above and use the **Enable insert for authenticated users only** template. This ensures only logged-in users can save messages. The policy would look like this:
             ```sql
             -- Policy name: Allow authenticated insert access (PROD)
             CREATE POLICY "Allow authenticated insert access (PROD)"
             ON "public"."message_history"
             AS PERMISSIVE FOR INSERT
             TO authenticated -- Only allows logged-in users
-            WITH CHECK (true); -- Or add specific checks like auth.uid() = user_id
+            WITH CHECK (auth.uid() IS NOT NULL); -- Example check: Ensure user is logged in
             ```
-        *   **Choose the appropriate template based on your current setup.** Start with the "public" insert policy for development if you haven't implemented login yet.
-        *   Click **Review**, then **Save policy**.
+        *   **Choose the appropriate method based on your current setup.** Start with the "public" insert policy (using the SQL Editor if needed) for development if you haven't implemented login yet.
 
     **Troubleshooting RLS:** If you still get "Permission denied. Check RLS policies." errors:
         *   Double-check in the Supabase dashboard (**Authentication > Policies**) that *both* read and insert policies exist and are enabled for `message_history`.
-        *   Ensure the **target role** for the insert policy matches your needs (`public` for development without auth, `authenticated` for production with auth).
-        *   Verify the `WITH CHECK` expression is correct (usually `true` for basic access).
+        *   Ensure the **target role** for the insert policy is `public` for development without auth, or `authenticated` for production with auth.
+        *   Verify the `WITH CHECK` expression is correct (usually `true` for basic public access, or a condition involving `auth.uid()` for authenticated access).
+        *   Refresh your application after changing policies.
 
 ### Google AI (Optional for Genkit/AI Features)
 
@@ -98,4 +102,6 @@ To use the Binance asset summary and trading features:
 *   **TradingView Chart**: Displays the BTC/USDT price chart.
 *   **Binance Account Panel**: Allows users to input Binance API keys to view asset summaries (BTC/USDT) and recent trade history (BTC/USDT).
 *   **YINSEN Chatbot**: An AI assistant integrated with Binance (using provided keys) to answer questions and potentially execute trades (Buy/Sell Market/Limit orders for BTC/USDT). Chat history is stored in Supabase.
-*   **Analysis Panel**: Placeholder panel for future analysis tools.
+*   **Analysis Panel**: Displays real-time BTC/USDT technical indicators and includes placeholders for future analysis tools.
+
+```
