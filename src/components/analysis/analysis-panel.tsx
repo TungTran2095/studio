@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2 } from 'lucide-react'; // Added DatabaseZap, Loader2
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, CalendarIcon } from 'lucide-react'; // Added DatabaseZap, Loader2, CalendarIcon
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -21,6 +21,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover
+import { Calendar } from "@/components/ui/calendar"; // Import Calendar
+import { format, startOfDay } from 'date-fns'; // Import date-fns for formatting
+import type { DateRange } from "react-day-picker"; // Import DateRange type
+import { Label } from "@/components/ui/label"; // Import Label
+
 
 interface AnalysisPanelProps {
   isExpanded: boolean;
@@ -28,7 +34,7 @@ interface AnalysisPanelProps {
 }
 
 // Type for collection status
-type CollectionStatus = 'idle' | 'collecting' | 'success' | 'error';
+type CollectionStatus = 'idle' | 'collecting-latest' | 'collecting-historical' | 'success' | 'error';
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -45,6 +51,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [isFetchingIndicators, setIsFetchingIndicators] = useState(false);
   const [collectionStatus, setCollectionStatus] = useState<CollectionStatus>('idle');
   const [collectionMessage, setCollectionMessage] = useState<string>('');
+  // State for date range picker
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const { toast } = useToast();
   const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -91,22 +99,50 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
 
   // --- Data Collection Logic ---
-  const handleCollectData = async () => {
-    if (collectionStatus === 'collecting') return; // Prevent multiple clicks
+  const handleCollectData = async (type: 'latest' | 'historical') => {
+     const isCollecting = collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical';
+    if (isCollecting) return; // Prevent multiple clicks
 
-    setCollectionStatus('collecting');
-    setCollectionMessage('Collecting latest 1m data...');
-    console.log("[AnalysisPanel] Triggering data collection...");
+    let startTimeMs: number | undefined = undefined;
+    let endTimeMs: number | undefined = undefined;
+
+    if (type === 'historical') {
+        if (!dateRange?.from || !dateRange?.to) {
+            toast({ title: "Date Range Required", description: "Please select a start and end date for historical data.", variant: "destructive" });
+            return;
+        }
+         // Set startTime to the beginning of the 'from' day
+         startTimeMs = startOfDay(dateRange.from).getTime();
+         // Set endTime to the *end* of the 'to' day (just before the next day starts)
+         endTimeMs = startOfDay(dateRange.to).getTime() + (24 * 60 * 60 * 1000) - 1; // End of the selected day
+         console.log(`[AnalysisPanel] Collecting historical data from ${new Date(startTimeMs).toISOString()} to ${new Date(endTimeMs).toISOString()}`);
+         setCollectionStatus('collecting-historical');
+         setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}...`);
+    } else {
+        console.log("[AnalysisPanel] Collecting latest data...");
+         setCollectionStatus('collecting-latest');
+         setCollectionMessage('Collecting latest 1m data...');
+    }
+
+
+    console.log(`[AnalysisPanel] Triggering ${type} data collection...`);
 
     try {
-      // Call the server action - fetch default (100 records)
-      const result = await collectBinanceOhlcvData();
+      // Call the server action - pass time range if historical
+      const result = await collectBinanceOhlcvData({
+        symbol: 'BTCUSDT',
+        interval: '1m',
+        limit: 1000, // Always fetch max limit per request for efficiency, especially historical
+        ...(type === 'historical' && { startTime: startTimeMs, endTime: endTimeMs }),
+      });
 
       if (result.success) {
         setCollectionStatus('success');
         setCollectionMessage(result.message || 'Collection successful.');
-        toast({ title: "Data Collection", description: result.message });
+        toast({ title: "Data Collection", description: `${result.message} (Fetched: ${result.fetchedCount}, Saved: ${result.insertedCount})` });
         console.log("[AnalysisPanel] Data collection successful:", result.message);
+        // Clear date range after successful historical collection
+        // if (type === 'historical') setDateRange(undefined);
       } else {
         setCollectionStatus('error');
         setCollectionMessage(result.message || 'Collection failed.');
@@ -120,8 +156,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       toast({ title: "Collection Error", description: errorMsg, variant: "destructive" });
       console.error("[AnalysisPanel] Unexpected error during data collection:", error);
     } finally {
-      // Optionally reset status after a delay?
-      // setTimeout(() => setCollectionStatus('idle'), 3000);
+       // Optionally reset status after a delay only on success/error, not while collecting
+        setTimeout(() => {
+             if (collectionStatus !== 'collecting-latest' && collectionStatus !== 'collecting-historical') {
+                 setCollectionStatus('idle');
+                 setCollectionMessage('');
+             }
+        }, 5000); // Keep message for 5 seconds
     }
   };
 
@@ -162,40 +203,101 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             Ensemble Learning
                         </h4>
                     </AccordionTrigger>
-                    <AccordionContent className="px-2 pt-1 pb-2 space-y-2">
-                        {/* Data Collection Section */}
-                        <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">
-                                Collect BTC/USDT 1m OHLCV data into Supabase.
-                            </p>
+                    <AccordionContent className="px-2 pt-1 pb-2 space-y-3">
+                         {/* Data Collection Section */}
+                        <div className="space-y-2">
+                             <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
+                            {/* Latest Data Button */}
                             <div className="flex items-center gap-2">
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    className="text-xs h-7" // Slightly larger button
-                                    onClick={handleCollectData}
-                                    disabled={collectionStatus === 'collecting'}
+                                    className="text-xs h-7"
+                                    onClick={() => handleCollectData('latest')}
+                                    disabled={collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical'}
                                 >
-                                    {collectionStatus === 'collecting' ? (
+                                    {(collectionStatus === 'collecting-latest') ? (
                                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                                     ) : (
                                         <DatabaseZap className="h-3 w-3 mr-1" />
                                     )}
-                                    Collect Latest Data
+                                    Collect Latest (1000)
                                 </Button>
-                                {/* Status Indicator */}
-                                {collectionStatus !== 'idle' && (
-                                     <span className={cn(
-                                         "text-xs px-1.5 py-0.5 rounded",
-                                         collectionStatus === 'collecting' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
-                                         collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
-                                         collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50"
-                                     )}>
-                                        {collectionMessage}
-                                     </span>
-                                )}
                             </div>
+
+                            {/* Historical Data Collection */}
+                             <div className="flex items-center gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                        id="date"
+                                        variant={"outline"}
+                                        size="sm"
+                                        className={cn(
+                                            "w-[260px] justify-start text-left font-normal h-7 text-xs",
+                                            !dateRange && "text-muted-foreground"
+                                        )}
+                                         disabled={collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical'}
+                                        >
+                                        <CalendarIcon className="mr-2 h-3 w-3" />
+                                        {dateRange?.from ? (
+                                            dateRange.to ? (
+                                            <>
+                                                {format(dateRange.from, "LLL dd, y")} -{" "}
+                                                {format(dateRange.to, "LLL dd, y")}
+                                            </>
+                                            ) : (
+                                            format(dateRange.from, "LLL dd, y")
+                                            )
+                                        ) : (
+                                            <span>Pick a date range</span>
+                                        )}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                        initialFocus
+                                        mode="range"
+                                        defaultMonth={dateRange?.from}
+                                        selected={dateRange}
+                                        onSelect={setDateRange}
+                                        numberOfMonths={2}
+                                        // Optional: disable future dates if needed
+                                        // disabled={(date) => date > new Date()}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs h-7"
+                                    onClick={() => handleCollectData('historical')}
+                                    disabled={collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical' || !dateRange?.from || !dateRange?.to}
+                                >
+                                    {(collectionStatus === 'collecting-historical') ? (
+                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    ) : (
+                                        <DatabaseZap className="h-3 w-3 mr-1" />
+                                    )}
+                                    Collect Range
+                                </Button>
+                             </div>
+                            {/* Status Indicator */}
+                            {(collectionStatus !== 'idle') && (
+                                 <div className="pt-1">
+                                    <span className={cn(
+                                        "text-xs px-1.5 py-0.5 rounded",
+                                        (collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical') && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
+                                        collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                                        collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50"
+                                    )}>
+                                        {collectionMessage || collectionStatus.replace('-', ' ')}
+                                    </span>
+                                 </div>
+                            )}
+                            <p className="text-xs text-muted-foreground pt-1">Note: Historical collection might require multiple clicks if the range exceeds the API limit (1000 candles). Consider smaller ranges.</p>
                         </div>
+
                          <Separator className="my-2" />
                          {/* Placeholder for model config */}
                         <p className="text-xs text-muted-foreground">
@@ -248,11 +350,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             <p className="text-xs text-muted-foreground">
                                 Technical indicators for BTC/USDT (1h interval).
                             </p>
-                            <span className="text-xs text-muted-foreground">
-                                Last updated: {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ?
+                             <span className="text-xs text-muted-foreground">
+                                Last updated:{" "}
+                                {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ? (
                                     <Skeleton className="h-3 w-14 inline-block bg-muted" />
-                                    : indicators.lastUpdated
-                                } (Auto ~5s)
+                                ) : (
+                                    indicators.lastUpdated
+                                )}
+                                (Auto ~5s)
                             </span>
                          </div>
                         <Table>
@@ -269,10 +374,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     <TableRow key={key} className="border-border">
                                         <TableCell className="font-medium text-foreground text-xs py-1">{key}</TableCell>
                                         <TableCell className="text-right text-foreground text-xs py-1">
-                                            {value === "Loading..." || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") || value === "Error" ? (
-                                                value === "Error" ? <span className="text-destructive">Error</span> : <Skeleton className="h-3 w-16 ml-auto bg-muted" />
+                                            {value === "Loading..." || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") ? (
+                                                 <Skeleton className="h-3 w-16 ml-auto bg-muted" />
+                                            ) : value === "Error" ? (
+                                                <span className="text-destructive">Error</span>
+                                            ) : value === "N/A" ? (
+                                                <span className="text-muted-foreground">N/A</span>
                                             ) : (
-                                                value === "N/A" ? <span className="text-muted-foreground">N/A</span> : value
+                                                value
                                             )}
                                         </TableCell>
                                     </TableRow>
