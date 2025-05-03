@@ -35,7 +35,7 @@ import { Switch } from "@/components/ui/switch";
 // Import the generic training server action and types
 import { startTrainingJob } from '@/actions/train-lstm'; // Keep file name for now, action is generic
 // Import all config types, including DLinear and Informer
-import type { LstmTrainingConfig, NBeatsTrainingConfig, LightGBMTrainingConfig, DLinearTrainingConfig, InformerTrainingConfig, TrainingResult } from '@/actions/train-lstm';
+import type { LstmTrainingConfig, NBeatsTrainingConfig, LightGBMTrainingConfig, DLinearTrainingConfig, InformerTrainingConfig, DeepARTrainingConfig, TrainingResult } from '@/actions/train-lstm'; // Added DeepARTrainingConfig
 import { Progress } from "@/components/ui/progress"; // Import Progress
 
 
@@ -48,8 +48,8 @@ interface AnalysisPanelProps {
 type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error';
 // Type for training status (client-side view)
 type TrainingStatus = 'idle' | 'training' | 'completed' | 'error';
-// Add DLinear and Informer to ModelType
-type ModelType = 'LSTM' | 'N-BEATS' | 'LightGBM' | 'DLinear' | 'Informer';
+// Add DLinear, Informer, DeepAR to ModelType
+type ModelType = 'LSTM' | 'N-BEATS' | 'LightGBM' | 'DLinear' | 'Informer' | 'DeepAR';
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -131,6 +131,19 @@ const defaultInformerConfig: InformerTrainingConfig = {
     epochs: 10,
 };
 
+// Default DeepAR Config (Align with Python script args)
+const defaultDeepARConfig: DeepARTrainingConfig = {
+    input_chunk_length: 20,
+    output_chunk_length: 5,
+    hidden_dim: 40,
+    n_rnn_layers: 2,
+    dropout: 0.1,
+    likelihood: 'Gaussian',
+    learningRate: 0.001,
+    batchSize: 64,
+    epochs: 100,
+};
+
 
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
   const [indicators, setIndicators] = useState<IndicatorsData>(initialIndicators);
@@ -205,6 +218,17 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [informerLearningRate, setInformerLearningRate] = useState(defaultInformerConfig.learningRate);
   const [informerBatchSize, setInformerBatchSize] = useState(defaultInformerConfig.batchSize);
   const [informerEpochs, setInformerEpochs] = useState(defaultInformerConfig.epochs);
+
+  // DeepAR specific state (Match defaultDeepARConfig structure)
+  const [deeparInputChunk, setDeeparInputChunk] = useState(defaultDeepARConfig.input_chunk_length);
+  const [deeparOutputChunk, setDeeparOutputChunk] = useState(defaultDeepARConfig.output_chunk_length);
+  const [deeparHiddenDim, setDeeparHiddenDim] = useState(defaultDeepARConfig.hidden_dim);
+  const [deeparRnnLayers, setDeeparRnnLayers] = useState(defaultDeepARConfig.n_rnn_layers);
+  const [deeparDropout, setDeeparDropout] = useState(defaultDeepARConfig.dropout);
+  const [deeparLikelihood, setDeeparLikelihood] = useState<'Gaussian' | 'NegativeBinomial' | 'Poisson'>(defaultDeepARConfig.likelihood);
+  const [deeparLearningRate, setDeeparLearningRate] = useState(defaultDeepARConfig.learningRate);
+  const [deeparBatchSize, setDeeparBatchSize] = useState(defaultDeepARConfig.batchSize);
+  const [deeparEpochs, setDeeparEpochs] = useState(defaultDeepARConfig.epochs);
 
 
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>('idle');
@@ -342,7 +366,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
    const handleStartTraining = async () => {
     if (trainingStatus === 'training') return;
 
-    let config: LstmTrainingConfig | NBeatsTrainingConfig | LightGBMTrainingConfig | DLinearTrainingConfig | InformerTrainingConfig;
+    let config: LstmTrainingConfig | NBeatsTrainingConfig | LightGBMTrainingConfig | DLinearTrainingConfig | InformerTrainingConfig | DeepARTrainingConfig; // Added DeepAR
 
     // Determine config based on selectedModel and useDefaultConfig
     switch (selectedModel) {
@@ -361,6 +385,9 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
        case 'Informer':
          config = useDefaultConfig ? defaultInformerConfig : { seq_len: informerSeqLen, pred_len: informerPredLen, d_model: informerDModel, n_heads: informerNHeads, e_layers: informerELayers, d_layers: informerDLayers, d_ff: informerDFF, dropout: informerDropout, activation: informerActivation, learningRate: informerLearningRate, batchSize: informerBatchSize, epochs: informerEpochs };
          break;
+        case 'DeepAR': // Add case for DeepAR
+            config = useDefaultConfig ? defaultDeepARConfig : { input_chunk_length: deeparInputChunk, output_chunk_length: deeparOutputChunk, hidden_dim: deeparHiddenDim, n_rnn_layers: deeparRnnLayers, dropout: deeparDropout, likelihood: deeparLikelihood, learningRate: deeparLearningRate, batchSize: deeparBatchSize, epochs: deeparEpochs };
+            break;
       default:
         toast({ title: "Error", description: "Invalid model selected.", variant: "destructive"});
         return;
@@ -413,7 +440,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
             }
             if (result.results?.mae !== undefined) { // Check for undefined explicitly
                 validationData.push({ model: selectedModel, metric: 'MAE', value: result.results.mae.toFixed(4) });
-            }
+             }
              // Prepend new results to existing ones (or replace if you prefer)
             setValidationResults(prev => [...validationData, ...prev.filter(r => r.model !== selectedModel)]);
             toast({ title: `${selectedModel} Training`, description: result.message });
@@ -676,6 +703,55 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                     <p className="text-xs text-muted-foreground col-span-2">(Informer script is placeholder)</p>
                 </div>
             );
+         case 'DeepAR': // Add DeepAR configuration inputs
+            return (
+                <div className={gridClass}>
+                    <div className="space-y-1">
+                        <Label htmlFor="deepar-input" className={labelClass}>Input Chunk</Label>
+                        <Input id="deepar-input" type="number" value={deeparInputChunk} onChange={(e) => setDeeparInputChunk(parseInt(e.target.value) || 10)} min="5" max="100" step="5" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="deepar-output" className={labelClass}>Output Chunk</Label>
+                        <Input id="deepar-output" type="number" value={deeparOutputChunk} onChange={(e) => setDeeparOutputChunk(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="deepar-hidden" className={labelClass}>Hidden Dim</Label>
+                        <Input id="deepar-hidden" type="number" value={deeparHiddenDim} onChange={(e) => setDeeparHiddenDim(parseInt(e.target.value) || 32)} min="16" max="128" step="8" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="deepar-layers" className={labelClass}>RNN Layers</Label>
+                        <Input id="deepar-layers" type="number" value={deeparRnnLayers} onChange={(e) => setDeeparRnnLayers(parseInt(e.target.value) || 1)} min="1" max="5" step="1" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="deepar-dropout" className={labelClass}>Dropout Rate</Label>
+                        <Input id="deepar-dropout" type="number" value={deeparDropout} onChange={(e) => setDeeparDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.5" step="0.05" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                     <div className="space-y-1">
+                        <Label htmlFor="deepar-likelihood" className={labelClass}>Likelihood</Label>
+                        <Select value={deeparLikelihood} onValueChange={(v) => setDeeparLikelihood(v as any)} disabled={commonDisabled}>
+                            <SelectTrigger className={inputClass}><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Gaussian" className={labelClass}>Gaussian</SelectItem>
+                                <SelectItem value="NegativeBinomial" className={labelClass}>Negative Binomial</SelectItem>
+                                <SelectItem value="Poisson" className={labelClass}>Poisson</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="deepar-lr" className={labelClass}>Learning Rate</Label>
+                        <Input id="deepar-lr" type="number" value={deeparLearningRate} onChange={(e) => setDeeparLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="deepar-batch" className={labelClass}>Batch Size</Label>
+                        <Input id="deepar-batch" type="number" value={deeparBatchSize} onChange={(e) => setDeeparBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                        <Label htmlFor="deepar-epochs" className={labelClass}>Epochs</Label>
+                        <Input id="deepar-epochs" type="number" value={deeparEpochs} onChange={(e) => setDeeparEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <p className="text-xs text-muted-foreground col-span-2">(DeepAR script is placeholder)</p>
+                </div>
+            );
 
        default:
          // Should not happen with typed selectedModel
@@ -823,7 +899,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                <SelectItem value="N-BEATS" className="text-xs">N-BEATS</SelectItem>
                                <SelectItem value="LightGBM" className="text-xs">LightGBM</SelectItem>
                                <SelectItem value="DLinear" className="text-xs">DLinear</SelectItem>
-                               <SelectItem value="Informer" className="text-xs">Informer</SelectItem> {/* Add Informer */}
+                               <SelectItem value="Informer" className="text-xs">Informer</SelectItem>
+                               <SelectItem value="DeepAR" className="text-xs">DeepAR</SelectItem> {/* Add DeepAR */}
                            </SelectContent>
                        </Select>
                    </div>
@@ -1165,3 +1242,4 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     </Card>
   );
 };
+

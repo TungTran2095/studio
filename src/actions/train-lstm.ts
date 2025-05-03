@@ -80,18 +80,33 @@ const InformerTrainingConfigSchema = z.object({
 });
 export type InformerTrainingConfig = z.infer<typeof InformerTrainingConfigSchema>;
 
+// DeepAR Config Schema (Example common parameters based on Darts)
+const DeepARTrainingConfigSchema = z.object({
+    input_chunk_length: z.number().int().positive().default(20),
+    output_chunk_length: z.number().int().positive().default(5),
+    hidden_dim: z.number().int().positive().default(40),
+    n_rnn_layers: z.number().int().positive().default(2),
+    dropout: z.number().min(0).max(0.8).default(0.1),
+    likelihood: z.enum(['Gaussian', 'NegativeBinomial', 'Poisson']).default('Gaussian').describe("Likelihood function to use."),
+    learningRate: z.number().positive().default(0.001),
+    batchSize: z.number().int().positive().default(64),
+    epochs: z.number().int().positive().default(100),
+});
+export type DeepARTrainingConfig = z.infer<typeof DeepARTrainingConfigSchema>;
+
 
 // Input schema for the generic training job action
 const StartTrainingJobInputSchema = z.object({
-  // Add Informer to the model types
-  modelType: z.enum(['LSTM', 'N-BEATS', 'LightGBM', 'DLinear', 'Informer']),
-  // Updated union to include Informer config
+  // Add Informer and DeepAR to the model types
+  modelType: z.enum(['LSTM', 'N-BEATS', 'LightGBM', 'DLinear', 'Informer', 'DeepAR']),
+  // Updated union to include Informer and DeepAR config
   config: z.union([
       LstmTrainingConfigSchema,
       NBeatsTrainingConfigSchema,
       LightGBMTrainingConfigSchema,
       DLinearTrainingConfigSchema,
-      InformerTrainingConfigSchema, // Added Informer schema
+      InformerTrainingConfigSchema,
+      DeepARTrainingConfigSchema, // Added DeepAR schema
     ]),
   trainTestSplitRatio: z.number().min(0.1).max(0.9).default(0.8),
   // Added target_column and feature_columns for flexibility across models
@@ -138,7 +153,7 @@ function getPythonExecutable(): string {
 
 /**
  * Initiates a model training job by spawning the appropriate Python script.
- * Handles LSTM, N-BEATS (placeholder), LightGBM, DLinear (placeholder), and Informer (placeholder).
+ * Handles LSTM, N-BEATS (placeholder), LightGBM, DLinear (placeholder), Informer (placeholder), DeepAR (placeholder).
  */
 export async function startTrainingJob(
   input: StartTrainingJobInput
@@ -253,6 +268,24 @@ export async function startTrainingJob(
             '--learning_rate', String(informerConfig.learningRate),
             '--batch_size', String(informerConfig.batchSize),
             '--epochs', String(informerConfig.epochs),
+            ...commonArgs,
+        ];
+        break;
+
+    case 'DeepAR': // Add case for DeepAR
+        scriptName = 'train_deepar.py';
+        const deeparConfig = config as DeepARTrainingConfig; // Type assertion
+        scriptArgs = [
+            path.join(process.cwd(), 'scripts', scriptName),
+            '--input_chunk_length', String(deeparConfig.input_chunk_length),
+            '--output_chunk_length', String(deeparConfig.output_chunk_length),
+            '--hidden_dim', String(deeparConfig.hidden_dim),
+            '--n_rnn_layers', String(deeparConfig.n_rnn_layers),
+            '--dropout', String(deeparConfig.dropout),
+            '--likelihood', deeparConfig.likelihood,
+            '--learning_rate', String(deeparConfig.learningRate),
+            '--batch_size', String(deeparConfig.batchSize),
+            '--epochs', String(deeparConfig.epochs),
             ...commonArgs,
         ];
         break;
@@ -433,4 +466,5 @@ export async function startTrainingJob(
     }
   }); // End of Promise
 }
+
 
