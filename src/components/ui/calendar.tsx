@@ -1,3 +1,4 @@
+// src/components/ui/calendar.tsx
 "use client"
 
 import * as React from "react"
@@ -90,7 +91,11 @@ function Calendar({
                 handleChange(value)
               }}
             >
-              <SelectTrigger className="pr-1.5 focus:ring-0 h-7 text-xs">
+              {/* Add onPointerDown to prevent Popover closure */}
+              <SelectTrigger
+                 onPointerDown={(e) => e.preventDefault()} // Prevent Popover closing
+                 className="pr-1.5 focus:ring-0 h-7 text-xs"
+              >
                 <SelectValue>{selected?.props?.children}</SelectValue>
               </SelectTrigger>
               <SelectContent position="popper">
