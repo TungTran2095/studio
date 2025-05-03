@@ -6,3 +6,4 @@ numpy>=1.23.0
 supabase>=1.0.0 # Adjust based on the actual supabase-py version
 python-dotenv>=0.20.0
 lightgbm>=3.3.0 # Added for LightGBM model
+darts>=0.26.0 # Added for N-BEATS and DLinear placeholders

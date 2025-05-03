@@ -20,7 +20,7 @@ const LstmTrainingConfigSchema = z.object({
 });
 export type LstmTrainingConfig = z.infer<typeof LstmTrainingConfigSchema>;
 
-// Example N-BEATS Config Schema (adjust based on actual implementation)
+// N-BEATS Config Schema (align with Python script args where possible)
 const NBeatsTrainingConfigSchema = z.object({
     input_chunk_length: z.number().int().positive().default(20), // Darts param name
     output_chunk_length: z.number().int().positive().default(5), // Darts param name
@@ -50,14 +50,26 @@ const LightGBMTrainingConfigSchema = z.object({
 });
 export type LightGBMTrainingConfig = z.infer<typeof LightGBMTrainingConfigSchema>;
 
+// DLinear Config Schema (Example using Darts library parameters)
+const DLinearTrainingConfigSchema = z.object({
+    input_chunk_length: z.number().int().positive().default(20),
+    output_chunk_length: z.number().int().positive().default(5),
+    kernel_size: z.number().int().positive().default(25),
+    shared_weights: z.boolean().default(false),
+    const_init: z.boolean().default(true),
+    learningRate: z.number().positive().default(0.001),
+    batchSize: z.number().int().positive().default(64),
+    epochs: z.number().int().positive().default(50),
+});
+export type DLinearTrainingConfig = z.infer<typeof DLinearTrainingConfigSchema>;
+
 
 // Input schema for the generic training job action
 const StartTrainingJobInputSchema = z.object({
-  modelType: z.enum(['LSTM', 'N-BEATS', 'LightGBM']),
-  // Use discriminated union based on modelType? Or keep separate config objects?
-  // For simplicity, let's keep config separate for now, validation happens on frontend.
-  // We'll pass the specific config matching modelType.
-  config: z.union([LstmTrainingConfigSchema, NBeatsTrainingConfigSchema, LightGBMTrainingConfigSchema]),
+  // Added DLinear to the model types
+  modelType: z.enum(['LSTM', 'N-BEATS', 'LightGBM', 'DLinear']),
+  // Updated union to include DLinear config
+  config: z.union([LstmTrainingConfigSchema, NBeatsTrainingConfigSchema, LightGBMTrainingConfigSchema, DLinearTrainingConfigSchema]),
   trainTestSplitRatio: z.number().min(0.1).max(0.9).default(0.8),
 });
 export type StartTrainingJobInput = z.infer<typeof StartTrainingJobInputSchema>;
@@ -85,7 +97,7 @@ function getPythonExecutable(): string {
 
 /**
  * Initiates a model training job by spawning the appropriate Python script.
- * Handles LSTM, N-BEATS (placeholder), and LightGBM.
+ * Handles LSTM, N-BEATS (placeholder), LightGBM, and DLinear (placeholder).
  */
 export async function startTrainingJob(
   input: StartTrainingJobInput
@@ -161,6 +173,24 @@ export async function startTrainingJob(
        ];
       break;
 
+    case 'DLinear': // Add case for DLinear
+        scriptName = 'train_dlinear.py';
+        const dlinearConfig = config as DLinearTrainingConfig; // Type assertion
+        scriptArgs = [
+            path.join(process.cwd(), 'scripts', scriptName),
+            '--input_chunk_length', String(dlinearConfig.input_chunk_length),
+            '--output_chunk_length', String(dlinearConfig.output_chunk_length),
+            '--kernel_size', String(dlinearConfig.kernel_size),
+            '--shared_weights', String(dlinearConfig.shared_weights), // Convert boolean to string
+            '--const_init', String(dlinearConfig.const_init), // Convert boolean to string
+            '--learning_rate', String(dlinearConfig.learningRate),
+            '--batch_size', String(dlinearConfig.batchSize),
+            '--epochs', String(dlinearConfig.epochs),
+            '--train_test_split_ratio', String(trainTestSplitRatio),
+        ];
+        break;
+
+
     default:
       console.error(`[startTrainingJob] Unsupported model type: ${modelType}`);
       return { success: false, message: `Unsupported model type: ${modelType}` };
@@ -197,31 +227,47 @@ export async function startTrainingJob(
                 const lines = stdoutData.trim().split('\n');
                 const lastLine = lines[lines.length - 1];
                 try {
-                    const result: TrainingResult = JSON.parse(lastLine);
-                    const validation = TrainingResultSchema.safeParse(result); // Validate schema
+                    // Attempt to parse the last line as JSON
+                    const resultJson = JSON.parse(lastLine);
+                    const validation = TrainingResultSchema.safeParse(resultJson); // Validate schema
+
                     if (validation.success) {
                          console.log(`[startTrainingJob] Parsed ${modelType} Python output:`, validation.data);
                          resolve({ ...validation.data, jobId });
                     } else {
                         console.error(`[startTrainingJob] Failed to validate ${modelType} Python JSON output:`, validation.error);
+                         // Include the problematic JSON in the error message if possible
+                         const invalidJsonMessage = lastLine.length < 500 ? lastLine : lastLine.substring(0, 500) + '...';
                         resolve({
                             success: false,
-                            message: `${modelType} script finished (code 0), but output format is invalid. Check Python script's JSON output. Error: ${validation.error.message}`,
+                            message: `${modelType} script finished (code 0), but output format is invalid. Output: ${invalidJsonMessage}. Error: ${validation.error.message}`,
                             jobId: jobId,
                         });
                     }
                 } catch (parseError: any) {
                      console.error(`[startTrainingJob] Failed to parse ${modelType} Python output as JSON:`, parseError);
                      console.error(`[startTrainingJob] Raw stdout (${modelType}):`, stdoutData);
+                     // Include more raw output in the error message
+                     const rawOutputMessage = stdoutData.length < 500 ? stdoutData : stdoutData.slice(-500);
                     resolve({
                         success: false,
-                        message: `${modelType} script finished successfully (code 0), but failed to parse output. Raw stdout: ${stdoutData.slice(-500)}`,
+                        message: `${modelType} script finished successfully (code 0), but failed to parse output. Raw stdout: ${rawOutputMessage}`,
                         jobId: jobId,
                     });
                 }
             } else {
-                 const errorMessage = stderrData.trim() || `Python script (${modelType}) exited with error code ${code}. Check server logs.`;
-                 console.error(`[startTrainingJob] ${modelType} script failed. Stderr: ${stderrData.trim()}`);
+                 // Try parsing stderr first, then stdout for error messages
+                 let errorMessage = `Python script (${modelType}) exited with error code ${code}.`;
+                 if (stderrData.trim()) {
+                    errorMessage += ` Stderr: ${stderrData.trim().slice(-500)}`; // Limit stderr length
+                 } else if (stdoutData.trim()) {
+                     // Sometimes errors might be printed to stdout
+                     errorMessage += ` Stdout: ${stdoutData.trim().slice(-500)}`;
+                 } else {
+                     errorMessage += ' No output captured. Check server logs.';
+                 }
+
+                 console.error(`[startTrainingJob] ${modelType} script failed. Code: ${code}. Stderr: ${stderrData.trim()}`);
                  console.error(`[startTrainingJob] ${modelType} script failed. Stdout: ${stdoutData.trim()}`);
                 resolve({
                     success: false,

@@ -34,7 +34,8 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 // Import the generic training server action and types
 import { startTrainingJob } from '@/actions/train-lstm'; // Keep file name for now, action is generic
-import type { LstmTrainingConfig, NBeatsTrainingConfig, LightGBMTrainingConfig, TrainingResult } from '@/actions/train-lstm'; // Import all config types
+// Import all config types, including DLinear
+import type { LstmTrainingConfig, NBeatsTrainingConfig, LightGBMTrainingConfig, DLinearTrainingConfig, TrainingResult } from '@/actions/train-lstm';
 import { Progress } from "@/components/ui/progress"; // Import Progress
 
 
@@ -47,7 +48,8 @@ interface AnalysisPanelProps {
 type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error';
 // Type for training status (client-side view)
 type TrainingStatus = 'idle' | 'training' | 'completed' | 'error';
-type ModelType = 'LSTM' | 'N-BEATS' | 'LightGBM'; // Add more models as needed
+// Add DLinear to ModelType
+type ModelType = 'LSTM' | 'N-BEATS' | 'LightGBM' | 'DLinear';
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -101,6 +103,19 @@ const defaultLightGBMConfig: LightGBMTrainingConfig = {
     epochs: 100, // Added for consistency (maps to numIterations)
 };
 
+// Default DLinear Config (align with Python script args)
+const defaultDLinearConfig: DLinearTrainingConfig = {
+    input_chunk_length: 20,
+    output_chunk_length: 5,
+    kernel_size: 25,
+    shared_weights: false,
+    const_init: true,
+    learningRate: 0.001,
+    batchSize: 64,
+    epochs: 50,
+};
+
+
 
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
   const [indicators, setIndicators] = useState<IndicatorsData>(initialIndicators);
@@ -147,6 +162,17 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [lgbmNumIterations, setLgbmNumIterations] = useState(defaultLightGBMConfig.numIterations);
   const [lgbmLags, setLgbmLags] = useState(defaultLightGBMConfig.lags);
   const [lgbmForecastHorizon, setLgbmForecastHorizon] = useState(defaultLightGBMConfig.forecast_horizon);
+
+  // DLinear specific state (Match defaultDLinearConfig structure)
+  const [dlinearInputChunk, setDlinearInputChunk] = useState(defaultDLinearConfig.input_chunk_length);
+  const [dlinearOutputChunk, setDlinearOutputChunk] = useState(defaultDLinearConfig.output_chunk_length);
+  const [dlinearKernelSize, setDlinearKernelSize] = useState(defaultDLinearConfig.kernel_size);
+  const [dlinearSharedWeights, setDlinearSharedWeights] = useState(defaultDLinearConfig.shared_weights);
+  const [dlinearConstInit, setDlinearConstInit] = useState(defaultDLinearConfig.const_init);
+  const [dlinearLearningRate, setDlinearLearningRate] = useState(defaultDLinearConfig.learningRate);
+  const [dlinearBatchSize, setDlinearBatchSize] = useState(defaultDLinearConfig.batchSize);
+  const [dlinearEpochs, setDlinearEpochs] = useState(defaultDLinearConfig.epochs);
+
 
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>('idle');
   const [trainingMessage, setTrainingMessage] = useState<string>('');
@@ -273,7 +299,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
    const handleStartTraining = async () => {
     if (trainingStatus === 'training') return;
 
-    let config: LstmTrainingConfig | NBeatsTrainingConfig | LightGBMTrainingConfig;
+    let config: LstmTrainingConfig | NBeatsTrainingConfig | LightGBMTrainingConfig | DLinearTrainingConfig;
 
     // Determine config based on selectedModel and useDefaultConfig
     switch (selectedModel) {
@@ -305,6 +331,16 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
               numIterations: lgbmNumIterations, lags: lgbmLags, forecast_horizon: lgbmForecastHorizon,
               // Add batchSize/epochs from default for consistency, though script uses numIterations
               batchSize: defaultLightGBMConfig.batchSize, epochs: defaultLightGBMConfig.epochs
+            };
+        break;
+       case 'DLinear': // Add case for DLinear
+        config = useDefaultConfig
+          ? defaultDLinearConfig
+          : {
+              input_chunk_length: dlinearInputChunk, output_chunk_length: dlinearOutputChunk,
+              kernel_size: dlinearKernelSize, shared_weights: dlinearSharedWeights,
+              const_init: dlinearConstInit, learningRate: dlinearLearningRate,
+              batchSize: dlinearBatchSize, epochs: dlinearEpochs,
             };
         break;
       default:
@@ -509,6 +545,45 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                     </div>
                 </div>
             );
+        case 'DLinear': // Add case for DLinear
+            return (
+                <div className={gridClass}>
+                    <div className="space-y-1">
+                        <Label htmlFor="dlinear-input" className="text-xs">Input Chunk</Label>
+                        <Input id="dlinear-input" type="number" value={dlinearInputChunk} onChange={(e) => setDlinearInputChunk(parseInt(e.target.value) || 10)} min="5" max="100" step="5" className="h-7 text-xs" disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="dlinear-output" className="text-xs">Output Chunk</Label>
+                        <Input id="dlinear-output" type="number" value={dlinearOutputChunk} onChange={(e) => setDlinearOutputChunk(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="dlinear-kernel" className="text-xs">Kernel Size</Label>
+                        <Input id="dlinear-kernel" type="number" value={dlinearKernelSize} onChange={(e) => setDlinearKernelSize(parseInt(e.target.value) || 25)} min="1" max="50" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1 flex items-center justify-between col-span-2">
+                         <Label htmlFor="dlinear-shared" className="text-xs">Shared Weights</Label>
+                         <Switch id="dlinear-shared" checked={dlinearSharedWeights} onCheckedChange={setDlinearSharedWeights} disabled={commonDisabled} />
+                    </div>
+                     <div className="space-y-1 flex items-center justify-between col-span-2">
+                         <Label htmlFor="dlinear-constinit" className="text-xs">Constant Init</Label>
+                         <Switch id="dlinear-constinit" checked={dlinearConstInit} onCheckedChange={setDlinearConstInit} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="dlinear-lr" className="text-xs">Learning Rate</Label>
+                        <Input id="dlinear-lr" type="number" value={dlinearLearningRate} onChange={(e) => setDlinearLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="dlinear-batch" className="text-xs">Batch Size</Label>
+                        <Input id="dlinear-batch" type="number" value={dlinearBatchSize} onChange={(e) => setDlinearBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                        <Label htmlFor="dlinear-epochs" className="text-xs">Epochs</Label>
+                        <Input id="dlinear-epochs" type="number" value={dlinearEpochs} onChange={(e) => setDlinearEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={commonDisabled} />
+                    </div>
+                    <p className="text-xs text-muted-foreground col-span-2">(DLinear script is placeholder)</p>
+                </div>
+            );
+
        default:
          return null;
      }
@@ -665,7 +740,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                 <SelectItem value="LSTM" className="text-xs">LSTM</SelectItem>
                                                 <SelectItem value="N-BEATS" className="text-xs">N-BEATS</SelectItem>
                                                 <SelectItem value="LightGBM" className="text-xs">LightGBM</SelectItem>
-                                                {/* Add other models here */}
+                                                 <SelectItem value="DLinear" className="text-xs">DLinear</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -771,6 +846,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                     </TableRow>
                                                 ))}
                                                 {/* Placeholder for other models if not trained */}
+                                                 {!validationResults.some(r => r.model === 'LSTM') && trainingStatus !== 'training' && (
+                                                     <TableRow className="opacity-50">
+                                                        <TableCell className="text-xs py-1 text-muted-foreground">LSTM</TableCell>
+                                                        <TableCell className="text-xs py-1 text-muted-foreground">RMSE</TableCell>
+                                                        <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
+                                                    </TableRow>
+                                                 )}
                                                 {!validationResults.some(r => r.model === 'N-BEATS') && trainingStatus !== 'training' && (
                                                     <TableRow className="opacity-50">
                                                         <TableCell className="text-xs py-1 text-muted-foreground">N-BEATS</TableCell>
@@ -785,6 +867,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                         <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
                                                     </TableRow>
                                                 )}
+                                                {!validationResults.some(r => r.model === 'DLinear') && trainingStatus !== 'training' && (
+                                                     <TableRow className="opacity-50">
+                                                        <TableCell className="text-xs py-1 text-muted-foreground">DLinear</TableCell>
+                                                        <TableCell className="text-xs py-1 text-muted-foreground">RMSE</TableCell>
+                                                        <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
+                                                    </TableRow>
+                                                 )}
                                             </TableBody>
                                         </Table>
                                      </div>
