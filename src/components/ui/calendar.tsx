@@ -91,9 +91,8 @@ function Calendar({
                 handleChange(value)
               }}
             >
-              {/* Add onPointerDown to prevent Popover closure */}
+              {/* Removed onPointerDown to allow Popover closure */}
               <SelectTrigger
-                 onPointerDown={(e) => e.preventDefault()} // Prevent Popover closing
                  className="pr-1.5 focus:ring-0 h-7 text-xs w-fit" // Use w-fit for auto width
                  aria-label={rest.name} // Add aria-label for accessibility
               >
@@ -127,4 +126,3 @@ function Calendar({
 Calendar.displayName = "Calendar"
 
 export { Calendar }
-
