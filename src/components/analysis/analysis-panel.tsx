@@ -364,7 +364,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                              <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 Last updated:{" "}
                                 {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ? (
-                                    <Skeleton className="h-3 w-14 inline-block bg-muted" />
+                                     <Skeleton className="h-3 w-14 inline-block bg-muted" />
                                 ) : (
                                     indicators.lastUpdated
                                 )}
