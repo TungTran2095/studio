@@ -31,9 +31,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-// Import the new server action
-import { startLstmTrainingJob } from '@/actions/train-lstm';
-import type { LstmTrainingConfig, LstmTrainingResult } from '@/actions/train-lstm';
+// Import the training server action
+import { startLstmTrainingJob } from '@/actions/train-lstm'; // Keep specific name for now
+import type { LstmTrainingConfig, LstmTrainingResult } from '@/actions/train-lstm'; // Keep specific types for now
+import { Progress } from "@/components/ui/progress"; // Import Progress
 
 
 interface AnalysisPanelProps {
@@ -43,8 +44,9 @@ interface AnalysisPanelProps {
 
 // Type for collection status
 type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error';
-// Type for LSTM training status (client-side view)
-type LstmTrainingStatus = 'idle' | 'training' | 'completed' | 'error';
+// Type for training status (client-side view)
+type TrainingStatus = 'idle' | 'training' | 'completed' | 'error'; // Renamed from LstmTrainingStatus
+type ModelType = 'LSTM' | 'N-BEATS' | 'LightGBM'; // Add more models as needed
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -57,9 +59,11 @@ const initialIndicators: IndicatorsData = {
 };
 
 // Placeholder type for validation results - matches LstmTrainingResult structure
-type ValidationResult = { metric: string; value: string | number };
+// Add model field
+type ValidationResult = { model: string; metric: string; value: string | number };
 
-// Default LSTM Configuration - matches LstmTrainingConfig structure
+
+// Default configurations for different models
 const defaultLstmConfig: LstmTrainingConfig = {
   units: 50,
   layers: 2,
@@ -69,6 +73,10 @@ const defaultLstmConfig: LstmTrainingConfig = {
   batchSize: 64,
   epochs: 100,
 };
+
+// Placeholder default configs for other models (adjust as needed)
+const defaultNBeatsConfig = { /* Add N-BEATS specific defaults */ };
+const defaultLightGBMConfig = { /* Add LightGBM specific defaults */ };
 
 
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
@@ -82,8 +90,10 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
   const [trainTestSplit, setTrainTestSplit] = useState([80]);
 
-  // --- LSTM Training State ---
-  const [useDefaultLstmConfig, setUseDefaultLstmConfig] = useState(true); // State for the switch
+  // --- Model Training State ---
+  const [selectedModel, setSelectedModel] = useState<ModelType>('LSTM'); // State for selected model
+  const [useDefaultConfig, setUseDefaultConfig] = useState(true); // State for config switch (applies to selected model)
+  // LSTM specific state
   const [lstmUnits, setLstmUnits] = useState(defaultLstmConfig.units);
   const [lstmLayers, setLstmLayers] = useState(defaultLstmConfig.layers);
   const [lstmTimesteps, setLstmTimesteps] = useState(defaultLstmConfig.timesteps);
@@ -91,12 +101,15 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [lstmLearningRate, setLstmLearningRate] = useState(defaultLstmConfig.learningRate);
   const [lstmBatchSize, setLstmBatchSize] = useState(defaultLstmConfig.batchSize);
   const [lstmEpochs, setLstmEpochs] = useState(defaultLstmConfig.epochs);
-  const [lstmTrainingStatus, setLstmTrainingStatus] = useState<LstmTrainingStatus>('idle');
-  const [lstmTrainingMessage, setLstmTrainingMessage] = useState<string>('');
-  const [lstmValidationResults, setLstmValidationResults] = useState<ValidationResult[]>([]);
+  // Add state for other model params as needed
+  // ...
+  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>('idle'); // Renamed
+  const [trainingMessage, setTrainingMessage] = useState<string>(''); // Renamed
+  const [validationResults, setValidationResults] = useState<ValidationResult[]>([]); // Renamed
+  const [trainingProgress, setTrainingProgress] = useState<number | null>(null); // State for progress
 
 
-  // --- Indicator Fetching Logic ---
+  // --- Indicator Fetching Logic --- (No changes needed here)
   const fetchIndicators = useCallback(async () => {
       if (isFetchingIndicators) return;
     setIsFetchingIndicators(true);
@@ -128,7 +141,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFetchingIndicators, toast]);
 
-  // Effect for indicators interval - Only run if indicators tab is active or initially
+  // Effect for indicators interval - Only run if indicators tab is active or initially (No changes needed here)
   useEffect(() => {
      const startFetching = () => {
         fetchIndicators(); // Fetch on start/switch
@@ -144,39 +157,33 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
         }
     };
 
-    // Start fetching if the indicators tab is active
     if (activeTab === 'indicators') {
          console.log("[AnalysisPanel] Indicators tab active, starting refresh.");
          startFetching();
     } else {
-         // Stop fetching if another tab is active
          stopFetching();
-         // Optionally fetch once when panel expands if not on indicators tab
          if (isExpanded && indicators.lastUpdated === "N/A") {
              console.log("[AnalysisPanel] Fetching initial indicators for non-active tab.");
              fetchIndicators();
          }
     }
 
-    // Cleanup on component unmount or tab change
     return () => stopFetching();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, fetchIndicators, isExpanded]);
 
 
-  // --- Data Collection Logic ---
+  // --- Data Collection Logic --- (No changes needed here)
   const handleCollectData = async () => {
-     if (collectionStatus === 'collecting-historical') return; // Prevent multiple clicks
+     if (collectionStatus === 'collecting-historical') return;
 
     if (!dateRange?.from || !dateRange?.to) {
         toast({ title: "Date Range Required", description: "Please select a start and end date for historical data.", variant: "destructive" });
         return;
     }
 
-     // Set startTime to the beginning of the 'from' day
      const startTimeMs = dateRange.from.getTime();
-     // Set endTime to the *end* of the 'to' day (just before the next day starts)
-     const endTimeMs = dateRange.to.getTime() + (24 * 60 * 60 * 1000) - 1; // End of the selected day
+     const endTimeMs = dateRange.to.getTime() + (24 * 60 * 60 * 1000) - 1;
 
      console.log(`[AnalysisPanel] Collecting historical data from ${new Date(startTimeMs).toISOString()} to ${new Date(endTimeMs).toISOString()}`);
      setCollectionStatus('collecting-historical');
@@ -196,7 +203,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
         setCollectionMessage(result.message || 'Collection successful.');
         toast({ title: "Data Collection", description: `${result.message} (Fetched: ${result.totalFetchedCount ?? 0}, Saved: ${result.totalInsertedCount ?? 0})` });
         console.log("[AnalysisPanel] Data collection successful:", result.message);
-        // setDateRange(undefined); // Clear date range? Optional.
       } else {
         setCollectionStatus('error');
         setCollectionMessage(result.message || 'Collection failed.');
@@ -210,11 +216,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       toast({ title: "Collection Error", description: errorMsg, variant: "destructive" });
       console.error("[AnalysisPanel] Unexpected error during data collection:", error);
     } finally {
-       // Reset status immediately after completion
        setCollectionStatus('idle');
-       // Keep the message briefly
        setTimeout(() => {
-           // Check status *again* before clearing message, in case another operation started
            if (collectionStatus === 'idle') {
                setCollectionMessage('');
            }
@@ -222,75 +225,175 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     }
   };
 
-   // --- LSTM Training Logic (Triggers Server Action) ---
-   const handleStartLstmTraining = async () => {
-    if (lstmTrainingStatus === 'training') return;
+   // --- Model Training Logic ---
+   // Renamed function
+   const handleStartTraining = async () => {
+    if (trainingStatus === 'training') return;
 
-    const config: LstmTrainingConfig = useDefaultLstmConfig
-      ? defaultLstmConfig
-      : {
-          units: lstmUnits,
-          layers: lstmLayers,
-          timesteps: lstmTimesteps,
-          dropout: lstmDropout,
-          learningRate: lstmLearningRate,
-          batchSize: lstmBatchSize,
-          epochs: lstmEpochs,
-        };
+    let config: any = {}; // Use 'any' temporarily, define proper types later
+    let trainingFunctionName = 'startLstmTrainingJob'; // Default to LSTM function
+
+    // Determine config and function based on selectedModel
+    switch (selectedModel) {
+      case 'LSTM':
+        config = useDefaultConfig
+          ? defaultLstmConfig
+          : {
+              units: lstmUnits,
+              layers: lstmLayers,
+              timesteps: lstmTimesteps,
+              dropout: lstmDropout,
+              learningRate: lstmLearningRate,
+              batchSize: lstmBatchSize,
+              epochs: lstmEpochs,
+            };
+        trainingFunctionName = 'startLstmTrainingJob'; // Specific function for LSTM
+        break;
+      case 'N-BEATS':
+        // config = useDefaultConfig ? defaultNBeatsConfig : { /* Custom N-BEATS params */ };
+        // trainingFunctionName = 'startNBeatsTrainingJob'; // Example for future
+        toast({ title: "Not Implemented", description: "N-BEATS training is not yet implemented.", variant: "destructive"});
+        return;
+      case 'LightGBM':
+        // config = useDefaultConfig ? defaultLightGBMConfig : { /* Custom LightGBM params */ };
+        // trainingFunctionName = 'startLightGBMTrainingJob'; // Example for future
+        toast({ title: "Not Implemented", description: "LightGBM training is not yet implemented.", variant: "destructive"});
+        return;
+      default:
+        console.error("Unknown model selected:", selectedModel);
+        toast({ title: "Error", description: "Invalid model selected for training.", variant: "destructive"});
+        return;
+    }
+
 
     const input = {
+        // Add modelType to input if backend supports it
+        modelType: selectedModel,
         config: config,
-        trainTestSplitRatio: trainTestSplit[0] / 100, // Convert percentage to ratio
+        trainTestSplitRatio: trainTestSplit[0] / 100,
     };
 
-    console.log(`[AnalysisPanel] Requesting LSTM Training Job with ${useDefaultLstmConfig ? 'DEFAULT' : 'CUSTOM'} config:`, input);
+    console.log(`[AnalysisPanel] Requesting ${selectedModel} Training Job with ${useDefaultConfig ? 'DEFAULT' : 'CUSTOM'} config:`, input);
 
-    setLstmTrainingStatus('training');
-    setLstmTrainingMessage(`Requesting training job (${config.epochs} epochs)...`);
-    setLstmValidationResults([]); // Clear previous results
+    setTrainingStatus('training');
+    setTrainingMessage(`Requesting ${selectedModel} training job (${config.epochs || 'N/A'} epochs)...`); // Show epochs if available
+    setValidationResults([]);
+    setTrainingProgress(5); // Simulate starting progress
+
+    // Simulate progress increase
+    const progressInterval = setInterval(() => {
+        setTrainingProgress(prev => {
+            if (prev === null || prev >= 95) {
+                 // Don't exceed 95% before completion
+                 return prev;
+            }
+            return Math.min(95, prev + Math.floor(Math.random() * 10) + 5); // Random progress increase
+        });
+    }, 1500); // Update progress every 1.5 seconds
+
 
     try {
-        // --- Call the Server Action ---
-        const result = await startLstmTrainingJob(input);
+        // --- Call the appropriate Server Action based on trainingFunctionName ---
+        // For now, we only have the LSTM one
+        let result: LstmTrainingResult; // Use specific type for now
+        if (trainingFunctionName === 'startLstmTrainingJob') {
+            result = await startLstmTrainingJob({
+                config: config as LstmTrainingConfig, // Cast config
+                trainTestSplitRatio: input.trainTestSplitRatio
+            });
+        } else {
+            // Placeholder for other model training functions
+            throw new Error(`Training function ${trainingFunctionName} not implemented.`);
+        }
         // --- END Call ---
 
+        clearInterval(progressInterval); // Stop simulating progress
+
         if (result.success) {
-            setLstmTrainingStatus('completed');
-            setLstmTrainingMessage(result.message || 'LSTM Training Job Completed Successfully.');
-            // Map results to the format expected by the table
+            setTrainingStatus('completed');
+            setTrainingProgress(100); // Set progress to 100% on completion
+            setTrainingMessage(result.message || `${selectedModel} Training Job Completed Successfully.`);
             const validationData: ValidationResult[] = [];
             if (result.results?.rmse) {
-                validationData.push({ model: 'LSTM', metric: 'RMSE', value: result.results.rmse.toFixed(4) });
+                validationData.push({ model: selectedModel, metric: 'RMSE', value: result.results.rmse.toFixed(4) });
             }
             if (result.results?.mae) {
-                validationData.push({ model: 'LSTM', metric: 'MAE', value: result.results.mae.toFixed(4) });
+                validationData.push({ model: selectedModel, metric: 'MAE', value: result.results.mae.toFixed(4) });
             }
-            setLstmValidationResults(validationData);
-            toast({ title: "LSTM Training", description: result.message });
-            console.log("[AnalysisPanel] LSTM Training Job successful:", result);
+            setValidationResults(validationData);
+            toast({ title: `${selectedModel} Training`, description: result.message });
+            console.log(`[AnalysisPanel] ${selectedModel} Training Job successful:`, result);
         } else {
-            setLstmTrainingStatus('error');
+            setTrainingStatus('error');
+            setTrainingProgress(null); // Clear progress on error
             const errorMsg = result.message || 'Backend training job failed.';
-            setLstmTrainingMessage(`Error: ${errorMsg}`);
-            toast({ title: "LSTM Training Error", description: errorMsg, variant: "destructive" });
-            console.error("[AnalysisPanel] LSTM Training Job failed:", result);
+            setTrainingMessage(`Error: ${errorMsg}`);
+            toast({ title: `${selectedModel} Training Error`, description: errorMsg, variant: "destructive" });
+            console.error(`[AnalysisPanel] ${selectedModel} Training Job failed:`, result);
         }
     } catch (error: any) {
-        setLstmTrainingStatus('error');
+        clearInterval(progressInterval); // Stop simulating progress on error
+        setTrainingStatus('error');
+        setTrainingProgress(null); // Clear progress on error
         const errorMsg = error.message || 'An unexpected error occurred.';
-        setLstmTrainingMessage(`Error: ${errorMsg}`);
+        setTrainingMessage(`Error: ${errorMsg}`);
         toast({ title: "Training Request Error", description: errorMsg, variant: "destructive" });
-        console.error("[AnalysisPanel] Error calling startLstmTrainingJob action:", error);
+        console.error(`[AnalysisPanel] Error calling ${trainingFunctionName} action:`, error);
     } finally {
-        // Reset status after a delay (adjust as needed)
         setTimeout(() => {
-            if (lstmTrainingStatus !== 'training') { // Avoid resetting if a new training started
-                 setLstmTrainingStatus('idle');
-                 // Keep the final message for a bit longer? Or clear it?
-                 // setLstmTrainingMessage('');
+            if (trainingStatus !== 'training') {
+                 setTrainingStatus('idle');
+                 setTrainingProgress(null); // Clear progress bar after timeout
             }
         }, 8000);
     }
+   };
+
+   // --- Render specific config inputs based on selectedModel ---
+   const renderModelConfigInputs = () => {
+     switch (selectedModel) {
+       case 'LSTM':
+         return (
+             <> {/* Use fragment to group LSTM inputs */}
+                 <div className={cn("grid grid-cols-2 gap-x-4 gap-y-2 transition-opacity", useDefaultConfig && "opacity-50 pointer-events-none")}>
+                     <div className="space-y-1">
+                         <Label htmlFor="lstm-units" className="text-xs">Units/Layer</Label>
+                         <Input id="lstm-units" type="number" value={lstmUnits} onChange={(e) => setLstmUnits(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={useDefaultConfig || trainingStatus === 'training'} />
+                     </div>
+                     <div className="space-y-1">
+                         <Label htmlFor="lstm-layers" className="text-xs">Layers</Label>
+                         <Input id="lstm-layers" type="number" value={lstmLayers} onChange={(e) => setLstmLayers(parseInt(e.target.value) || 1)} min="1" max="5" className="h-7 text-xs" disabled={useDefaultConfig || trainingStatus === 'training'} />
+                     </div>
+                     <div className="space-y-1">
+                         <Label htmlFor="lstm-timesteps" className="text-xs">Timesteps (Lookback)</Label>
+                         <Input id="lstm-timesteps" type="number" value={lstmTimesteps} onChange={(e) => setLstmTimesteps(parseInt(e.target.value) || 10)} min="10" max="120" step="10" className="h-7 text-xs" disabled={useDefaultConfig || trainingStatus === 'training'} />
+                     </div>
+                     <div className="space-y-1">
+                         <Label htmlFor="lstm-dropout" className="text-xs">Dropout Rate</Label>
+                         <Input id="lstm-dropout" type="number" value={lstmDropout} onChange={(e) => setLstmDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.8" step="0.1" className="h-7 text-xs" disabled={useDefaultConfig || trainingStatus === 'training'} />
+                     </div>
+                     <div className="space-y-1">
+                         <Label htmlFor="lstm-lr" className="text-xs">Learning Rate</Label>
+                         <Input id="lstm-lr" type="number" value={lstmLearningRate} onChange={(e) => setLstmLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={useDefaultConfig || trainingStatus === 'training'} />
+                     </div>
+                     <div className="space-y-1">
+                         <Label htmlFor="lstm-batch" className="text-xs">Batch Size</Label>
+                         <Input id="lstm-batch" type="number" value={lstmBatchSize} onChange={(e) => setLstmBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={useDefaultConfig || trainingStatus === 'training'} />
+                     </div>
+                     <div className="space-y-1 col-span-2">
+                         <Label htmlFor="lstm-epochs" className="text-xs">Epochs</Label>
+                         <Input id="lstm-epochs" type="number" value={lstmEpochs} onChange={(e) => setLstmEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={useDefaultConfig || trainingStatus === 'training'} />
+                     </div>
+                 </div>
+             </>
+         );
+       case 'N-BEATS':
+         return <p className="text-xs text-muted-foreground">N-BEATS configuration (Placeholder)</p>;
+       case 'LightGBM':
+         return <p className="text-xs text-muted-foreground">LightGBM configuration (Placeholder)</p>;
+       default:
+         return null;
+     }
    };
 
 
@@ -332,21 +435,20 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
             </TabsList>
 
             <ScrollArea className="flex-1 overflow-y-auto">
-               <div className="p-3 space-y-1"> {/* Reduced space-y */}
+               <div className="p-3 space-y-1">
                     {/* Ensemble Tab Content */}
                     <TabsContent value="ensemble" className="mt-0">
                          <Accordion type="multiple" className="w-full" defaultValue={['collect-data', 'model-training']}>
                             {/* 1. Collect Data Section */}
                             <AccordionItem value="collect-data" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground"> {/* Increased py, added text-foreground */}
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground">
                                     <div className="flex items-center gap-2">
                                         <DatabaseZap className="h-4 w-4" />
                                         Collect OHLCV Data
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-2 pb-4 space-y-3"> {/* Adjusted padding */}
+                                <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
                                      <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
-                                     {/* Date Range Picker */}
                                      <div className="flex flex-wrap items-center gap-2">
                                         <Popover>
                                             <PopoverTrigger asChild>
@@ -402,7 +504,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                             Collect Range
                                         </Button>
                                      </div>
-                                    {/* Status Indicator */}
                                     {(collectionStatus !== 'idle' || collectionMessage) && (
                                          <div className="pt-1">
                                             <span className={cn(
@@ -422,14 +523,34 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                             {/* 2. Model Training Section */}
                              <AccordionItem value="model-training" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground"> {/* Added text-foreground */}
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground">
                                     <div className="flex items-center gap-2">
                                         <Brain className="h-4 w-4" />
                                         Model Training
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-2 pb-4 space-y-4"> {/* Increased spacing */}
+                                <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
                                     <p className="text-xs text-muted-foreground">Configure and train time series forecasting models using collected data.</p>
+
+                                    {/* Model Selection */}
+                                    <div className="space-y-2 border-t border-border pt-3">
+                                        <Label htmlFor="model-select" className="text-xs">Select Model</Label>
+                                        <Select
+                                            value={selectedModel}
+                                            onValueChange={(value) => setSelectedModel(value as ModelType)}
+                                            disabled={trainingStatus === 'training'}
+                                        >
+                                            <SelectTrigger id="model-select" className="h-8 text-xs">
+                                                <SelectValue placeholder="Select a model..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="LSTM" className="text-xs">LSTM</SelectItem>
+                                                <SelectItem value="N-BEATS" className="text-xs" disabled>N-BEATS (Coming Soon)</SelectItem>
+                                                <SelectItem value="LightGBM" className="text-xs" disabled>LightGBM (Coming Soon)</SelectItem>
+                                                {/* Add other models here */}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
                                     {/* Train/Test Split */}
                                     <div className="space-y-2 border-t border-border pt-3">
@@ -445,88 +566,63 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                             value={trainTestSplit}
                                             onValueChange={setTrainTestSplit}
                                             className="w-[95%] mx-auto pt-1"
-                                            disabled={lstmTrainingStatus === 'training'}
+                                            disabled={trainingStatus === 'training'}
                                         />
-                                        <p className="text-xs text-muted-foreground pt-1">Adjust the percentage of data used for training vs. validation.</p>
                                     </div>
 
-                                    {/* LSTM Model Configuration */}
+                                    {/* Model Configuration (Conditional) */}
                                     <div className="space-y-3 border-t border-border pt-3">
-                                         {/* Config Toggle Switch - Inverted logic */}
                                         <div className="flex items-center justify-between">
                                             <Label className="text-xs font-medium flex items-center gap-1">
-                                                 {useDefaultLstmConfig ? <Settings className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}
-                                                 LSTM Configuration
+                                                 {useDefaultConfig ? <Settings className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}
+                                                 {selectedModel} Configuration
                                             </Label>
                                             <div className="flex items-center space-x-2">
-                                                <Label htmlFor="lstm-config-switch" className="text-xs text-muted-foreground">
-                                                     {useDefaultLstmConfig ? "Default" : "Custom"}
+                                                <Label htmlFor="config-switch" className="text-xs text-muted-foreground">
+                                                     {useDefaultConfig ? "Default" : "Custom"}
                                                 </Label>
                                                 <Switch
-                                                    id="lstm-config-switch"
-                                                    checked={useDefaultLstmConfig} // Checked means default
-                                                    onCheckedChange={setUseDefaultLstmConfig} // Direct set
-                                                    disabled={lstmTrainingStatus === 'training'}
+                                                    id="config-switch"
+                                                    checked={useDefaultConfig}
+                                                    onCheckedChange={setUseDefaultConfig}
+                                                    disabled={trainingStatus === 'training'}
                                                 />
                                             </div>
                                         </div>
+                                        {/* Render specific inputs */}
+                                        {renderModelConfigInputs()}
 
-                                        {/* Parameter Inputs (Conditionally Disabled) */}
-                                         {/* Apply disabled styles when useDefaultLstmConfig is true */}
-                                        <div className={cn("grid grid-cols-2 gap-x-4 gap-y-2 transition-opacity", useDefaultLstmConfig && "opacity-50 pointer-events-none")}>
-                                            <div className="space-y-1">
-                                                <Label htmlFor="lstm-units" className="text-xs">Units/Layer</Label>
-                                                <Input id="lstm-units" type="number" value={lstmUnits} onChange={(e) => setLstmUnits(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label htmlFor="lstm-layers" className="text-xs">Layers</Label>
-                                                <Input id="lstm-layers" type="number" value={lstmLayers} onChange={(e) => setLstmLayers(parseInt(e.target.value) || 1)} min="1" max="5" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label htmlFor="lstm-timesteps" className="text-xs">Timesteps (Lookback)</Label>
-                                                <Input id="lstm-timesteps" type="number" value={lstmTimesteps} onChange={(e) => setLstmTimesteps(parseInt(e.target.value) || 10)} min="10" max="120" step="10" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label htmlFor="lstm-dropout" className="text-xs">Dropout Rate</Label>
-                                                <Input id="lstm-dropout" type="number" value={lstmDropout} onChange={(e) => setLstmDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.8" step="0.1" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label htmlFor="lstm-lr" className="text-xs">Learning Rate</Label>
-                                                <Input id="lstm-lr" type="number" value={lstmLearningRate} onChange={(e) => setLstmLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label htmlFor="lstm-batch" className="text-xs">Batch Size</Label>
-                                                <Input id="lstm-batch" type="number" value={lstmBatchSize} onChange={(e) => setLstmBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
-                                            </div>
-                                             <div className="space-y-1 col-span-2">
-                                                <Label htmlFor="lstm-epochs" className="text-xs">Epochs</Label>
-                                                <Input id="lstm-epochs" type="number" value={lstmEpochs} onChange={(e) => setLstmEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
-                                            </div>
-                                        </div>
-                                        <Button size="sm" variant="outline" className="text-xs h-7" onClick={handleStartLstmTraining} disabled={lstmTrainingStatus === 'training'}>
-                                            {lstmTrainingStatus === 'training' ? (
+                                        {/* Start Training Button */}
+                                        <Button size="sm" variant="outline" className="text-xs h-7" onClick={handleStartTraining} disabled={trainingStatus === 'training'}>
+                                            {trainingStatus === 'training' ? (
                                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                                             ) : (
                                                 <Play className="h-3 w-3 mr-1" />
                                             )}
-                                            Start LSTM Training
+                                            Start Training {/* Renamed Button */}
                                         </Button>
-                                         {/* Training Status */}
-                                         {(lstmTrainingStatus !== 'idle' || lstmTrainingMessage) && (
-                                            <div className="pt-1">
+
+                                        {/* Training Status & Progress */}
+                                        {(trainingStatus !== 'idle' || trainingMessage) && (
+                                            <div className="pt-1 space-y-1">
+                                                {trainingStatus === 'training' && trainingProgress !== null && (
+                                                    <Progress value={trainingProgress} className="h-2 w-full" />
+                                                )}
                                                 <span className={cn(
-                                                    "text-xs px-1.5 py-0.5 rounded",
-                                                    lstmTrainingStatus === 'training' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
-                                                    lstmTrainingStatus === 'completed' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
-                                                    lstmTrainingStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
-                                                    lstmTrainingStatus === 'idle' && lstmTrainingMessage && "text-muted-foreground bg-muted/50"
+                                                    "text-xs px-1.5 py-0.5 rounded block w-fit", // Use block for message positioning
+                                                    trainingStatus === 'training' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
+                                                    trainingStatus === 'completed' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                                                    trainingStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
+                                                    trainingStatus === 'idle' && trainingMessage && "text-muted-foreground bg-muted/50"
                                                 )}>
-                                                    {lstmTrainingMessage || lstmTrainingStatus}
+                                                    {trainingMessage || trainingStatus}
+                                                    {trainingStatus === 'training' && trainingProgress !== null && ` (${trainingProgress.toFixed(0)}%)`}
                                                 </span>
                                             </div>
                                          )}
-                                        <p className="text-xs text-muted-foreground pt-1">Note: This triggers a (simulated) backend job. Actual Python/TensorFlow training runs externally.</p>
+                                        <p className="text-xs text-muted-foreground pt-1">Note: This triggers a backend training job. Progress is simulated.</p>
                                     </div>
+
 
                                      {/* Model Validation Results */}
                                      <div className="space-y-2 border-t border-border pt-3">
@@ -540,16 +636,16 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {lstmTrainingStatus === 'training' && (
+                                                {trainingStatus === 'training' && (
                                                     <>
                                                      <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-2/3 bg-muted" /></TableCell></TableRow>
                                                      <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-1/2 bg-muted" /></TableCell></TableRow>
                                                     </>
                                                 )}
-                                                {(lstmTrainingStatus === 'completed' || lstmTrainingStatus === 'error') && lstmValidationResults.length === 0 && lstmTrainingStatus !== 'training' && (
+                                                {(trainingStatus === 'completed' || trainingStatus === 'error') && validationResults.length === 0 && trainingStatus !== 'training' && (
                                                     <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground text-xs py-2">No validation results yet.</TableCell></TableRow>
                                                 )}
-                                                {lstmValidationResults.map((result, index) => (
+                                                {validationResults.map((result, index) => (
                                                     <TableRow key={index}>
                                                         <TableCell className="text-xs py-1">{result.model}</TableCell>
                                                         <TableCell className="text-xs py-1">{result.metric}</TableCell>
@@ -558,12 +654,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                 ))}
                                                 {/* Placeholder for other models */}
                                                  <TableRow className="opacity-50">
-                                                    <TableCell className="text-xs py-1 text-muted-foreground">N-BEATS (Placeholder)</TableCell>
+                                                    <TableCell className="text-xs py-1 text-muted-foreground">N-BEATS (Pending)</TableCell>
                                                     <TableCell className="text-xs py-1 text-muted-foreground">RMSE</TableCell>
                                                     <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
                                                 </TableRow>
                                                 <TableRow className="opacity-50">
-                                                    <TableCell className="text-xs py-1 text-muted-foreground">LightGBM (Placeholder)</TableCell>
+                                                    <TableCell className="text-xs py-1 text-muted-foreground">LightGBM (Pending)</TableCell>
                                                     <TableCell className="text-xs py-1 text-muted-foreground">MAE</TableCell>
                                                     <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
                                                 </TableRow>
@@ -576,7 +672,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                             {/* 3. Model Testing Section */}
                             <AccordionItem value="model-testing" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground"> {/* Added text-foreground */}
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground">
                                     <div className="flex items-center gap-2">
                                         <History className="h-4 w-4" />
                                         Model Testing
@@ -584,16 +680,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 </AccordionTrigger>
                                 <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
                                     <p className="text-xs text-muted-foreground">Perform backtesting and front testing on trained models.</p>
-                                     {/* Placeholder for test config */}
                                     <div className="space-y-2 border-t border-border pt-3">
                                          <Label className="text-xs">Testing Configuration (Placeholder)</Label>
                                          <Select disabled>
                                             <SelectTrigger className="h-8 text-xs">
                                                 <SelectValue placeholder="Select Trained Model..." />
                                             </SelectTrigger>
-                                            {/* Options would be populated with trained models */}
                                              <SelectContent>
-                                                <SelectItem value="lstm" disabled={lstmTrainingStatus !== 'completed'}>LSTM (Trained)</SelectItem>
+                                                <SelectItem value="lstm" disabled={trainingStatus !== 'completed' || selectedModel !== 'LSTM'}>LSTM (Trained)</SelectItem>
                                                 <SelectItem value="nbeats" disabled>N-BEATS (Placeholder)</SelectItem>
                                              </SelectContent>
                                         </Select>
@@ -606,7 +700,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                         <Play className="h-3 w-3 mr-1" />
                                         Run Tests (Placeholder)
                                     </Button>
-                                    {/* Placeholder for results table */}
                                      <Label className="text-xs text-muted-foreground pt-2 block">Test Results (Placeholder)</Label>
                                      <Table>
                                         <TableHeader>
@@ -636,13 +729,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                     {/* RL Tab Content */}
                     <TabsContent value="rl" className="mt-0 space-y-2">
-                        {/* Add Accordion structure here if needed, similar to Ensemble */}
                         <p className="text-xs text-muted-foreground mb-2">
                             Train and deploy RL agents for trading strategies. (Placeholder - UI only)
                         </p>
                          <Accordion type="multiple" className="w-full">
                              <AccordionItem value="rl-config" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground"> {/* Added text-foreground */}
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground">
                                     <div className="flex items-center gap-2"><Bot className="h-4 w-4" />Agent Configuration</div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
@@ -654,23 +746,23 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 </AccordionContent>
                              </AccordionItem>
                              <AccordionItem value="rl-training" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground"> {/* Added text-foreground */}
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground">
                                     <div className="flex items-center gap-2"><Play className="h-4 w-4" />Train Agent</div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
                                     <Input type="number" placeholder="Training Timesteps" className="h-8 text-xs" disabled/>
                                     <Button size="sm" variant="outline" className="text-xs h-7" disabled>Start RL Training (Placeholder)</Button>
                                     <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
+                                    <Progress value={null} className="h-2 w-full" /> {/* Placeholder Progress */}
                                 </AccordionContent>
                              </AccordionItem>
                              <AccordionItem value="rl-testing" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground"> {/* Added text-foreground */}
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground">
                                      <div className="flex items-center gap-2"><History className="h-4 w-4" />Agent Testing</div>
                                 </AccordionTrigger>
                                  <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
                                     <p className="text-xs text-muted-foreground">Backtest the trained RL agent.</p>
                                     <Button size="sm" variant="outline" className="text-xs h-7" disabled>Run Backtest (Placeholder)</Button>
-                                    {/* Placeholder for RL results */}
                                     <Label className="text-xs text-muted-foreground pt-2 block">RL Test Results</Label>
                                      <Table>
                                         <TableHeader><TableRow><TableHead className="text-xs h-8">Metric</TableHead><TableHead className="text-right text-xs h-8">Value</TableHead></TableRow></TableHeader>
@@ -695,8 +787,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     indicators.lastUpdated
                                 )}
                                 {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                                {/* Manual Refresh Button */}
-                                <span onClick={(e) => e.stopPropagation()}> {/* Prevent accordion toggle */}
+                                <span onClick={(e) => e.stopPropagation()}>
                                      <Button
                                         variant="ghost"
                                         size="icon"
@@ -751,3 +842,5 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     </Card>
   );
 };
+
+    
