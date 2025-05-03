@@ -73,7 +73,7 @@ Trading Instructions:
     - **If the apiKey or apiSecret are NOT available in the input, politely inform the user that you cannot execute the trade without the API credentials being configured in the 'Binance Account' section first.** Do not attempt to use the tool without credentials.
     - If all necessary parameters (symbol, quantity, available credentials, price for limit orders) are clear, use the 'placeBuyOrderTool' or 'placeSellOrderTool' with the extracted information and the provided apiKey, apiSecret, and isTestnet status from the input.
     - If any parameter (especially quantity or symbol) is unclear or missing, ASK the user for clarification before attempting to use a tool. Do not guess quantities or symbols if ambiguous.
-    - After attempting a trade using a tool, report the result (success message with order ID, or the error message) back to the user clearly.
+    - After attempting a trade using a tool, **you MUST generate a final text response confirming the outcome (success with order ID, or the error message from the tool) back to the user clearly.** Your final output MUST be a JSON object with a single key "response" containing this text message. Example: { "response": "Successfully placed buy order..." } or { "response": "Error placing order: ..." }.
 
 Chat History:
 {{#each chatHistory}}
@@ -82,7 +82,7 @@ Chat History:
 
 User Message: {{message}}
 
-Response:`,
+Response:`, // Ensure the final word is Response:, prompting for the JSON structure.
 });
 
 
@@ -119,12 +119,11 @@ const generateResponseFlow = ai.defineFlow<
 
     } catch (error: any) {
         console.error("[generateResponseFlow] Error calling prompt:", error);
-        // Handle errors during the prompt/tool execution itself
+         // Ensure the error response also matches the schema
         return { response: `Sorry, I encountered an error processing your request: ${error.message || 'Unknown error'}` };
     }
 
 
-    // Check if the model decided to use a tool
     if (response?.toolRequests?.length > 0) {
         console.log("[generateResponseFlow] Tool requests were generated and handled by Genkit.");
         // Genkit handles tool execution and feeding results back to the model automatically.
@@ -134,15 +133,15 @@ const generateResponseFlow = ai.defineFlow<
     }
 
     // **** Explicitly check if the output is null or undefined ****
-    // The error message "Provided data: null" suggests response.output might be null.
+    // This check already exists and is likely triggering the user's error.
     if (response?.output === null || response?.output === undefined) {
       console.error("[generateResponseFlow] Error: Flow returned null or undefined output. Raw response:", JSON.stringify(response, null, 2));
-      // Provide a more specific error message related to the schema validation failure
-      return { response: "Sorry, I couldn't generate a valid response in the expected format. Please try rephrasing your request." };
+      // Return a valid object matching the schema, explaining the internal issue.
+      return { response: "Sorry, I couldn't generate a valid response in the expected format after processing your request. Please try again." };
     }
 
-     // The Zod schema validation should happen automatically based on outputSchema.
-     // If it passed validation, response.output should be valid.
+     // If the output exists but doesn't match the schema, Genkit's validation will throw.
+     // The `catch` block above should handle this. If not, it implies a deeper issue.
     console.log("[generateResponseFlow] Final AI Response (validated):", response.output.response);
     return response.output; // Return the validated output
 });
