@@ -145,35 +145,39 @@ export default function Home() {
   };
 
   return (
-    // Changed to relative positioning to act as offsetParent for the button
+    // Main container: flex, full height, padding, gap, relative for button positioning
     <div className="flex h-screen bg-background overflow-hidden p-4 gap-4 relative">
-      {/* Left Analysis Panel */}
+      {/* Left Analysis Panel: Shrinkable width, full height */}
       <aside className={cn(
-        "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out",
+        "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out h-full", // Ensure full height
         isAnalysisExpanded ? 'w-72' : 'w-16'
       )}>
         <AnalysisPanel isExpanded={isAnalysisExpanded} onToggle={handleAnalysisToggle} />
       </aside>
 
-      {/* Main content area for the chart */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border">
-        <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
-        <div className="flex-1 p-0 overflow-hidden">
-          <TradingViewWidget />
+      {/* Center content area: Takes remaining space, stacks chart and assets */}
+      <main className="flex-1 flex flex-col gap-4 overflow-hidden">
+        {/* Chart Container: Takes available space, flex column */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border">
+          <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
+          {/* Inner div for widget takes remaining space */}
+          <div className="flex-1 p-0 overflow-hidden">
+            <TradingViewWidget />
+          </div>
         </div>
-      </main>
 
-      {/* Right Container for Asset Summary */}
-      <aside className="w-96 flex flex-col gap-4 flex-shrink-0">
+        {/* Asset Summary Container: Below chart, defined height when expanded */}
         <div className={cn(
-          "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card",
-          isAssetExpanded ? 'flex-1' : 'flex-shrink-0 h-auto'
+          "flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card",
+           // Give it a fixed height when expanded, shrink when collapsed
+           // Adjust 'h-96' as needed for desired height relative to analysis panel
+           isAssetExpanded ? 'h-96' : 'h-auto flex-shrink-0'
         )}>
           <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} />
         </div>
-      </aside>
+      </main>
 
-      {/* Chat Popover */}
+      {/* Chat Popover: Absolute positioning remains the same */}
       <Popover open={isChatOpen} onOpenChange={setIsChatOpen}>
         <PopoverTrigger asChild>
           {/* Draggable Chat Icon Button */}
@@ -224,3 +228,4 @@ export default function Home() {
     </div>
   );
 }
+
