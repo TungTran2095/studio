@@ -119,6 +119,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
          setCollectionStatus('collecting-historical');
          setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}... (this may take a while)`);
     } else {
+        // This part should ideally not be reachable if the button is removed, but keep logic for safety
         console.log("[AnalysisPanel] Collecting latest data...");
          setCollectionStatus('collecting-latest');
          setCollectionMessage('Collecting latest 1m data...');
@@ -211,23 +212,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                          {/* Data Collection Section */}
                         <div className="space-y-2">
                              <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
-                            {/* Latest Data Button */}
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs h-7"
-                                    onClick={() => handleCollectData('latest')}
-                                    disabled={collectionStatus === 'collecting-latest' || collectionStatus === 'collecting-historical'}
-                                >
-                                    {(collectionStatus === 'collecting-latest') ? (
-                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                    ) : (
-                                        <DatabaseZap className="h-3 w-3 mr-1" />
-                                    )}
-                                    Collect Latest (1000)
-                                </Button>
-                            </div>
+                            {/* Removed Latest Data Button */}
+                            {/* <div className="flex items-center gap-2"> ... button removed ... </div> */}
 
                             {/* Historical Data Collection */}
                              <div className="flex flex-wrap items-center gap-2"> {/* Use flex-wrap */}
@@ -333,29 +319,34 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                 {/* Section 3: Indicators */}
                 <AccordionItem value="item-3" className="border-b-0">
-                    <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md">
+                     <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md">
                         <div className="flex justify-between items-center w-full">
                             <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                                 <BarChart className="h-4 w-4 text-primary" />
                                 BTC/USDT Indicators
                             </h4>
-                            {/* Refresh button - Stop propagation to prevent Accordion toggle */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Prevent AccordionTrigger click
-                                    fetchIndicators();
-                                }}
-                                disabled={isFetchingIndicators}
-                                className="h-5 w-5 text-muted-foreground hover:text-foreground flex-shrink-0 mr-1"
-                                title="Refresh Indicators"
-                            >
-                                <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
-                                <span className="sr-only">Refresh Indicators</span>
-                            </Button>
+                             {/* Ensure the Button is NOT inside the AccordionTrigger itself */}
                         </div>
                     </AccordionTrigger>
+                     {/* Put the Button adjacent to the Trigger, but outside its interactive area */}
+                     {/* Or place it inside AccordionContent if appropriate */}
+                     <div className="absolute right-8 top-2.5"> {/* Adjust positioning as needed */}
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                                e.stopPropagation(); // Still useful to prevent potential bubbling
+                                fetchIndicators();
+                            }}
+                            disabled={isFetchingIndicators}
+                            className="h-5 w-5 text-muted-foreground hover:text-foreground flex-shrink-0"
+                            title="Refresh Indicators"
+                         >
+                            <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
+                            <span className="sr-only">Refresh Indicators</span>
+                        </Button>
+                    </div>
+
                     <AccordionContent className="px-2 pt-1 pb-2">
                          <div className="flex justify-between items-center mb-2">
                             <p className="text-xs text-muted-foreground">
