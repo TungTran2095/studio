@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal } from 'lucide-react'; // Added SplitSquareHorizontal
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -21,16 +21,15 @@ import { format } from 'date-fns';
 import type { DateRange } from "react-day-picker";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// Import Accordion components
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Input } from "@/components/ui/input"; // For placeholder inputs
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // For model selection placeholder
-import { Slider } from "@/components/ui/slider"; // For train/test split placeholder
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 
 
 interface AnalysisPanelProps {
@@ -40,6 +39,8 @@ interface AnalysisPanelProps {
 
 // Type for collection status
 type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error';
+// Type for LSTM training status
+type LstmTrainingStatus = 'idle' | 'training' | 'completed' | 'error';
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -51,21 +52,37 @@ const initialIndicators: IndicatorsData = {
     lastUpdated: "N/A",
 };
 
+// Placeholder type for validation results
+type ValidationResult = { model: string; metric: string; value: string | number };
+
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
   const [indicators, setIndicators] = useState<IndicatorsData>(initialIndicators);
   const [isFetchingIndicators, setIsFetchingIndicators] = useState(false);
   const [collectionStatus, setCollectionStatus] = useState<CollectionStatus>('idle');
   const [collectionMessage, setCollectionMessage] = useState<string>('');
   const [activeTab, setActiveTab] = useState("ensemble"); // Default tab
-  // State for date range picker
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const { toast } = useToast();
   const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
-  const [trainTestSplit, setTrainTestSplit] = useState([80]); // Placeholder state for slider
+  const [trainTestSplit, setTrainTestSplit] = useState([80]);
+
+  // --- LSTM Training State ---
+  const [lstmUnits, setLstmUnits] = useState(50);
+  const [lstmLayers, setLstmLayers] = useState(2);
+  const [lstmTimesteps, setLstmTimesteps] = useState(60);
+  const [lstmDropout, setLstmDropout] = useState(0.2);
+  const [lstmLearningRate, setLstmLearningRate] = useState(0.001);
+  const [lstmBatchSize, setLstmBatchSize] = useState(64);
+  const [lstmEpochs, setLstmEpochs] = useState(100);
+  const [lstmTrainingStatus, setLstmTrainingStatus] = useState<LstmTrainingStatus>('idle');
+  const [lstmTrainingMessage, setLstmTrainingMessage] = useState<string>('');
+  const [lstmValidationResults, setLstmValidationResults] = useState<ValidationResult[]>([]);
+
 
   // --- Indicator Fetching Logic ---
   const fetchIndicators = useCallback(async () => {
-    if (isFetchingIndicators) return;
+    // ... (indicator fetching logic remains the same) ...
+      if (isFetchingIndicators) return;
     setIsFetchingIndicators(true);
     console.log("[AnalysisPanel] Fetching real-time indicators for BTCUSDT...");
     try {
@@ -97,7 +114,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   // Effect for indicators interval - Only run if indicators tab is active or initially
   useEffect(() => {
-    const startFetching = () => {
+    // ... (indicator interval effect remains the same) ...
+     const startFetching = () => {
         fetchIndicators(); // Fetch on start/switch
         if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current);
         indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 5000); // Refresh every 5 seconds
@@ -127,15 +145,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
     // Cleanup on component unmount or tab change
     return () => stopFetching();
-
-    // Re-run effect when activeTab changes or fetchIndicators changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, fetchIndicators, isExpanded]);
 
 
   // --- Data Collection Logic ---
-  const handleCollectData = async () => { // Only handles historical now
-    if (collectionStatus === 'collecting-historical') return; // Prevent multiple clicks
+  const handleCollectData = async () => {
+    // ... (data collection logic remains the same) ...
+     if (collectionStatus === 'collecting-historical') return; // Prevent multiple clicks
 
     if (!dateRange?.from || !dateRange?.to) {
         toast({ title: "Date Range Required", description: "Please select a start and end date for historical data.", variant: "destructive" });
@@ -191,6 +208,60 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     }
   };
 
+   // --- LSTM Training Logic (Simulated) ---
+   const handleStartLstmTraining = async () => {
+    if (lstmTrainingStatus === 'training') return;
+
+    console.log("[AnalysisPanel] Starting LSTM Training (Simulated) with params:", {
+      units: lstmUnits,
+      layers: lstmLayers,
+      timesteps: lstmTimesteps,
+      dropout: lstmDropout,
+      learningRate: lstmLearningRate,
+      batchSize: lstmBatchSize,
+      epochs: lstmEpochs,
+      trainTestSplit: trainTestSplit[0],
+    });
+
+    setLstmTrainingStatus('training');
+    setLstmTrainingMessage(`Training LSTM model (${lstmEpochs} epochs)...`);
+    setLstmValidationResults([]); // Clear previous results
+
+    // --- SIMULATION ---
+    // Replace this with your actual call to the backend (Server Action or API)
+    // The backend would handle fetching data, preprocessing, training, and returning results.
+    await new Promise(resolve => setTimeout(resolve, 5000)); // Simulate training time
+
+    // Simulate success or error
+    const success = Math.random() > 0.2; // 80% success rate
+
+    if (success) {
+        setLstmTrainingStatus('completed');
+        const simulatedRMSE = (Math.random() * 50 + 10).toFixed(4); // Simulate RMSE
+        const simulatedMAE = (Math.random() * 40 + 8).toFixed(4); // Simulate MAE
+        setLstmTrainingMessage('LSTM Training Completed Successfully.');
+        setLstmValidationResults([
+            { model: 'LSTM', metric: 'RMSE', value: simulatedRMSE },
+            { model: 'LSTM', metric: 'MAE', value: simulatedMAE },
+        ]);
+        toast({ title: "LSTM Training", description: "Training completed successfully." });
+    } else {
+        setLstmTrainingStatus('error');
+        const errorMsg = 'Simulated training failure.';
+        setLstmTrainingMessage(`Error: ${errorMsg}`);
+        toast({ title: "LSTM Training Error", description: errorMsg, variant: "destructive" });
+    }
+    // --- END SIMULATION ---
+
+    // Reset status after a delay
+    setTimeout(() => {
+        if (lstmTrainingStatus !== 'training') { // Avoid resetting if a new training started
+             setLstmTrainingStatus('idle');
+             setLstmTrainingMessage('');
+        }
+    }, 8000);
+   };
+
 
   return (
     <Card className={cn(
@@ -233,18 +304,18 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                <div className="p-3 space-y-1"> {/* Reduced space-y */}
                     {/* Ensemble Tab Content */}
                     <TabsContent value="ensemble" className="mt-0">
-                         <Accordion type="multiple" className="w-full" defaultValue={['collect-data']}>
+                         <Accordion type="multiple" className="w-full" defaultValue={['collect-data', 'model-training']}>
                             {/* 1. Collect Data Section */}
-                            <AccordionItem value="collect-data" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-2 px-2 hover:bg-accent/50 rounded">
+                            <AccordionItem value="collect-data" className="border-b border-border">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t"> {/* Increased py */}
                                     <div className="flex items-center gap-2">
                                         <DatabaseZap className="h-4 w-4" />
                                         Collect OHLCV Data
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-1 pb-3 space-y-3">
+                                <AccordionContent className="px-2 pt-2 pb-4 space-y-3"> {/* Adjusted padding */}
                                      <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
-                                    {/* Historical Data Collection */}
+                                     {/* Date Range Picker */}
                                      <div className="flex flex-wrap items-center gap-2">
                                         <Popover>
                                             <PopoverTrigger asChild>
@@ -319,15 +390,15 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             </AccordionItem>
 
                             {/* 2. Model Training Section */}
-                             <AccordionItem value="model-training" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-2 px-2 hover:bg-accent/50 rounded">
+                             <AccordionItem value="model-training" className="border-b border-border">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none">
                                     <div className="flex items-center gap-2">
                                         <Brain className="h-4 w-4" />
                                         Model Training
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-1 pb-3 space-y-3">
-                                    <p className="text-xs text-muted-foreground">Configure and train time series forecasting models.</p>
+                                <AccordionContent className="px-2 pt-2 pb-4 space-y-4"> {/* Increased spacing */}
+                                    <p className="text-xs text-muted-foreground">Configure and train time series forecasting models using collected data.</p>
 
                                     {/* Train/Test Split */}
                                     <div className="space-y-2 border-t border-border pt-3">
@@ -342,40 +413,73 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                             step={5}
                                             value={trainTestSplit}
                                             onValueChange={setTrainTestSplit}
-                                            className="w-[95%] mx-auto"
-                                            disabled
+                                            className="w-[95%] mx-auto pt-1"
+                                            disabled={lstmTrainingStatus === 'training'}
                                         />
-                                        <p className="text-xs text-muted-foreground pt-1">Adjust the percentage of data used for training vs. testing. (Placeholder)</p>
+                                        <p className="text-xs text-muted-foreground pt-1">Adjust the percentage of data used for training vs. validation.</p>
                                     </div>
 
-                                    {/* Model Selection & Training Parameters */}
-                                    <div className="space-y-2 border-t border-border pt-3">
-                                        <Label htmlFor="model-select" className="text-xs">Select Model(s) & Configure</Label>
-                                        <Select disabled>
-                                            <SelectTrigger id="model-select" className="h-8 text-xs">
-                                                <SelectValue placeholder="e.g., ARIMA, LSTM, Prophet..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="arima">ARIMA</SelectItem>
-                                                <SelectItem value="lstm">LSTM</SelectItem>
-                                                <SelectItem value="prophet">Prophet</SelectItem>
-                                                <SelectItem value="other">Other...</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                         {/* Placeholder for parameters */}
-                                        <div className="space-y-1">
-                                            <Input id="epochs" type="number" placeholder="Epochs" className="h-8 text-xs" disabled/>
+                                    {/* LSTM Model Configuration */}
+                                    <div className="space-y-3 border-t border-border pt-3">
+                                        <Label className="text-xs font-medium block">LSTM Model Configuration</Label>
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                            <div className="space-y-1">
+                                                <Label htmlFor="lstm-units" className="text-xs">Units/Layer</Label>
+                                                <Input id="lstm-units" type="number" value={lstmUnits} onChange={(e) => setLstmUnits(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="lstm-layers" className="text-xs">Layers</Label>
+                                                <Input id="lstm-layers" type="number" value={lstmLayers} onChange={(e) => setLstmLayers(parseInt(e.target.value) || 1)} min="1" max="5" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="lstm-timesteps" className="text-xs">Timesteps (Lookback)</Label>
+                                                <Input id="lstm-timesteps" type="number" value={lstmTimesteps} onChange={(e) => setLstmTimesteps(parseInt(e.target.value) || 10)} min="10" max="120" step="10" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="lstm-dropout" className="text-xs">Dropout Rate</Label>
+                                                <Input id="lstm-dropout" type="number" value={lstmDropout} onChange={(e) => setLstmDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.8" step="0.1" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="lstm-lr" className="text-xs">Learning Rate</Label>
+                                                <Input id="lstm-lr" type="number" value={lstmLearningRate} onChange={(e) => setLstmLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="lstm-batch" className="text-xs">Batch Size</Label>
+                                                <Input id="lstm-batch" type="number" value={lstmBatchSize} onChange={(e) => setLstmBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                            </div>
+                                             <div className="space-y-1 col-span-2">
+                                                <Label htmlFor="lstm-epochs" className="text-xs">Epochs</Label>
+                                                <Input id="lstm-epochs" type="number" value={lstmEpochs} onChange={(e) => setLstmEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                            </div>
                                         </div>
-                                        <Button size="sm" variant="outline" className="text-xs h-7" disabled>
-                                            <Play className="h-3 w-3 mr-1" />
-                                            Start Training (Placeholder)
+                                        <Button size="sm" variant="outline" className="text-xs h-7" onClick={handleStartLstmTraining} disabled={lstmTrainingStatus === 'training'}>
+                                            {lstmTrainingStatus === 'training' ? (
+                                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                            ) : (
+                                                <Play className="h-3 w-3 mr-1" />
+                                            )}
+                                            Start LSTM Training
                                         </Button>
-                                         <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
+                                         {/* Training Status */}
+                                         {(lstmTrainingStatus !== 'idle' || lstmTrainingMessage) && (
+                                            <div className="pt-1">
+                                                <span className={cn(
+                                                    "text-xs px-1.5 py-0.5 rounded",
+                                                    lstmTrainingStatus === 'training' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
+                                                    lstmTrainingStatus === 'completed' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                                                    lstmTrainingStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
+                                                    lstmTrainingStatus === 'idle' && lstmTrainingMessage && "text-muted-foreground bg-muted/50"
+                                                )}>
+                                                    {lstmTrainingMessage || lstmTrainingStatus}
+                                                </span>
+                                            </div>
+                                         )}
+                                        <p className="text-xs text-muted-foreground pt-1">Note: Training runs on a separate backend (not implemented here). This UI simulates the process.</p>
                                     </div>
 
                                      {/* Model Validation Results */}
                                      <div className="space-y-2 border-t border-border pt-3">
-                                         <Label className="text-xs block">Validation Results (Placeholder)</Label>
+                                         <Label className="text-xs block">Validation Results</Label>
                                          <Table>
                                             <TableHeader>
                                                 <TableRow>
@@ -385,15 +489,32 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                <TableRow>
-                                                    <TableCell className="text-xs py-1">N/A</TableCell>
-                                                    <TableCell className="text-xs py-1">RMSE</TableCell>
-                                                    <TableCell className="text-right text-xs py-1">-</TableCell>
+                                                {lstmTrainingStatus === 'training' && (
+                                                    <>
+                                                     <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-2/3 bg-muted" /></TableCell></TableRow>
+                                                     <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-1/2 bg-muted" /></TableCell></TableRow>
+                                                    </>
+                                                )}
+                                                {(lstmTrainingStatus === 'completed' || lstmTrainingStatus === 'error') && lstmValidationResults.length === 0 && lstmTrainingStatus !== 'training' && (
+                                                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground text-xs py-2">No validation results yet.</TableCell></TableRow>
+                                                )}
+                                                {lstmValidationResults.map((result, index) => (
+                                                    <TableRow key={index}>
+                                                        <TableCell className="text-xs py-1">{result.model}</TableCell>
+                                                        <TableCell className="text-xs py-1">{result.metric}</TableCell>
+                                                        <TableCell className="text-right text-xs py-1">{result.value}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                                {/* Placeholder for other models */}
+                                                 <TableRow className="opacity-50">
+                                                    <TableCell className="text-xs py-1 text-muted-foreground">N-BEATS (Placeholder)</TableCell>
+                                                    <TableCell className="text-xs py-1 text-muted-foreground">RMSE</TableCell>
+                                                    <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
                                                 </TableRow>
-                                                 <TableRow>
-                                                    <TableCell className="text-xs py-1">N/A</TableCell>
-                                                    <TableCell className="text-xs py-1">MAE</TableCell>
-                                                    <TableCell className="text-right text-xs py-1">-</TableCell>
+                                                <TableRow className="opacity-50">
+                                                    <TableCell className="text-xs py-1 text-muted-foreground">LightGBM (Placeholder)</TableCell>
+                                                    <TableCell className="text-xs py-1 text-muted-foreground">MAE</TableCell>
+                                                    <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
                                                 </TableRow>
                                             </TableBody>
                                         </Table>
@@ -404,26 +525,30 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                             {/* 3. Model Testing Section */}
                             <AccordionItem value="model-testing" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-2 px-2 hover:bg-accent/50 rounded">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b">
                                     <div className="flex items-center gap-2">
                                         <History className="h-4 w-4" />
                                         Model Testing
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-1 pb-3 space-y-3">
+                                <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
                                     <p className="text-xs text-muted-foreground">Perform backtesting and front testing on trained models.</p>
                                      {/* Placeholder for test config */}
-                                    <div className="space-y-1">
-                                         <Label className="text-xs">Testing Configuration</Label>
+                                    <div className="space-y-2 border-t border-border pt-3">
+                                         <Label className="text-xs">Testing Configuration (Placeholder)</Label>
                                          <Select disabled>
                                             <SelectTrigger className="h-8 text-xs">
                                                 <SelectValue placeholder="Select Trained Model..." />
                                             </SelectTrigger>
                                             {/* Options would be populated with trained models */}
+                                             <SelectContent>
+                                                <SelectItem value="lstm" disabled={lstmTrainingStatus !== 'completed'}>LSTM (Trained)</SelectItem>
+                                                <SelectItem value="nbeats" disabled>N-BEATS (Placeholder)</SelectItem>
+                                             </SelectContent>
                                         </Select>
                                          <div className="flex gap-2 pt-1">
-                                             <Input type="text" placeholder="Backtest Period" className="h-8 text-xs" disabled />
-                                             <Input type="text" placeholder="Front Test Period" className="h-8 text-xs" disabled />
+                                             <Input type="text" placeholder="Backtest Period (e.g., 30d)" className="h-8 text-xs" disabled />
+                                             <Input type="text" placeholder="Front Test Period (e.g., 7d)" className="h-8 text-xs" disabled />
                                         </div>
                                     </div>
                                     <Button size="sm" variant="outline" className="text-xs h-7" disabled>
@@ -431,7 +556,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                         Run Tests (Placeholder)
                                     </Button>
                                     {/* Placeholder for results table */}
-                                     <Label className="text-xs text-muted-foreground pt-2 block">Test Results</Label>
+                                     <Label className="text-xs text-muted-foreground pt-2 block">Test Results (Placeholder)</Label>
                                      <Table>
                                         <TableHeader>
                                             <TableRow>
@@ -442,12 +567,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                         </TableHeader>
                                         <TableBody>
                                             <TableRow>
-                                                <TableCell className="text-xs py-1">N/A</TableCell>
+                                                <TableCell className="text-xs py-1">LSTM</TableCell>
                                                 <TableCell className="text-xs py-1">P/L %</TableCell>
                                                 <TableCell className="text-right text-xs py-1">-</TableCell>
                                             </TableRow>
                                              <TableRow>
-                                                <TableCell className="text-xs py-1">N/A</TableCell>
+                                                <TableCell className="text-xs py-1">LSTM</TableCell>
                                                 <TableCell className="text-xs py-1">Sharpe Ratio</TableCell>
                                                 <TableCell className="text-right text-xs py-1">-</TableCell>
                                             </TableRow>
@@ -462,9 +587,47 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                     <TabsContent value="rl" className="mt-0 space-y-2">
                         {/* Add Accordion structure here if needed, similar to Ensemble */}
                         <p className="text-xs text-muted-foreground mb-2">
-                            Train and deploy RL agents for trading strategies. (Placeholder)
+                            Train and deploy RL agents for trading strategies. (Placeholder - UI only)
                         </p>
-                        <Button size="sm" variant="outline" className="text-xs h-6" disabled>Train Agent</Button>
+                         <Accordion type="multiple" className="w-full">
+                             <AccordionItem value="rl-config" className="border-b border-border">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t">
+                                    <div className="flex items-center gap-2"><Bot className="h-4 w-4" />Agent Configuration</div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
+                                    <Label className="text-xs">Select RL Algorithm</Label>
+                                    <Select disabled><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="e.g., PPO, DQN..." /></SelectTrigger></Select>
+                                    <Label className="text-xs">Environment Settings</Label>
+                                    <Input type="text" placeholder="Reward Function..." className="h-8 text-xs" disabled/>
+                                    <Input type="text" placeholder="State Space Features..." className="h-8 text-xs" disabled/>
+                                </AccordionContent>
+                             </AccordionItem>
+                             <AccordionItem value="rl-training" className="border-b border-border">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none">
+                                    <div className="flex items-center gap-2"><Play className="h-4 w-4" />Train Agent</div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
+                                    <Input type="number" placeholder="Training Timesteps" className="h-8 text-xs" disabled/>
+                                    <Button size="sm" variant="outline" className="text-xs h-7" disabled>Start RL Training (Placeholder)</Button>
+                                    <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
+                                </AccordionContent>
+                             </AccordionItem>
+                             <AccordionItem value="rl-testing" className="border-b-0">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b">
+                                     <div className="flex items-center gap-2"><History className="h-4 w-4" />Agent Testing</div>
+                                </AccordionTrigger>
+                                 <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
+                                    <p className="text-xs text-muted-foreground">Backtest the trained RL agent.</p>
+                                    <Button size="sm" variant="outline" className="text-xs h-7" disabled>Run Backtest (Placeholder)</Button>
+                                    {/* Placeholder for RL results */}
+                                    <Label className="text-xs text-muted-foreground pt-2 block">RL Test Results</Label>
+                                     <Table>
+                                        <TableHeader><TableRow><TableHead className="text-xs h-8">Metric</TableHead><TableHead className="text-right text-xs h-8">Value</TableHead></TableRow></TableHeader>
+                                        <TableBody><TableRow><TableCell className="text-xs py-1">Total Reward</TableCell><TableCell className="text-right text-xs py-1">-</TableCell></TableRow></TableBody>
+                                    </Table>
+                                </AccordionContent>
+                             </AccordionItem>
+                        </Accordion>
                     </TabsContent>
 
                      {/* Indicators Tab Content */}
@@ -481,7 +644,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     indicators.lastUpdated
                                 )}
                                 {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                                {/* Manual Refresh Button - Wrapped in a span to prevent nesting issues */}
+                                {/* Manual Refresh Button - Wrapped in a span */}
                                 <span onClick={(e) => e.stopPropagation()}>
                                      <Button
                                         variant="ghost"
