@@ -6,7 +6,7 @@ This is a Next.js application featuring an AI-powered chatbot (YINSEN) integrate
 
 To run this project, you will need to add the following environment variables to your `.env` file:
 
-### Supabase (Required for Chat History)
+### Supabase (Required for Chat History & OHLCV Data)
 
 1.  **Create a Supabase Project**: Go to [Supabase](https://supabase.com/) and create a new project.
 2.  **Get Project URL and Anon Key**: Navigate to your project's **Settings** > **API**. Copy the **Project URL** and the **anon** public key.
@@ -26,43 +26,67 @@ To run this project, you will need to add the following environment variables to
         *   `content`: `text`, **Is Nullable**: `false`.
     *   Click **Save**.
 
-5.  **Set up RLS Policies**: Go to **Authentication** > **Policies** in your Supabase dashboard.
-    *   Find the `message_history` table in the list. If policies exist, you might need to edit them. If not, create new ones.
-    *   **Policy 1: Enable Read Access (Public):**
-        *   Click **New Policy**.
-        *   Choose the **Enable read access for all users** template.
-        *   Review the generated SQL (it should have `FOR SELECT USING (true)`).
-        *   Click **Review**, then **Save policy**.
-    *   **Policy 2: Enable Insert Access (Development vs. Production):**
-        *   Click **New Policy** again for the `message_history` table.
-        *   **For Development (No Auth):** If the UI template **"Enable insert for all users"** is not available, use the **SQL Editor**:
-            *   Navigate to the **SQL Editor** in the left sidebar of your Supabase dashboard.
-            *   Click **New query**.
-            *   Paste the following SQL command:
+5.  **Create `OHLCV_BTC_USDT_1m` Table**: Go to the **Table Editor** again.
+    *   Click **New table**.
+    *   Name the table `OHLCV_BTC_USDT_1m`.
+    *   Ensure **RLS (Row Level Security)** is enabled.
+    *   Add the following columns:
+        *   `open_time`: `timestamptz`, **Primary Key**. (Timestamp of the candle open)
+        *   `open`: `numeric`.
+        *   `high`: `numeric`.
+        *   `low`: `numeric`.
+        *   `close`: `numeric`.
+        *   `volume`: `numeric`. (Base asset volume)
+        *   `close_time`: `timestamptz`. (Timestamp of the candle close)
+        *   `quote_asset_volume`: `numeric`. (Quote asset volume)
+        *   `number_of_trades`: `bigint` (or `int8`).
+        *   `taker_buy_base_asset_volume`: `numeric`.
+        *   `taker_buy_quote_asset_volume`: `numeric`.
+        *   `inserted_at`: `timestamptz`, Default Value: `now()`. (Timestamp when the record was inserted/updated in Supabase)
+    *   Click **Save**.
+    *   **(Optional but Recommended) Add Index**: Go to **Database** > **Indexes**. Create an index on the `open_time` column for faster lookups.
+
+6.  **Set up RLS Policies**: Go to **Authentication** > **Policies** in your Supabase dashboard.
+
+    *   **For `message_history` table:**
+        *   **Policy 1: Enable Read Access (Public):**
+            *   Click **New Policy** > Choose the **Enable read access for all users** template.
+            *   Review and **Save policy**.
+        *   **Policy 2: Enable Insert Access (Public - For Development):**
+            *   Click **New Policy** > Choose the **Enable insert access for all users** template (if available).
+            *   *If template unavailable*, use the **SQL Editor** (Left Sidebar > SQL Editor > New query):
                 ```sql
-                -- Policy name: Allow public insert access (DEV)
-                CREATE POLICY "Allow public insert access (DEV)"
+                -- Policy name: Allow public insert access for messages (DEV)
+                CREATE POLICY "Allow public insert access for messages (DEV)"
                 ON "public"."message_history"
                 AS PERMISSIVE FOR INSERT
-                TO public -- Allows anonymous users (necessary for non-authenticated chat saving)
+                TO public -- Allows anonymous users (via anon key)
                 WITH CHECK (true);
                 ```
-            *   Click **Run**. This creates the policy allowing anyone (including your Next.js backend using the anon key) to insert messages. This is suitable for development without user login.
-        *   **For Production (Requires Auth):** If you implement Supabase Authentication later, you should **delete** the public insert policy above and use the **Enable insert for authenticated users only** template. This ensures only logged-in users can save messages. The policy would look like this:
-            ```sql
-            -- Policy name: Allow authenticated insert access (PROD)
-            CREATE POLICY "Allow authenticated insert access (PROD)"
-            ON "public"."message_history"
-            AS PERMISSIVE FOR INSERT
-            TO authenticated -- Only allows logged-in users
-            WITH CHECK (auth.uid() IS NOT NULL); -- Example check: Ensure user is logged in
-            ```
-        *   **Choose the appropriate method based on your current setup.** Start with the "public" insert policy (using the SQL Editor if needed) for development if you haven't implemented login yet.
+            *   Run the SQL and **Save policy**. (For production with authentication, change `TO public` to `TO authenticated` and add appropriate checks).
 
-    **Troubleshooting RLS:** If you still get "Permission denied. Check RLS policies." errors:
-        *   Double-check in the Supabase dashboard (**Authentication > Policies**) that *both* read and insert policies exist and are enabled for `message_history`.
-        *   Ensure the **target role** for the insert policy is `public` for development without auth, or `authenticated` for production with auth.
-        *   Verify the `WITH CHECK` expression is correct (usually `true` for basic public access, or a condition involving `auth.uid()` for authenticated access).
+    *   **For `OHLCV_BTC_USDT_1m` table:**
+        *   **Policy 1: Enable Read Access (Public):**
+            *   Click **New Policy** for `OHLCV_BTC_USDT_1m`.
+            *   Choose the **Enable read access for all users** template.
+            *   Review and **Save policy**.
+        *   **Policy 2: Enable Insert/Update Access (Public - for Data Collection):**
+            *   Since the `collect-data.ts` action uses `upsert`, we need both INSERT and UPDATE permissions. Use the **SQL Editor**:
+                ```sql
+                -- Policy name: Allow public upsert access for OHLCV data
+                CREATE POLICY "Allow public upsert access for OHLCV data"
+                ON "public"."OHLCV_BTC_USDT_1m"
+                AS PERMISSIVE FOR ALL -- Grants INSERT, SELECT, UPDATE, DELETE (adjust if needed)
+                TO public -- Allows anon key access
+                USING (true) -- Condition for SELECT, UPDATE, DELETE
+                WITH CHECK (true); -- Condition for INSERT, UPDATE
+                ```
+            *   Run the SQL and **Save policy**. This broad policy allows the data collection script (using the anon key) to insert or update records.
+
+    **Troubleshooting RLS:** If you encounter "Permission denied. Check RLS policies." errors:
+        *   Verify in **Authentication > Policies** that *all necessary policies* (read, insert/update) exist and are enabled for *both* `message_history` and `OHLCV_BTC_USDT_1m`.
+        *   Ensure the **target role** for insert/upsert policies is `public` (if not using Supabase Auth).
+        *   Ensure `USING (true)` and `WITH CHECK (true)` are set for basic public access.
         *   Refresh your application after changing policies.
 
 ### Google AI (Optional for Genkit/AI Features)
@@ -100,8 +124,9 @@ To use the Binance asset summary and trading features:
 ## Features
 
 *   **TradingView Chart**: Displays the BTC/USDT price chart.
-*   **Binance Account Panel**: Allows users to input Binance API keys to view asset summaries (BTC/USDT) and recent trade history (BTC/USDT).
-*   **YINSEN Chatbot**: An AI assistant integrated with Binance (using provided keys) to answer questions and potentially execute trades (Buy/Sell Market/Limit orders for BTC/USDT). Chat history is stored in Supabase.
-*   **Analysis Panel**: Displays real-time BTC/USDT technical indicators and includes placeholders for future analysis tools.
+*   **Binance Account Panel**: Allows users to input Binance API keys to view asset summaries (BTC/USDT) and recent trade history (BTC/USDT). Data refreshes periodically.
+*   **Trading Panel**: Allows placing Market and Limit orders for BTC/USDT using the provided Binance API keys.
+*   **YINSEN Chatbot**: An AI assistant. Chat history is stored in Supabase. (Trading functionality removed from bot).
+*   **Analysis Panel**: Displays real-time BTC/USDT technical indicators and includes a button to collect 1-minute OHLCV data into Supabase.
 
 ```
