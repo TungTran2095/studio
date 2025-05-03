@@ -1022,7 +1022,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                </AccordionContent>
            </AccordionItem>
 
-           {/* 3. Combine Models (Ensemble Prediction) Section - NEW */}
+           {/* 3. Combine Models (Ensemble Prediction) Section - Refactored */}
             <AccordionItem value="combine-models" className="border-b border-border">
                 <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground">
                     <div className="flex items-center gap-2">
@@ -1031,73 +1031,102 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                     </div>
                 </AccordionTrigger>
                 <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
-                    <p className="text-xs text-muted-foreground">Combine predictions from trained models using a meta-learner.</p>
+                    <p className="text-xs text-muted-foreground">Combine predictions from trained models using a meta-learner (Stacking recommended).</p>
 
                     {/* Base Model Selection */}
                     <div className="space-y-2 border-t border-border pt-3">
-                        <Label className="text-xs block">Select Base Models</Label>
+                        <Label className="text-xs block">Select Base Models for Stacking</Label>
                         <div className="grid grid-cols-2 gap-2">
                             {['LSTM', 'N-BEATS', 'LightGBM', 'DLinear', 'Informer', 'DeepAR'].map(model => {
                                 // Check if validation results exist for this model
-                                const isTrained = validationResults.some(r => r.model === model);
+                                const isTrained = validationResults.some(r => r.model === model && (r.metric === 'RMSE' || r.metric === 'MAE'));
                                 return (
                                     <div key={model} className="flex items-center space-x-2">
-                                        <Checkbox id={`check-${model}`} disabled={!isTrained || trainingStatus === 'training'} />
-                                        <Label htmlFor={`check-${model}`} className={cn("text-xs font-normal", !isTrained && "text-muted-foreground opacity-50")}>
-                                            {model} {isTrained ? '' : '(Not Trained)'}
+                                        <Checkbox
+                                            id={`check-${model}`}
+                                            // Add state management for selected base models if needed
+                                            // checked={selectedBaseModels.includes(model)}
+                                            // onCheckedChange={(checked) => handleBaseModelSelection(model, checked)}
+                                            disabled={!isTrained || trainingStatus === 'training'}
+                                        />
+                                        <Label
+                                            htmlFor={`check-${model}`}
+                                            className={cn(
+                                                "text-xs font-normal",
+                                                !isTrained && "text-muted-foreground opacity-50 cursor-not-allowed"
+                                            )}
+                                        >
+                                            {model} {!isTrained && '(Not Trained)'}
                                         </Label>
                                     </div>
                                 );
                             })}
                         </div>
-                        <p className="text-xs text-muted-foreground pt-1">Select models whose predictions will be combined.</p>
+                        <p className="text-xs text-muted-foreground pt-1">Select models whose predictions will be combined as features for the meta-model.</p>
                     </div>
 
                      {/* Meta-Model Selection */}
                      <div className="space-y-2 border-t border-border pt-3">
-                        <Label htmlFor="meta-model-select" className="text-xs">Select Meta-Model</Label>
-                        <Select disabled={trainingStatus === 'training'}>
+                        <Label htmlFor="meta-model-select" className="text-xs">Select Meta-Model (Stacking)</Label>
+                        <Select disabled={trainingStatus === 'training'} /* Add state for selectedMetaModel */ >
                             <SelectTrigger id="meta-model-select" className="h-8 text-xs">
-                                <SelectValue placeholder="e.g., XGBoost, Linear Regression..." />
+                                <SelectValue placeholder="e.g., LightGBM, Linear Regression..." />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="xgboost" className="text-xs">XGBoost (Placeholder)</SelectItem>
-                                <SelectItem value="linear" className="text-xs">Linear Regression (Placeholder)</SelectItem>
-                                <SelectItem value="voting" className="text-xs">Voting Classifier (Placeholder)</SelectItem>
+                                <SelectItem value="lightgbm" className="text-xs">LightGBM (Recommended)</SelectItem>
+                                <SelectItem value="linear" className="text-xs">Linear Regression (Fast)</SelectItem>
+                                {/* Add other potential meta-models if needed */}
+                                {/* <SelectItem value="xgboost" className="text-xs">XGBoost</SelectItem> */}
                             </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground pt-1">The model used to combine base model predictions.</p>
+                        <p className="text-xs text-muted-foreground pt-1">This model learns to combine the base model predictions.</p>
                     </div>
 
-                    {/* Execute Ensemble Prediction */}
+                    {/* Additional Features for Meta-Model */}
                      <div className="space-y-2 border-t border-border pt-3">
-                        <Button size="sm" variant="outline" className="text-xs h-7" disabled={trainingStatus === 'training'}>
-                            <Target className="h-3 w-3 mr-1" />
-                            Generate Ensemble Prediction (Placeholder)
+                         <Label className="text-xs">Additional Features for Meta-Model (Optional)</Label>
+                          <Input
+                              type="text"
+                              // value={metaFeatures.join(', ')} // Add state if needed
+                              // onChange={(e) => setMetaFeatures(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                              placeholder="e.g., RSI, MACD, Volume_MA"
+                              className="h-8 text-xs"
+                              disabled={trainingStatus === 'training'}
+                           />
+                            <p className="text-xs text-muted-foreground">Comma-separated technical indicators or features to include alongside base model predictions.</p>
+                     </div>
+
+
+                    {/* Train/Execute Ensemble */}
+                     <div className="space-y-2 border-t border-border pt-3">
+                        <Button size="sm" variant="outline" className="text-xs h-7" disabled={trainingStatus === 'training'} /* onClick={handleTrainEnsemble} */>
+                             <Layers className="h-3 w-3 mr-1" />
+                            Train Ensemble Meta-Model (Placeholder)
                         </Button>
                          {/* Placeholder for status/results */}
                         <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
                      </div>
 
-                     {/* Ensemble Prediction Results */}
+                     {/* Ensemble Prediction Results (Placeholder Structure) */}
                      <div className="space-y-2 border-t border-border pt-3">
-                         <Label className="text-xs block">Ensemble Prediction Result</Label>
+                         <Label className="text-xs block">Ensemble Validation/Test Result</Label>
                          <Table>
                              <TableHeader>
                                 <TableRow>
-                                    <TableHead className="text-xs h-8">Timeframe</TableHead>
-                                    <TableHead className="text-right text-xs h-8">Predicted Value</TableHead>
+                                    <TableHead className="text-xs h-8">Metric</TableHead>
+                                    <TableHead className="text-right text-xs h-8">Value</TableHead>
                                 </TableRow>
                              </TableHeader>
                              <TableBody>
                                 <TableRow>
-                                    <TableCell className="text-xs py-1">Next 1 min</TableCell>
+                                    <TableCell className="text-xs py-1">RMSE</TableCell>
                                     <TableCell className="text-right text-xs py-1">-</TableCell>
                                 </TableRow>
                                 <TableRow>
-                                    <TableCell className="text-xs py-1">Next 5 min</TableCell>
+                                    <TableCell className="text-xs py-1">Sharpe Ratio</TableCell>
                                     <TableCell className="text-right text-xs py-1">-</TableCell>
                                 </TableRow>
+                                {/* Add other relevant metrics like MAE, P/L% */}
                              </TableBody>
                          </Table>
                      </div>
@@ -1129,6 +1158,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                  {validationResults.length === 0 && (
                                     <SelectItem value="none" disabled className="text-xs">No models trained yet</SelectItem>
                                  )}
+                                 {/* Add option for Ensemble model once trained */}
+                                 <SelectItem value="ensemble" className="text-xs">Ensemble (Trained - Placeholder)</SelectItem>
                             </SelectContent>
                        </Select>
                         <div className="flex gap-2 pt-1">
@@ -1160,6 +1191,11 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                <TableCell className="text-xs py-1">Sharpe Ratio</TableCell>
                                <TableCell className="text-right text-xs py-1">-</TableCell>
                            </TableRow>
+                           <TableRow>
+                                <TableCell className="text-xs py-1">Ensemble</TableCell>
+                                <TableCell className="text-xs py-1">Sharpe Ratio</TableCell>
+                                <TableCell className="text-right text-xs py-1">-</TableCell>
+                            </TableRow>
                        </TableBody>
                    </Table>
                </AccordionContent>
@@ -1328,3 +1364,4 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   );
 };
 
+    
