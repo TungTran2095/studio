@@ -83,6 +83,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
   const { toast } = useToast();
   const summaryViewportRef = useRef<HTMLDivElement>(null); // Ref for summary scroll area
   const historyViewportRef = useRef<HTMLDivElement>(null); // Ref for history scroll area
+  const [isCredentialsVisible, setIsCredentialsVisible] = useState(true); // State for credentials visibility
 
    // Initialize the form with values from the store
    const form = useForm<z.infer<typeof formSchema>>({
@@ -222,7 +223,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 console.error("Error fetching trade history from action:", result.error);
                 toast({
                 title: "Error Fetching Trades",
-                description: `Failed to fetch trade history: ${result.error}.`, // Simplified error
+                description: `Failed to fetch trade history: ${result.error}. Check library version or initialization.`, // Updated error message
                 variant: "destructive",
                 });
             }
@@ -450,80 +451,98 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
       {isExpanded && (
         // Content container takes remaining space, adjust padding
         <CardContent className="flex-1 p-3 overflow-hidden flex flex-col gap-4">
-          {/* API Key Form */}
-          <Form {...form}>
-            {/* Use store credentials for the handler */}
-             <form onSubmit={form.handleSubmit(handleFetchAssets)} className="space-y-3">
-               {/* Inputs remain the same */}
-               <FormField
-                control={form.control}
-                name="apiKey"
-                render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-xs text-foreground">API Key</FormLabel>
-                    <FormControl>
-                      <Input
-                      placeholder="Binance API Key"
-                      {...field}
-                      type="password" // Hide sensitive input
-                      className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
-                      disabled={isLoadingAssets} // Only disable during asset load
-                      />
-                    </FormControl>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
+          {/* API Key Form Section */}
+           <div className="space-y-3 border-b border-border pb-4 mb-4">
+                {/* Header for Credentials Section with Toggle */}
+                <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setIsCredentialsVisible(!isCredentialsVisible)}
+                >
+                    <Label className="text-sm font-medium text-foreground">API Credentials</Label>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground">
+                        {isCredentialsVisible ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        <span className="sr-only">{isCredentialsVisible ? 'Hide' : 'Show'} Credentials</span>
+                    </Button>
+                </div>
+
+                {/* Collapsible Form Content */}
+                {isCredentialsVisible && (
+                    <Form {...form}>
+                        {/* Use store credentials for the handler */}
+                        <form onSubmit={form.handleSubmit(handleFetchAssets)} className="space-y-3 pt-2">
+                            {/* Inputs remain the same */}
+                            <FormField
+                                control={form.control}
+                                name="apiKey"
+                                render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                    <FormLabel className="text-xs text-foreground">API Key</FormLabel>
+                                    <FormControl>
+                                    <Input
+                                    placeholder="Binance API Key"
+                                    {...field}
+                                    type="password" // Hide sensitive input
+                                    className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
+                                    disabled={isLoadingAssets} // Only disable during asset load
+                                    />
+                                    </FormControl>
+                                    <FormMessage className="text-xs" />
+                                </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="apiSecret"
+                                render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                    <FormLabel className="text-xs text-foreground">API Secret</FormLabel>
+                                    <FormControl>
+                                    <Input
+                                        placeholder="Binance API Secret"
+                                        {...field}
+                                        type="password" // Hide sensitive input
+                                        className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
+                                        disabled={isLoadingAssets} // Only disable during asset load
+                                    />
+                                    </FormControl>
+                                    <FormMessage className="text-xs" />
+                                </FormItem>
+                                )}
+                            />
+                            <div className="flex items-center justify-between">
+                                <FormField
+                                control={form.control}
+                                name="isTestnet"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                        <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                        id="testnet"
+                                        disabled={isLoadingAssets} // Only disable during asset load
+                                        className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground" // Theme colors
+                                        />
+                                    </FormControl>
+                                    <FormLabel htmlFor="testnet" className="text-xs font-normal text-foreground">
+                                        Use Testnet
+                                    </FormLabel>
+                                    </FormItem>
+                                )}
+                                />
+                                <Button type="submit" size="sm" disabled={isLoadingAssets} className="text-xs h-8">
+                                {isLoadingAssets ? "Loading..." : "Load Assets"}
+                                </Button>
+                            </div>
+                        </form>
+                    </Form>
                 )}
-              />
-              <FormField
-                control={form.control}
-                name="apiSecret"
-                render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-xs text-foreground">API Secret</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Binance API Secret"
-                        {...field}
-                        type="password" // Hide sensitive input
-                        className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring" // Theme colors
-                         disabled={isLoadingAssets} // Only disable during asset load
-                      />
-                    </FormControl>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
-                )}
-              />
-              <div className="flex items-center justify-between">
-                <FormField
-                  control={form.control}
-                  name="isTestnet"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          id="testnet"
-                           disabled={isLoadingAssets} // Only disable during asset load
-                          className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground" // Theme colors
-                        />
-                      </FormControl>
-                      <FormLabel htmlFor="testnet" className="text-xs font-normal text-foreground">
-                        Use Testnet
-                      </FormLabel>
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" size="sm" disabled={isLoadingAssets} className="text-xs h-8">
-                  {isLoadingAssets ? "Loading..." : "Load Assets"}
-                </Button>
-              </div>
-            </form>
-          </Form>
+           </div>
+
 
           {/* Tabs for Summary and History */}
            {/* Use store state for active tab and handler */}
-          <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col overflow-hidden pt-3 border-t border-border">
+          <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col overflow-hidden">
             <div className="flex justify-between items-center mb-2">
                 <TabsList className="grid w-full grid-cols-2 h-9">
                     {/* Updated Tab Titles */}
