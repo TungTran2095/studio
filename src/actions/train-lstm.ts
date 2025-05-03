@@ -132,29 +132,35 @@ export async function startLstmTrainingJob(
                     const validation = LstmTrainingResultSchema.safeParse(result);
                     if (validation.success) {
                          console.log("[startLstmTrainingJob] Parsed Python output:", validation.data);
+                         // Ensure success flag from Python is respected
                          resolve({ ...validation.data, jobId }); // Add jobId
                     } else {
                         console.error("[startLstmTrainingJob] Failed to validate Python JSON output:", validation.error);
+                        // Even if code is 0, if output is invalid, report failure.
                         resolve({
                             success: false,
-                            message: `Training script finished, but output format is invalid. Check Python script output. Error: ${validation.error.message}`,
+                            message: `Training script finished (code 0), but output format is invalid. Check Python script's JSON output. Error: ${validation.error.message}`,
                             jobId: jobId,
                         });
                     }
                 } catch (parseError: any) {
                      console.error("[startLstmTrainingJob] Failed to parse Python output as JSON:", parseError);
                      console.error("[startLstmTrainingJob] Raw stdout:", stdoutData);
+                    // Script finished successfully (code 0) but output wasn't valid JSON
                     resolve({
                         success: false,
-                        message: `Training script finished, but failed to parse output. Raw output: ${stdoutData.slice(-200)}`, // Show last part of output
+                        message: `Training script finished successfully (code 0), but failed to parse output. Raw stdout: ${stdoutData.slice(-500)}`, // Show more output
                         jobId: jobId,
                     });
                 }
             } else {
-                // Script exited with an error code
-                 const errorMessage = stderrData.trim() || `Python script exited with error code ${code}.`;
+                // Script exited with an error code. Prioritize stderr for the message.
+                 const errorMessage = stderrData.trim() || `Python script exited with error code ${code}. Check server logs for details.`;
+                 console.error(`[startLstmTrainingJob] Python script failed. Stderr: ${stderrData.trim()}`);
+                 console.error(`[startLstmTrainingJob] Python script failed. Stdout: ${stdoutData.trim()}`);
                 resolve({
                     success: false,
+                    // Return the captured stderr content as the primary error message
                     message: errorMessage,
                     jobId: jobId,
                 });
@@ -181,3 +187,4 @@ export async function startLstmTrainingJob(
     }
   }); // End of Promise
 }
+

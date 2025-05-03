@@ -3,6 +3,7 @@ import os
 import argparse
 import json
 import sys
+import traceback # Import traceback for detailed error logging
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -34,8 +35,6 @@ parser.add_argument('--train_test_split_ratio', type=float, required=True, help=
 parser.add_argument('--target_column', type=str, default='close', help='Column name to predict.')
 parser.add_argument('--feature_columns', nargs='+', default=['open', 'high', 'low', 'close', 'volume'], help='List of feature columns to use.')
 # Supabase Credentials (passed via env variables for security)
-# parser.add_argument('--supabase_url', type=str, required=True, help='Supabase project URL.')
-# parser.add_argument('--supabase_key', type=str, required=True, help='Supabase anon key.')
 
 args = parser.parse_args()
 
@@ -60,6 +59,7 @@ def print_json_output(success, message=None, rmse=None, mae=None):
     if mae is not None: # Check for None specifically
          if "results" not in output: output["results"] = {}
          output["results"]["mae"] = mae
+    # Ensure output is printed to stdout
     print(json.dumps(output))
     sys.stdout.flush() # Ensure output is sent immediately
 
@@ -73,18 +73,23 @@ try:
     if not supabase_url or not supabase_key:
         raise ValueError("Missing Supabase URL or Key. Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in .env")
 
+    print("[Python Script] Connecting to Supabase...", file=sys.stderr) # Log progress to stderr
     supabase: Client = create_client(supabase_url, supabase_key)
+    print("[Python Script] Supabase client created.", file=sys.stderr)
 
     # --- 2. Fetch Data ---
+    print(f"[Python Script] Fetching data from OHLCV_BTC_USDT_1m...", file=sys.stderr)
     # Fetch all data, ordered by time
     response = supabase.table("OHLCV_BTC_USDT_1m").select("*").order("open_time", desc=False).execute()
+    print(f"[Python Script] Fetched {len(response.data)} records.", file=sys.stderr)
+
 
     if not response.data:
-        raise ValueError("No data fetched from OHLCV_BTC_USDT_1m table. Ensure data exists.")
+        raise ValueError("No data fetched from OHLCV_BTC_USDT_1m table. Ensure data exists and RLS allows reads.")
 
     df = pd.DataFrame(response.data)
     df['open_time'] = pd.to_datetime(df['open_time'])
-    df = df.sort_values('open_time').set_index('open_time') # Set time as index for potential future use
+    df = df.sort_values('open_time').set_index('open_time') # Set time as index
 
     # Select features and target
     if args.target_column not in args.feature_columns:
@@ -97,21 +102,31 @@ try:
         missing_cols = [col for col in all_cols if col not in df.columns]
         raise ValueError(f"Missing required columns in fetched data: {', '.join(missing_cols)}")
 
+    print(f"[Python Script] Using features: {all_cols}", file=sys.stderr)
     data_to_process = df[all_cols].astype(float).values # Ensure numeric type
     target_col_index_in_features = all_cols.index(args.target_column) # Index of target within the selected columns
 
     # --- 3. Preprocess Data ---
+    print("[Python Script] Scaling data...", file=sys.stderr)
     # Scale features
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled_data = scaler.fit_transform(data_to_process)
+    print(f"[Python Script] Scaled data shape: {scaled_data.shape}", file=sys.stderr)
+
 
     # Create sequences
+    print(f"[Python Script] Creating sequences with {args.timesteps} timesteps...", file=sys.stderr)
     X, y = create_sequences(scaled_data, target_col_index_in_features, args.timesteps)
+    print(f"[Python Script] Created sequences: X shape={X.shape}, y shape={y.shape}", file=sys.stderr)
+
 
     # --- 4. Split Data ---
+    print(f"[Python Script] Splitting data (Train ratio: {args.train_test_split_ratio})...", file=sys.stderr)
     X_train, X_temp, y_train, y_temp = train_test_split(X, y, train_size=args.train_test_split_ratio, shuffle=False) # Keep order for time series
     # Split remaining temp data into validation and test (e.g., 50/50 split of the remainder)
     X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, shuffle=False)
+    print(f"[Python Script] Split sizes: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}", file=sys.stderr)
+
 
     if len(X_train) == 0 or len(X_val) == 0 or len(X_test) == 0:
         raise ValueError("Data split resulted in empty sets. Ensure enough data and appropriate split ratio/timesteps.")
@@ -119,6 +134,7 @@ try:
     n_features = X_train.shape[2] # Number of features in the input sequence
 
     # --- 5. Build LSTM Model ---
+    print(f"[Python Script] Building LSTM model ({args.layers} layers, {args.units} units)...", file=sys.stderr)
     model = Sequential()
     # Input Layer + Hidden Layers
     for i in range(args.layers):
@@ -131,13 +147,17 @@ try:
 
     # Output Layer (predicting a single value - the target column)
     model.add(Dense(units=1, activation='linear')) # Linear activation for regression
+    model.summary(print_fn=lambda x: print(x, file=sys.stderr)) # Print model summary to stderr
+
 
     # --- 6. Compile Model ---
+    print(f"[Python Script] Compiling model (LR: {args.learning_rate})...", file=sys.stderr)
     optimizer = Adam(learning_rate=args.learning_rate)
     model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae']) # Use MSE for regression
 
     # --- 7. Train Model ---
-    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=0) # Reduced verbosity
+    print(f"[Python Script] Starting training ({args.epochs} epochs, Batch: {args.batch_size})...", file=sys.stderr)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=1) # Increased verbosity for callback logs (to stderr)
 
     history = model.fit(
         X_train, y_train,
@@ -147,21 +167,32 @@ try:
         callbacks=[early_stopping],
         verbose=0 # Suppress Keras epoch logging to keep stdout clean for JSON
     )
+    print("[Python Script] Training finished.", file=sys.stderr)
+
 
     # --- 8. Evaluate Model ---
-    # Use the test set for final evaluation
+    print("[Python Script] Evaluating model on test set...", file=sys.stderr)
     loss, mae = model.evaluate(X_test, y_test, verbose=0)
     rmse = np.sqrt(loss) # RMSE is sqrt of MSE loss
+    print(f"[Python Script] Evaluation Results - RMSE: {rmse:.4f}, MAE: {mae:.4f}", file=sys.stderr)
 
-    # --- 9. Output Results ---
-    # Optional: Save the model
-    # model.save('trained_lstm_model.h5')
 
-    print_json_output(success=True, message=f"Training completed. Final Val Loss: {history.history['val_loss'][-1]:.4f}", rmse=rmse, mae=mae)
+    # --- 9. Output Results (to stdout) ---
+    # Optional: Save the model locally if needed
+    # model_save_path = 'trained_lstm_model.h5'
+    # print(f"[Python Script] Saving model to {model_save_path}", file=sys.stderr)
+    # model.save(model_save_path)
+
+    final_message = f"Training completed successfully. Final Val Loss: {history.history['val_loss'][-1]:.4f}"
+    print_json_output(success=True, message=final_message, rmse=rmse, mae=mae)
 
 except Exception as e:
     # --- Error Handling ---
-    print_json_output(success=False, message=f"Training failed: {str(e)}")
-    # Optionally: raise e # Re-raise if you want the process to exit with non-zero code
+    # Log detailed exception traceback to stderr for debugging
+    print(f"[Python Script ERROR] An error occurred during training: {str(e)}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr) # Print full traceback to stderr
 
-```
+    # Print a structured JSON error message to stdout
+    # The Node.js action expects a JSON object on stdout
+    print_json_output(success=False, message=f"Training failed: {str(e)}")
+    sys.exit(1) # Exit with a non-zero code to indicate failure
