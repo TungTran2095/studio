@@ -26,13 +26,20 @@ To run this project, you will need to add the following environment variables to
         *   `content`: `text`, **Is Nullable**: `false`.
     *   Click **Save**.
 5.  **Set up RLS Policies**: Go to **Authentication** > **Policies** in your Supabase dashboard.
-    *   Select the `message_history` table.
-    *   Click **New Policy**.
-    *   Choose **Enable read access for all users** template. Review and save.
-    *   Click **New Policy** again.
-    *   Choose **Enable insert for all users** template. **IMPORTANT:** This is suitable for development without user authentication. For production, you MUST implement authentication and use a stricter policy like **Enable insert for authenticated users only**. Review the policy SQL to understand it, then save.
+    *   Find the `message_history` table in the list.
+    *   **Policy 1: Enable Read Access:**
+        *   Click **New Policy**.
+        *   Choose the **Enable read access for all users** template.
+        *   Review the generated SQL (it should have `FOR SELECT USING (true)`).
+        *   Click **Review**, then **Save policy**.
+    *   **Policy 2: Enable Insert Access:**
+        *   Click **New Policy** again for the `message_history` table.
+        *   Choose the **Enable insert for all users** template.
+        *   **CRITICAL:** This template allows *anyone* to insert data. This is okay for development without user accounts, but **NOT SECURE FOR PRODUCTION**. In production, you'd typically use "Enable insert for authenticated users only" or a custom policy.
+        *   Review the generated SQL. It should look like the example below (`FOR INSERT WITH CHECK (true)`).
+        *   Click **Review**, then **Save policy**.
 
-    **Example SQL for Insert Policy (Allow ALL):**
+    **Example SQL for Insert Policy (Allow ALL - For Development):**
     ```sql
     -- Policy name: Allow public insert access
     -- Target roles: public
@@ -43,6 +50,7 @@ To run this project, you will need to add the following environment variables to
     TO public
     WITH CHECK (true);
     ```
+    **Troubleshooting RLS:** If you still get "Permission denied. Check RLS policies." errors, double-check in the Supabase dashboard under **Authentication > Policies** that *both* the read and insert policies exist, are enabled for the `message_history` table, and target the `public` role (for development without authentication).
 
 ### Google AI (Optional for Genkit/AI Features)
 
@@ -82,4 +90,3 @@ To use the Binance asset summary and trading features:
 *   **Binance Account Panel**: Allows users to input Binance API keys to view asset summaries (BTC/USDT) and recent trade history (BTC/USDT).
 *   **YINSEN Chatbot**: An AI assistant integrated with Binance (using provided keys) to answer questions and potentially execute trades (Buy/Sell Market/Limit orders for BTC/USDT). Chat history is stored in Supabase.
 *   **Analysis Panel**: Placeholder panel for future analysis tools.
-```

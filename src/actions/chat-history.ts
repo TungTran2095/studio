@@ -51,9 +51,12 @@ export async function fetchChatHistory(): Promise<FetchHistoryResult> {
     if (error) {
       console.error('[fetchChatHistory] Supabase error:', error);
       // Check specifically for RLS errors
-      if (error.message.includes('new row violates row-level security policy')) {
-           console.error('[fetchChatHistory] RLS policy might be preventing reads. Check Supabase table policies.');
-           return { success: false, data: [], error: 'Permission denied. Check RLS policies.' };
+      if (error.message.includes('relation "public.message_history" does not exist') || error.message.includes('Could not find the specified table')) {
+           console.error('[fetchChatHistory] Table "message_history" might not exist. Check Supabase table editor.');
+           return { success: false, data: [], error: 'Table not found.' };
+      } else if (error.message.includes('security policy') || error.code === '42501') { // 42501 is permission denied
+           console.error('[fetchChatHistory] RLS policy might be preventing reads. Check Supabase Authentication > Policies for message_history (SELECT).');
+           return { success: false, data: [], error: 'Permission denied. Check RLS policies for read access.' };
       }
       return { success: false, data: [], error: error.message };
     }
@@ -97,9 +100,12 @@ export async function saveChatMessage(
     if (error) {
       console.error('[saveChatMessage] Supabase insert error:', error);
        // Check specifically for RLS errors during insert
-       if (error.message.includes('new row violates row-level security policy')) {
-           console.error('[saveChatMessage] RLS policy prevented insert. Check Supabase table policies.');
-           return { success: false, error: 'Permission denied. Check RLS policies.' };
+       if (error.message.includes('security policy') || error.code === '42501') { // 42501 is permission denied
+           console.error('[saveChatMessage] RLS policy prevented insert. Check Supabase Authentication > Policies for message_history (INSERT). Ensure it allows public role.');
+           return { success: false, error: 'Permission denied. Check RLS policies for insert access.' };
+       } else if (error.message.includes('relation "public.message_history" does not exist') || error.message.includes('Could not find the specified table')) {
+            console.error('[saveChatMessage] Table "message_history" might not exist. Check Supabase table editor.');
+            return { success: false, error: 'Table not found.' };
        }
       return { success: false, error: error.message };
     }
