@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal, Settings, Settings2 } from 'lucide-react'; // Added Settings icons
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch"; // Import Switch
 
 
 interface AnalysisPanelProps {
@@ -55,6 +56,18 @@ const initialIndicators: IndicatorsData = {
 // Placeholder type for validation results
 type ValidationResult = { model: string; metric: string; value: string | number };
 
+// Default LSTM Configuration
+const defaultLstmConfig = {
+  units: 50,
+  layers: 2,
+  timesteps: 60,
+  dropout: 0.2,
+  learningRate: 0.001,
+  batchSize: 64,
+  epochs: 100,
+};
+
+
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
   const [indicators, setIndicators] = useState<IndicatorsData>(initialIndicators);
   const [isFetchingIndicators, setIsFetchingIndicators] = useState(false);
@@ -67,13 +80,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [trainTestSplit, setTrainTestSplit] = useState([80]);
 
   // --- LSTM Training State ---
-  const [lstmUnits, setLstmUnits] = useState(50);
-  const [lstmLayers, setLstmLayers] = useState(2);
-  const [lstmTimesteps, setLstmTimesteps] = useState(60);
-  const [lstmDropout, setLstmDropout] = useState(0.2);
-  const [lstmLearningRate, setLstmLearningRate] = useState(0.001);
-  const [lstmBatchSize, setLstmBatchSize] = useState(64);
-  const [lstmEpochs, setLstmEpochs] = useState(100);
+  const [useDefaultLstmConfig, setUseDefaultLstmConfig] = useState(true); // State for the switch
+  const [lstmUnits, setLstmUnits] = useState(defaultLstmConfig.units);
+  const [lstmLayers, setLstmLayers] = useState(defaultLstmConfig.layers);
+  const [lstmTimesteps, setLstmTimesteps] = useState(defaultLstmConfig.timesteps);
+  const [lstmDropout, setLstmDropout] = useState(defaultLstmConfig.dropout);
+  const [lstmLearningRate, setLstmLearningRate] = useState(defaultLstmConfig.learningRate);
+  const [lstmBatchSize, setLstmBatchSize] = useState(defaultLstmConfig.batchSize);
+  const [lstmEpochs, setLstmEpochs] = useState(defaultLstmConfig.epochs);
   const [lstmTrainingStatus, setLstmTrainingStatus] = useState<LstmTrainingStatus>('idle');
   const [lstmTrainingMessage, setLstmTrainingMessage] = useState<string>('');
   const [lstmValidationResults, setLstmValidationResults] = useState<ValidationResult[]>([]);
@@ -81,7 +95,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   // --- Indicator Fetching Logic ---
   const fetchIndicators = useCallback(async () => {
-    // ... (indicator fetching logic remains the same) ...
       if (isFetchingIndicators) return;
     setIsFetchingIndicators(true);
     console.log("[AnalysisPanel] Fetching real-time indicators for BTCUSDT...");
@@ -114,7 +127,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   // Effect for indicators interval - Only run if indicators tab is active or initially
   useEffect(() => {
-    // ... (indicator interval effect remains the same) ...
      const startFetching = () => {
         fetchIndicators(); // Fetch on start/switch
         if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current);
@@ -151,7 +163,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   // --- Data Collection Logic ---
   const handleCollectData = async () => {
-    // ... (data collection logic remains the same) ...
      if (collectionStatus === 'collecting-historical') return; // Prevent multiple clicks
 
     if (!dateRange?.from || !dateRange?.to) {
@@ -212,19 +223,25 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
    const handleStartLstmTraining = async () => {
     if (lstmTrainingStatus === 'training') return;
 
-    console.log("[AnalysisPanel] Starting LSTM Training (Simulated) with params:", {
-      units: lstmUnits,
-      layers: lstmLayers,
-      timesteps: lstmTimesteps,
-      dropout: lstmDropout,
-      learningRate: lstmLearningRate,
-      batchSize: lstmBatchSize,
-      epochs: lstmEpochs,
-      trainTestSplit: trainTestSplit[0],
+    const trainingConfig = useDefaultLstmConfig
+      ? defaultLstmConfig
+      : {
+          units: lstmUnits,
+          layers: lstmLayers,
+          timesteps: lstmTimesteps,
+          dropout: lstmDropout,
+          learningRate: lstmLearningRate,
+          batchSize: lstmBatchSize,
+          epochs: lstmEpochs,
+        };
+
+    console.log(`[AnalysisPanel] Starting LSTM Training (Simulated) with ${useDefaultLstmConfig ? 'DEFAULT' : 'CUSTOM'} config:`, {
+        ...trainingConfig,
+        trainTestSplit: trainTestSplit[0],
     });
 
     setLstmTrainingStatus('training');
-    setLstmTrainingMessage(`Training LSTM model (${lstmEpochs} epochs)...`);
+    setLstmTrainingMessage(`Training LSTM model (${trainingConfig.epochs} epochs)...`);
     setLstmValidationResults([]); // Clear previous results
 
     // --- SIMULATION ---
@@ -307,7 +324,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                          <Accordion type="multiple" className="w-full" defaultValue={['collect-data', 'model-training']}>
                             {/* 1. Collect Data Section */}
                             <AccordionItem value="collect-data" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t"> {/* Increased py */}
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground"> {/* Increased py, added text-foreground */}
                                     <div className="flex items-center gap-2">
                                         <DatabaseZap className="h-4 w-4" />
                                         Collect OHLCV Data
@@ -391,7 +408,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                             {/* 2. Model Training Section */}
                              <AccordionItem value="model-training" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground"> {/* Added text-foreground */}
                                     <div className="flex items-center gap-2">
                                         <Brain className="h-4 w-4" />
                                         Model Training
@@ -421,35 +438,54 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                                     {/* LSTM Model Configuration */}
                                     <div className="space-y-3 border-t border-border pt-3">
-                                        <Label className="text-xs font-medium block">LSTM Model Configuration</Label>
-                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                         {/* Config Toggle Switch */}
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-xs font-medium flex items-center gap-1">
+                                                 {useDefaultLstmConfig ? <Settings className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}
+                                                 LSTM Configuration
+                                            </Label>
+                                            <div className="flex items-center space-x-2">
+                                                <Label htmlFor="lstm-config-switch" className="text-xs text-muted-foreground">
+                                                    {useDefaultLstmConfig ? "Default" : "Custom"}
+                                                </Label>
+                                                <Switch
+                                                    id="lstm-config-switch"
+                                                    checked={!useDefaultLstmConfig} // Invert logic: checked means custom
+                                                    onCheckedChange={(checked) => setUseDefaultLstmConfig(!checked)}
+                                                    disabled={lstmTrainingStatus === 'training'}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Parameter Inputs (Conditionally Disabled) */}
+                                        <div className={cn("grid grid-cols-2 gap-x-4 gap-y-2 transition-opacity", useDefaultLstmConfig && "opacity-50 pointer-events-none")}>
                                             <div className="space-y-1">
                                                 <Label htmlFor="lstm-units" className="text-xs">Units/Layer</Label>
-                                                <Input id="lstm-units" type="number" value={lstmUnits} onChange={(e) => setLstmUnits(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                                <Input id="lstm-units" type="number" value={lstmUnits} onChange={(e) => setLstmUnits(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
                                             </div>
                                             <div className="space-y-1">
                                                 <Label htmlFor="lstm-layers" className="text-xs">Layers</Label>
-                                                <Input id="lstm-layers" type="number" value={lstmLayers} onChange={(e) => setLstmLayers(parseInt(e.target.value) || 1)} min="1" max="5" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                                <Input id="lstm-layers" type="number" value={lstmLayers} onChange={(e) => setLstmLayers(parseInt(e.target.value) || 1)} min="1" max="5" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
                                             </div>
                                             <div className="space-y-1">
                                                 <Label htmlFor="lstm-timesteps" className="text-xs">Timesteps (Lookback)</Label>
-                                                <Input id="lstm-timesteps" type="number" value={lstmTimesteps} onChange={(e) => setLstmTimesteps(parseInt(e.target.value) || 10)} min="10" max="120" step="10" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                                <Input id="lstm-timesteps" type="number" value={lstmTimesteps} onChange={(e) => setLstmTimesteps(parseInt(e.target.value) || 10)} min="10" max="120" step="10" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
                                             </div>
                                             <div className="space-y-1">
                                                 <Label htmlFor="lstm-dropout" className="text-xs">Dropout Rate</Label>
-                                                <Input id="lstm-dropout" type="number" value={lstmDropout} onChange={(e) => setLstmDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.8" step="0.1" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                                <Input id="lstm-dropout" type="number" value={lstmDropout} onChange={(e) => setLstmDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.8" step="0.1" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
                                             </div>
                                             <div className="space-y-1">
                                                 <Label htmlFor="lstm-lr" className="text-xs">Learning Rate</Label>
-                                                <Input id="lstm-lr" type="number" value={lstmLearningRate} onChange={(e) => setLstmLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                                <Input id="lstm-lr" type="number" value={lstmLearningRate} onChange={(e) => setLstmLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
                                             </div>
                                             <div className="space-y-1">
                                                 <Label htmlFor="lstm-batch" className="text-xs">Batch Size</Label>
-                                                <Input id="lstm-batch" type="number" value={lstmBatchSize} onChange={(e) => setLstmBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                                <Input id="lstm-batch" type="number" value={lstmBatchSize} onChange={(e) => setLstmBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
                                             </div>
                                              <div className="space-y-1 col-span-2">
                                                 <Label htmlFor="lstm-epochs" className="text-xs">Epochs</Label>
-                                                <Input id="lstm-epochs" type="number" value={lstmEpochs} onChange={(e) => setLstmEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={lstmTrainingStatus === 'training'} />
+                                                <Input id="lstm-epochs" type="number" value={lstmEpochs} onChange={(e) => setLstmEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={useDefaultLstmConfig || lstmTrainingStatus === 'training'} />
                                             </div>
                                         </div>
                                         <Button size="sm" variant="outline" className="text-xs h-7" onClick={handleStartLstmTraining} disabled={lstmTrainingStatus === 'training'}>
@@ -525,7 +561,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                             {/* 3. Model Testing Section */}
                             <AccordionItem value="model-testing" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground"> {/* Added text-foreground */}
                                     <div className="flex items-center gap-2">
                                         <History className="h-4 w-4" />
                                         Model Testing
@@ -591,7 +627,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                         </p>
                          <Accordion type="multiple" className="w-full">
                              <AccordionItem value="rl-config" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground"> {/* Added text-foreground */}
                                     <div className="flex items-center gap-2"><Bot className="h-4 w-4" />Agent Configuration</div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
@@ -603,7 +639,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 </AccordionContent>
                              </AccordionItem>
                              <AccordionItem value="rl-training" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground"> {/* Added text-foreground */}
                                     <div className="flex items-center gap-2"><Play className="h-4 w-4" />Train Agent</div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
@@ -613,7 +649,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 </AccordionContent>
                              </AccordionItem>
                              <AccordionItem value="rl-testing" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b">
+                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground"> {/* Added text-foreground */}
                                      <div className="flex items-center gap-2"><History className="h-4 w-4" />Agent Testing</div>
                                 </AccordionTrigger>
                                  <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
@@ -644,8 +680,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     indicators.lastUpdated
                                 )}
                                 {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                                {/* Manual Refresh Button - Wrapped in a span */}
-                                <span onClick={(e) => e.stopPropagation()}>
+                                {/* Manual Refresh Button */}
+                                <span onClick={(e) => e.stopPropagation()}> {/* Prevent accordion toggle */}
                                      <Button
                                         variant="ghost"
                                         size="icon"
