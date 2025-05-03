@@ -3,7 +3,7 @@
 
 import type { FC } from "react";
 import { useState, useRef, useEffect } from "react";
-import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Import Card for structure
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
@@ -16,16 +16,20 @@ import { cn } from '@/lib/utils';
 import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
 import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // Import Supabase actions
 import type { MessageHistory } from "@/lib/supabase-client"; // Import the type for messages from DB
-
+import { Button } from "@/components/ui/button"; // Import Button
+import { ChevronLeft, ChevronRight, MessageCircle } from "lucide-react"; // Import icons
 
 // Use MessageHistory type for consistency
 // Add a temporary client-side ID for rendering keys before DB ID exists
 type Message = MessageHistory & { clientId?: string };
 
-// Removed isExpanded and onToggle from props
-interface ChatWindowProps {}
+// Added props for expansion state and toggle function
+interface ChatWindowProps {
+  isExpanded: boolean;
+  onToggle: () => void;
+}
 
-export const ChatWindow: FC<ChatWindowProps> = () => {
+export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true); // State for loading history
@@ -63,14 +67,14 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
 
   // Scroll to bottom effect
   useEffect(() => {
-    if (viewportRef.current) {
+    if (viewportRef.current && isExpanded) { // Only scroll if expanded
       requestAnimationFrame(() => {
         if (viewportRef.current) {
           viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
         }
       });
     }
-  }, [messages, isLoading, isLoadingHistory]); // Include isLoadingHistory
+  }, [messages, isLoading, isLoadingHistory, isExpanded]); // Include isExpanded
 
   const handleSendMessage = async (messageContent: string) => {
     const userMessageClientId = `user-${Date.now()}`; // Simple client ID
@@ -167,38 +171,68 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
   };
 
   return (
-    // Removed className related to expansion state
-    <div className="flex flex-col h-full w-full overflow-hidden bg-card">
-      <CardHeader className="border-b border-border flex-shrink-0 p-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-medium text-foreground">YINSEN</CardTitle>
-        {/* Removed toggle button */}
+    // Use Card for consistent styling with other panels
+    <Card className={cn(
+        "flex flex-col h-full w-full overflow-hidden transition-all duration-300 ease-in-out border border-border shadow-md bg-card"
+    )}>
+      <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
+        {/* Show title only when expanded */}
+        <CardTitle className={cn(
+          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out",
+          !isExpanded && "opacity-0 w-0 overflow-hidden" // Hide title when collapsed
+        )}>
+          YINSEN
+        </CardTitle>
+        {/* Toggle Button */}
+        <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground flex-shrink-0">
+            {/* Show different icon based on expansion state */}
+            {isExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
+        </Button>
       </CardHeader>
 
-      <CardContent className="flex-1 p-0 overflow-hidden">
-        <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both">
-          <div className="space-y-1 p-3 min-w-max">
-            {isLoadingHistory && (
-              <>
-                <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted ml-auto" />
-                <Skeleton className="h-12 rounded-lg p-3 w-4/5 bg-muted" />
-                <Skeleton className="h-10 rounded-lg p-3 w-2/3 bg-muted ml-auto" />
-              </>
-            )}
-            {!isLoadingHistory && messages.map((msg) => (
-              <ChatMessage key={msg.id ?? msg.clientId} role={msg.role} content={msg.content} />
-            ))}
-            {isLoading && (
-              <div className="flex items-start gap-2 justify-start pt-1">
-                 <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1 invisible">
-                  <AvatarFallback></AvatarFallback>
-                </Avatar>
-                <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" />
+      {/* Conditionally render content based on isExpanded */}
+      <CardContent className={cn(
+        "flex-1 p-0 overflow-hidden flex flex-col", // Use flex-col for inner structure
+        !isExpanded && "p-0 opacity-0" // Hide content when collapsed
+      )}>
+         {isExpanded ? (
+           <>
+            <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="vertical"> {/* Changed orientation */}
+              <div className="space-y-1 p-3"> {/* Removed min-w-max */}
+                {isLoadingHistory && (
+                  <>
+                    <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted ml-auto" />
+                    <Skeleton className="h-12 rounded-lg p-3 w-4/5 bg-muted" />
+                    <Skeleton className="h-10 rounded-lg p-3 w-2/3 bg-muted ml-auto" />
+                  </>
+                )}
+                {!isLoadingHistory && messages.map((msg) => (
+                  <ChatMessage key={msg.id ?? msg.clientId} role={msg.role} content={msg.content} />
+                ))}
+                {isLoading && (
+                  <div className="flex items-start gap-2 justify-start pt-1">
+                    {/* Avatar Skeleton for bot response loading */}
+                     <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
+                      <AvatarFallback className="bg-accent"></AvatarFallback>
+                    </Avatar>
+                    <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+           </>
+         ) : (
+           // Show only an icon when collapsed, centered vertically
+           <div className="flex-1 flex items-center justify-center p-3">
+             <Button variant="ghost" size="icon" onClick={onToggle} className="h-8 w-8 text-foreground">
+               <MessageCircle className="h-5 w-5" />
+               <span className="sr-only">Expand Chat</span>
+             </Button>
+           </div>
+         )}
       </CardContent>
-      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-    </div>
+    </Card>
   );
 };
