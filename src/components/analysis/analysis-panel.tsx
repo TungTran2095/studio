@@ -38,9 +38,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   // Function to fetch indicator data using the Server Action
   const fetchIndicators = useCallback(async () => {
-    // Avoid fetching if already fetching or if panel is collapsed (optional optimization)
-    if (isFetchingIndicators) return; // Removed !isExpanded condition
-    // if (isFetchingIndicators || !isExpanded) return;
+    // Avoid fetching if already fetching
+    if (isFetchingIndicators) return;
 
     setIsFetchingIndicators(true);
     console.log("[AnalysisPanel] Fetching real-time indicators for BTCUSDT...");
@@ -90,7 +89,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       setIsFetchingIndicators(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFetchingIndicators, toast]); // Removed isExpanded from dependencies
+  }, [isFetchingIndicators, toast]);
 
   // Effect to fetch initially and set interval
   useEffect(() => {
@@ -111,19 +110,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       }
     };
   }, [fetchIndicators]); // Depend on fetchIndicators function
-
-  // Optional: Pause interval when panel is collapsed and resume when expanded
-  // useEffect(() => {
-  //   if (!isExpanded && intervalIdRef.current) {
-  //     console.log("[AnalysisPanel] Collapsed, pausing indicator updates.");
-  //     clearInterval(intervalIdRef.current);
-  //     intervalIdRef.current = null;
-  //   } else if (isExpanded && !intervalIdRef.current) {
-  //     console.log("[AnalysisPanel] Expanded, resuming indicator updates.");
-  //     fetchIndicators(); // Fetch immediately on expand
-  //     intervalIdRef.current = setInterval(fetchIndicators, 5000);
-  //   }
-  // }, [isExpanded, fetchIndicators]);
 
 
   return (
@@ -204,12 +190,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                         Technical indicators for BTC/USDT (1h interval).
                      </p>
                      {/* Show last updated time */}
-                    <p className="text-xs text-muted-foreground mb-3">
-                         Last updated: {indicators.lastUpdated === "N/A" || isFetchingIndicators && indicators.lastUpdated === "N/A" ?
+                    {/* Changed surrounding <p> to <span> to avoid div-in-p hydration error */}
+                    <span className="text-xs text-muted-foreground mb-3 block"> {/* Use block for spacing */}
+                         Last updated: {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ?
                              <Skeleton className="h-3 w-16 inline-block bg-muted" />
                               : indicators.lastUpdated
                          } (Updates every 5s)
-                    </p>
+                    </span>
                     {/* Table for Indicators */}
                      <Table>
                         <TableHeader>
