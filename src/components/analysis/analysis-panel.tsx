@@ -2,8 +2,8 @@
 "use client";
 
 import type { FC } from 'react';
-import { useState, useEffect, useCallback, useRef } from 'react'; // Import useCallback, useRef
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2 } from 'lucide-react'; // Added DatabaseZap, Loader2
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -11,20 +11,24 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchTechnicalIndicators } from '@/actions/fetch-indicators'; // Import the Server Action
-import type { IndicatorsData } from '@/actions/fetch-indicators'; // Import the type
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { fetchTechnicalIndicators } from '@/actions/fetch-indicators';
+import type { IndicatorsData } from '@/actions/fetch-indicators';
+import { collectBinanceOhlcvData } from '@/actions/collect-data'; // Import the new collect action
+import { useToast } from '@/hooks/use-toast';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion"; // Import Accordion components
+} from "@/components/ui/accordion";
 
 interface AnalysisPanelProps {
   isExpanded: boolean;
   onToggle: () => void;
 }
+
+// Type for collection status
+type CollectionStatus = 'idle' | 'collecting' | 'success' | 'error';
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -39,84 +43,87 @@ const initialIndicators: IndicatorsData = {
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
   const [indicators, setIndicators] = useState<IndicatorsData>(initialIndicators);
   const [isFetchingIndicators, setIsFetchingIndicators] = useState(false);
+  const [collectionStatus, setCollectionStatus] = useState<CollectionStatus>('idle');
+  const [collectionMessage, setCollectionMessage] = useState<string>('');
   const { toast } = useToast();
-  const intervalIdRef = useRef<NodeJS.Timeout | null>(null); // Ref to store interval ID
+  const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Function to fetch indicator data using the Server Action
+  // --- Indicator Fetching Logic ---
   const fetchIndicators = useCallback(async () => {
-    // Avoid fetching if already fetching
     if (isFetchingIndicators) return;
-
     setIsFetchingIndicators(true);
     console.log("[AnalysisPanel] Fetching real-time indicators for BTCUSDT...");
-
     try {
-      const result = await fetchTechnicalIndicators({ symbol: 'BTCUSDT', interval: '1h', limit: 200 }); // Fetch 1-hour data
-
+      const result = await fetchTechnicalIndicators({ symbol: 'BTCUSDT', interval: '1h', limit: 200 });
       if (result.success && result.data) {
         setIndicators(result.data);
-        console.log("[AnalysisPanel] Indicators updated at", result.data.lastUpdated);
       } else {
         console.error("[AnalysisPanel] Error fetching indicators:", result.error);
-        // Keep existing data but show error? Or reset to 'Error'?
-        // Resetting to 'Error' provides clearer feedback
          setIndicators(prev => ({
-             ...initialIndicators, // Reset structure
-              "Moving Average (50)": "Error",
-              "Moving Average (200)": "Error",
-              "RSI (14)": "Error",
-              "MACD": "Error",
-              "Bollinger Bands": "Error",
+             ...initialIndicators,
+              "Moving Average (50)": "Error", "Moving Average (200)": "Error", "RSI (14)": "Error", "MACD": "Error", "Bollinger Bands": "Error",
              lastUpdated: new Date().toLocaleTimeString(),
          }));
-        toast({
-          title: "Error Fetching Indicators",
-          description: result.error || "Failed to fetch indicator data.",
-          variant: "destructive",
-        });
+        toast({ title: "Error Fetching Indicators", description: result.error || "Failed.", variant: "destructive" });
       }
     } catch (error: any) {
       console.error("[AnalysisPanel] Unexpected error fetching indicators:", error);
        setIndicators(prev => ({
-            ...initialIndicators, // Reset structure
-             "Moving Average (50)": "Error",
-             "Moving Average (200)": "Error",
-             "RSI (14)": "Error",
-             "MACD": "Error",
-             "Bollinger Bands": "Error",
-            lastUpdated: new Date().toLocaleTimeString(),
-        }));
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred while fetching indicators.",
-        variant: "destructive",
-      });
+           ...initialIndicators,
+            "Moving Average (50)": "Error", "Moving Average (200)": "Error", "RSI (14)": "Error", "MACD": "Error", "Bollinger Bands": "Error",
+           lastUpdated: new Date().toLocaleTimeString(),
+       }));
+      toast({ title: "Error", description: "Unexpected error fetching indicators.", variant: "destructive" });
     } finally {
       setIsFetchingIndicators(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFetchingIndicators, toast]); // Removed fetchIndicators from dependencies to prevent infinite loop
+  }, [isFetchingIndicators, toast]); // Removed fetchIndicators
 
-  // Effect to fetch initially and set interval
+  // Effect for indicators interval
   useEffect(() => {
     fetchIndicators(); // Fetch on mount
-
-    // Clear any existing interval before setting a new one
-    if (intervalIdRef.current) {
-      clearInterval(intervalIdRef.current);
-    }
-
-    // Set interval to fetch every 5 seconds
-    intervalIdRef.current = setInterval(fetchIndicators, 5000);
-
-    // Cleanup interval on component unmount
-    return () => {
-      if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current);
-      }
-    };
+    if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current);
+    indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 5000); // Refresh every 5 seconds
+    return () => { if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchIndicators]); // Depend on fetchIndicators function
+  }, [fetchIndicators]);
+
+
+  // --- Data Collection Logic ---
+  const handleCollectData = async () => {
+    if (collectionStatus === 'collecting') return; // Prevent multiple clicks
+
+    setCollectionStatus('collecting');
+    setCollectionMessage('Collecting latest 1m data...');
+    console.log("[AnalysisPanel] Triggering data collection...");
+
+    try {
+      // Call the server action - fetch default (100 records)
+      const result = await collectBinanceOhlcvData();
+
+      if (result.success) {
+        setCollectionStatus('success');
+        setCollectionMessage(result.message || 'Collection successful.');
+        toast({ title: "Data Collection", description: result.message });
+        console.log("[AnalysisPanel] Data collection successful:", result.message);
+      } else {
+        setCollectionStatus('error');
+        setCollectionMessage(result.message || 'Collection failed.');
+        toast({ title: "Data Collection Error", description: result.message, variant: "destructive" });
+        console.error("[AnalysisPanel] Data collection failed:", result.message);
+      }
+    } catch (error: any) {
+      setCollectionStatus('error');
+      const errorMsg = error.message || "An unexpected error occurred.";
+      setCollectionMessage(`Error: ${errorMsg}`);
+      toast({ title: "Collection Error", description: errorMsg, variant: "destructive" });
+      console.error("[AnalysisPanel] Unexpected error during data collection:", error);
+    } finally {
+      // Optionally reset status after a delay?
+      // setTimeout(() => setCollectionStatus('idle'), 3000);
+    }
+  };
 
 
   return (
@@ -145,9 +152,9 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
         {isExpanded && (
           <ScrollArea className="h-full">
             {/* Use Accordion for collapsible sections */}
-            <Accordion type="multiple" defaultValue={["item-3"]} className="w-full space-y-1">
+            <Accordion type="multiple" defaultValue={["item-1", "item-3"]} className="w-full space-y-1">
 
-                {/* Section 1: Ensemble Learning */}
+                {/* Section 1: Ensemble Learning (with Data Collection) */}
                 <AccordionItem value="item-1" className="border-b-0">
                     <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md">
                         <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -155,11 +162,46 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             Ensemble Learning
                         </h4>
                     </AccordionTrigger>
-                    <AccordionContent className="px-2 pt-1 pb-2">
-                        <p className="text-xs text-muted-foreground mb-2">
+                    <AccordionContent className="px-2 pt-1 pb-2 space-y-2">
+                        {/* Data Collection Section */}
+                        <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                                Collect BTC/USDT 1m OHLCV data into Supabase.
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs h-7" // Slightly larger button
+                                    onClick={handleCollectData}
+                                    disabled={collectionStatus === 'collecting'}
+                                >
+                                    {collectionStatus === 'collecting' ? (
+                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    ) : (
+                                        <DatabaseZap className="h-3 w-3 mr-1" />
+                                    )}
+                                    Collect Latest Data
+                                </Button>
+                                {/* Status Indicator */}
+                                {collectionStatus !== 'idle' && (
+                                     <span className={cn(
+                                         "text-xs px-1.5 py-0.5 rounded",
+                                         collectionStatus === 'collecting' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
+                                         collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                                         collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50"
+                                     )}>
+                                        {collectionMessage}
+                                     </span>
+                                )}
+                            </div>
+                        </div>
+                         <Separator className="my-2" />
+                         {/* Placeholder for model config */}
+                        <p className="text-xs text-muted-foreground">
                             Configure and run ensemble learning models. (Placeholder)
                         </p>
-                        <Button size="sm" variant="outline" className="text-xs h-6" disabled>Configure</Button>
+                        <Button size="sm" variant="outline" className="text-xs h-6" disabled>Configure Model</Button>
                     </AccordionContent>
                 </AccordionItem>
 
@@ -187,16 +229,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 <BarChart className="h-4 w-4 text-primary" />
                                 BTC/USDT Indicators
                             </h4>
-                            {/* Move refresh button inside trigger but stop propagation */}
+                            {/* Refresh button */}
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Prevent Accordion toggle
-                                    fetchIndicators();
-                                }}
+                                onClick={(e) => { e.stopPropagation(); fetchIndicators(); }}
                                 disabled={isFetchingIndicators}
-                                className="h-5 w-5 text-muted-foreground hover:text-foreground flex-shrink-0 mr-1" // Smaller button
+                                className="h-5 w-5 text-muted-foreground hover:text-foreground flex-shrink-0 mr-1"
                                 title="Refresh Indicators"
                             >
                                 <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
@@ -205,15 +244,17 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                         </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-2 pt-1 pb-2">
-                        <p className="text-xs text-muted-foreground mb-1">
-                            Technical indicators for BTC/USDT (1h interval).
-                        </p>
-                        <span className="text-xs text-muted-foreground mb-2 block">
-                            Last updated: {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ?
-                                <Skeleton className="h-3 w-14 inline-block bg-muted" />
-                                : indicators.lastUpdated
-                            } (Updates every 5s)
-                        </span>
+                         <div className="flex justify-between items-center mb-2">
+                            <p className="text-xs text-muted-foreground">
+                                Technical indicators for BTC/USDT (1h interval).
+                            </p>
+                            <span className="text-xs text-muted-foreground">
+                                Last updated: {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ?
+                                    <Skeleton className="h-3 w-14 inline-block bg-muted" />
+                                    : indicators.lastUpdated
+                                } (Auto ~5s)
+                            </span>
+                         </div>
                         <Table>
                             <TableHeader>
                                 <TableRow className="border-border">
@@ -250,5 +291,3 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     </Card>
   );
 };
-
-    
