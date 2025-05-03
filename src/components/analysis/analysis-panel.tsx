@@ -33,9 +33,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
   // Placeholder function to simulate fetching data
   const fetchIndicators = () => {
-      setIsFetchingIndicators(true);
+      // Only set loading if not already fetching (to avoid quick flashes on interval)
+      if (!isFetchingIndicators) {
+        setIsFetchingIndicators(true);
+      }
       console.log("Simulating indicator fetch...");
       // In a real app, fetch data from an API (e.g., Binance, TradingView API, etc.)
+      // and calculate indicators.
       setTimeout(() => {
            const now = new Date().toLocaleTimeString();
            setIndicators({
@@ -47,17 +51,20 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
            });
            setIsFetchingIndicators(false);
            console.log("Simulated indicators updated at", now);
-      }, 1500); // Simulate network delay
+      }, 800); // Simulate network/calculation delay (reduced from 1500ms)
   };
 
-  // Fetch initially and maybe set an interval (optional)
+  // Fetch initially and set an interval to fetch every 5 seconds
   useEffect(() => {
     fetchIndicators(); // Fetch on component mount
 
-    // Optional: Fetch periodically (uncomment if needed, adjust interval)
-    // const intervalId = setInterval(fetchIndicators, 30000); // Fetch every 30 seconds
-    // return () => clearInterval(intervalId); // Cleanup interval on unmount
-  }, []);
+    // Set interval to fetch every 5 seconds
+    const intervalId = setInterval(fetchIndicators, 5000); // Fetch every 5000 ms
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures this runs once on mount for setup
 
 
   return (
@@ -127,7 +134,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                          <Button
                             variant="ghost"
                             size="icon"
-                            onClick={fetchIndicators}
+                            onClick={fetchIndicators} // Manual refresh still possible
                             disabled={isFetchingIndicators}
                             className="h-6 w-6 text-foreground flex-shrink-0"
                             title="Refresh Indicators"
@@ -137,7 +144,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                         </Button>
                      </div>
                      <p className="text-sm text-muted-foreground mb-3">
-                        Real-time technical indicators for BTC/USDT. (Simulated data)
+                        Technical indicators for BTC/USDT. (Simulated data, updates every 5s)
                     </p>
                     {/* Table for Indicators */}
                      <Table>
@@ -152,7 +159,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 <TableRow key={key} className="border-border">
                                     <TableCell className="font-medium text-foreground text-xs py-1.5">{key}</TableCell>
                                     <TableCell className="text-right text-foreground text-xs py-1.5">
-                                        {isFetchingIndicators && value === "Loading..." ? (
+                                        {/* Show skeleton only if value is still "Loading..." */}
+                                        {value === "Loading..." || (isFetchingIndicators && indicators[key as keyof typeof indicators] === "Loading...") ? (
                                             <Skeleton className="h-4 w-20 ml-auto bg-muted" />
                                         ) : (
                                             value
