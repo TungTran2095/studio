@@ -70,8 +70,8 @@ Trading Instructions:
     - Identify the quantity to trade.
     - Determine the order type. Default to MARKET order unless the user specifies a price (then use LIMIT).
     - **Crucially: You MUST have the API Key and API Secret to use the trading tools.** These credentials should be passed in the input context (apiKey, apiSecret).
-    - **If the apiKey or apiSecret are NOT available in the input, politely inform the user that you cannot execute the trade without the API credentials being configured in the 'Binance Account' section first.** Do not attempt to use the tool without credentials.
-    - If all necessary parameters (symbol, quantity, available credentials, price for limit orders) are clear, use the 'placeBuyOrderTool' or 'placeSellOrderTool' with the extracted information and the provided apiKey, apiSecret, and isTestnet status from the input.
+    - **If the apiKey or apiSecret are NOT available in the input context, politely inform the user that you cannot execute the trade without the API credentials being configured in the 'Binance Account' section first.** Do not attempt to use the tool without credentials.
+    - If all necessary parameters (symbol, quantity, available credentials, price for limit orders) are clear, use the 'placeBuyOrderTool' or 'placeSellOrderTool' with the extracted information and the provided apiKey, apiSecret, and isTestnet status from the input context.
     - If any parameter (especially quantity or symbol) is unclear or missing, ASK the user for clarification before attempting to use a tool. Do not guess quantities or symbols if ambiguous.
     - After attempting a trade using a tool, **you MUST generate a final text response confirming the outcome (success with order ID, or the error message from the tool) back to the user clearly.** Your final output MUST be a JSON object with a single key "response" containing this text message. Example: { "response": "Successfully placed buy order..." } or { "response": "Error placing order: ..." }.
 
@@ -103,6 +103,7 @@ const generateResponseFlow = ai.defineFlow<
     });
 
     // Prepare the input for the prompt, passing along credentials if they exist.
+    // The prompt now knows to look for these in the input context.
     const promptInput: GenerateResponseInput = {
       message: input.message,
       chatHistory: input.chatHistory,

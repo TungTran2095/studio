@@ -35,8 +35,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true); // State for loading history
   const { toast } = useToast();
-  // Use Supabase service key from environment variables
-  // const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY || '';
+  // Use credentials from the Zustand store
   const { apiKey, apiSecret, isTestnet } = useAssetStore(state => ({
     apiKey: state.apiKey,
     apiSecret: state.apiSecret,
@@ -112,6 +111,15 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     const credentialsAvailable = apiKey && apiSecret;
     if (!credentialsAvailable) {
       console.warn("[ChatWindow] API credentials NOT available in store. Trading intent might fail.");
+      // Inform user if credentials are missing and a trading keyword is detected (optional enhancement)
+      const tradeKeywords = ['buy', 'sell', 'order', 'trade', 'binance'];
+      if (tradeKeywords.some(keyword => messageContent.toLowerCase().includes(keyword))) {
+          toast({
+            title: "Credentials Required",
+            description: "Please enter your Binance API Key and Secret in the 'Binance Account' section to execute trades.",
+            variant: "destructive",
+          });
+      }
     } else {
       console.log("[ChatWindow] API credentials found in store. Passing to generateResponse flow.");
     }
@@ -125,11 +133,13 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
      }));
 
 
+    // Pass credentials from store to the AI flow input
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
+      // Conditionally include credentials if they exist
       ...(credentialsAvailable && { apiKey: apiKey, apiSecret: apiSecret }),
-      isTestnet: isTestnet ?? false,
+      isTestnet: isTestnet ?? false, // Pass testnet status
     };
 
     try {
@@ -244,10 +254,10 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
                 ))}
                 {isLoading && (
                   <div className="flex items-start gap-2 justify-start pt-1"> {/* Loading indicator for bot response */}
-                    <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
-                      <AvatarFallback className="bg-accent"></AvatarFallback>
-                    </Avatar>
-                    <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" />
+                     <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
+                        <AvatarFallback className="bg-accent"></AvatarFallback>
+                     </Avatar>
+                     <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" /> {/* Match bubble style */}
                   </div>
                 )}
               </div>
