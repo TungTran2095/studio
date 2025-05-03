@@ -19,8 +19,9 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
+      // Default height h-10, adjust as needed or via className prop
       "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
-      className
+      className // Allow overriding default styles
     )}
     {...props}
   >
@@ -118,7 +119,8 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      // Adjusted padding for potentially smaller items
+      "relative flex w-full cursor-default select-none items-center rounded-sm py-1 pl-8 pr-2 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       // Apply gradient on focus/selected state, ensure text remains visible
       "data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground",
       className

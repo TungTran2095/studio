@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover
 import { Calendar } from "@/components/ui/calendar"; // Import Calendar component
-import { format, startOfDay } from 'date-fns'; // Import date-fns for formatting
+import { format, startOfDay, subYears } from 'date-fns'; // Import date-fns for formatting and date manipulation
 import type { DateRange } from "react-day-picker"; // Import DateRange type
 import { Label } from "@/components/ui/label"; // Import Label
 
@@ -55,6 +55,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const { toast } = useToast();
   const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
+  const currentYear = new Date().getFullYear(); // Get current year for calendar range
 
   // --- Indicator Fetching Logic ---
   const fetchIndicators = useCallback(async () => {
@@ -212,9 +213,6 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                          {/* Data Collection Section */}
                         <div className="space-y-2">
                              <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
-                            {/* Removed Latest Data Button */}
-                            {/* <div className="flex items-center gap-2"> ... button removed ... </div> */}
-
                             {/* Historical Data Collection */}
                              <div className="flex flex-wrap items-center gap-2"> {/* Use flex-wrap */}
                                 <Popover>
@@ -246,14 +244,17 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
-                                        initialFocus
-                                        mode="range"
-                                        defaultMonth={dateRange?.from}
-                                        selected={dateRange}
-                                        onSelect={setDateRange}
-                                        numberOfMonths={2}
-                                        // Optional: disable future dates if needed
-                                        // disabled={(date) => date > new Date()}
+                                            initialFocus
+                                            mode="range"
+                                            defaultMonth={dateRange?.from ?? subYears(new Date(), 1)} // Default to 1 year ago if no range selected
+                                            selected={dateRange}
+                                            onSelect={setDateRange}
+                                            numberOfMonths={1} // Show one month for dropdown layout
+                                            captionLayout="dropdown-buttons" // Use dropdowns for month/year
+                                            fromYear={2017} // Set earliest year (Binance launch)
+                                            toYear={currentYear} // Set latest year
+                                            // Optional: disable future dates if needed
+                                            disabled={(date) => date > new Date()}
                                         />
                                     </PopoverContent>
                                 </Popover>
@@ -319,33 +320,30 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                 {/* Section 3: Indicators */}
                 <AccordionItem value="item-3" className="border-b-0">
-                     <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md">
+                     <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md relative group"> {/* Add relative and group */}
                         <div className="flex justify-between items-center w-full">
                             <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                                 <BarChart className="h-4 w-4 text-primary" />
                                 BTC/USDT Indicators
                             </h4>
-                             {/* Ensure the Button is NOT inside the AccordionTrigger itself */}
+                            {/* Move Refresh Button here, make it appear on hover */}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                    e.stopPropagation(); // Prevent accordion toggle
+                                    fetchIndicators();
+                                }}
+                                disabled={isFetchingIndicators}
+                                className="h-5 w-5 text-muted-foreground hover:text-foreground absolute right-8 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" // Positioning and hover effect
+                                title="Refresh Indicators"
+                            >
+                                <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
+                                <span className="sr-only">Refresh Indicators</span>
+                            </Button>
                         </div>
                     </AccordionTrigger>
-                     {/* Put the Button adjacent to the Trigger, but outside its interactive area */}
-                     {/* Or place it inside AccordionContent if appropriate */}
-                     <div className="absolute right-8 top-2.5"> {/* Adjust positioning as needed */}
-                         <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                                e.stopPropagation(); // Still useful to prevent potential bubbling
-                                fetchIndicators();
-                            }}
-                            disabled={isFetchingIndicators}
-                            className="h-5 w-5 text-muted-foreground hover:text-foreground flex-shrink-0"
-                            title="Refresh Indicators"
-                         >
-                            <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
-                            <span className="sr-only">Refresh Indicators</span>
-                        </Button>
-                    </div>
+
 
                     <AccordionContent className="px-2 pt-1 pb-2">
                          <div className="flex justify-between items-center mb-2">
@@ -354,12 +352,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                             </p>
                              <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 Last updated:{" "}
-                                {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators.lastUpdated === "N/A") ? (
+                                {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") ? (
                                      <Skeleton className="h-3 w-14 inline-block bg-muted" />
                                 ) : (
                                     indicators.lastUpdated
                                 )}
-                                {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                                {isFetchingIndicators && indicators["Moving Average (50)"] !== "Loading..." && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                             </span>
                          </div>
                         <Table>
