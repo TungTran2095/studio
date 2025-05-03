@@ -317,15 +317,15 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                 {/* Section 3: Indicators */}
                 <AccordionItem value="item-3" className="border-b-0">
-                     <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md relative group">
-                        <div className="flex justify-between items-center w-full">
+                    {/* Make the trigger container relative and add group class */}
+                     <div className="relative group">
+                         <AccordionTrigger className="py-2 px-2 hover:no-underline hover:bg-accent/50 rounded-md w-full">
                             <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                                 <BarChart className="h-4 w-4 text-primary" />
                                 BTC/USDT Indicators
                             </h4>
-                            {/* Refresh Button (Now correctly outside the AccordionTrigger's default button) */}
-                        </div>
-                        {/* Separate Refresh Button */}
+                        </AccordionTrigger>
+                         {/* Separate Refresh Button, positioned absolutely */}
                          <Button
                             variant="ghost"
                             size="icon"
@@ -334,14 +334,13 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 fetchIndicators();
                             }}
                             disabled={isFetchingIndicators}
-                            className="h-5 w-5 text-muted-foreground hover:text-foreground absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" // Positioned absolute
+                            className="h-5 w-5 text-muted-foreground hover:text-foreground absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" // Positioned absolute within the relative parent
                             title="Refresh Indicators"
                         >
                             <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
                             <span className="sr-only">Refresh Indicators</span>
                         </Button>
-                    </AccordionTrigger>
-
+                    </div>
 
                     <AccordionContent className="px-2 pt-1 pb-2">
                          <div className="flex justify-between items-center mb-2">

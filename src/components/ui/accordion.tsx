@@ -26,16 +26,18 @@ const AccordionTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
+    {/* The Trigger itself is a button, but we render its content without an inner button tag */}
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
-        "flex flex-1 items-center justify-between py-2 font-medium transition-all hover:no-underline [&[data-state=open]>svg]:rotate-180", // Adjusted padding, removed underline hover
+        // Use w-full to allow inner content (like absolute positioned buttons) to align correctly
+        "flex flex-1 items-center justify-between py-2 font-medium transition-all hover:no-underline [&[data-state=open]>svg]:rotate-180 w-full", // Adjusted padding, removed underline hover, added w-full
         className
       )}
       {...props}
     >
       {children}
-      {/* Use ChevronDown with specific size and transition */}
+      {/* Chevron icon is part of the trigger button's content */}
       <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
     </AccordionPrimitive.Trigger>
   </AccordionPrimitive.Header>
@@ -59,5 +61,3 @@ const AccordionContent = React.forwardRef<
 AccordionContent.displayName = AccordionPrimitive.Content.displayName
 
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }
-
-    
