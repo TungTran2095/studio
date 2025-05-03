@@ -34,8 +34,8 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 // Import the generic training server action and types
 import { startTrainingJob } from '@/actions/train-lstm'; // Keep file name for now, action is generic
-// Import all config types, including DLinear
-import type { LstmTrainingConfig, NBeatsTrainingConfig, LightGBMTrainingConfig, DLinearTrainingConfig, TrainingResult } from '@/actions/train-lstm';
+// Import all config types, including DLinear and Informer
+import type { LstmTrainingConfig, NBeatsTrainingConfig, LightGBMTrainingConfig, DLinearTrainingConfig, InformerTrainingConfig, TrainingResult } from '@/actions/train-lstm';
 import { Progress } from "@/components/ui/progress"; // Import Progress
 
 
@@ -48,8 +48,8 @@ interface AnalysisPanelProps {
 type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error';
 // Type for training status (client-side view)
 type TrainingStatus = 'idle' | 'training' | 'completed' | 'error';
-// Add DLinear to ModelType
-type ModelType = 'LSTM' | 'N-BEATS' | 'LightGBM' | 'DLinear';
+// Add DLinear and Informer to ModelType
+type ModelType = 'LSTM' | 'N-BEATS' | 'LightGBM' | 'DLinear' | 'Informer';
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -115,6 +115,21 @@ const defaultDLinearConfig: DLinearTrainingConfig = {
     epochs: 50,
 };
 
+// Default Informer Config (Align with Python script args)
+const defaultInformerConfig: InformerTrainingConfig = {
+    seq_len: 96,
+    pred_len: 24,
+    d_model: 512,
+    n_heads: 8,
+    e_layers: 2,
+    d_layers: 1,
+    d_ff: 2048,
+    dropout: 0.05,
+    activation: 'gelu',
+    learningRate: 0.0001,
+    batchSize: 32,
+    epochs: 10,
+};
 
 
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
@@ -127,6 +142,10 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const { toast } = useToast();
   const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
   const [trainTestSplit, setTrainTestSplit] = useState([80]);
+   // State for features and target
+  const [targetColumn, setTargetColumn] = useState('close');
+  const [featureColumns, setFeatureColumns] = useState<string[]>(['open', 'high', 'low', 'close', 'volume']);
+
 
   // --- Model Training State ---
   const [selectedModel, setSelectedModel] = useState<ModelType>('LSTM'); // State for selected model
@@ -173,6 +192,20 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [dlinearBatchSize, setDlinearBatchSize] = useState(defaultDLinearConfig.batchSize);
   const [dlinearEpochs, setDlinearEpochs] = useState(defaultDLinearConfig.epochs);
 
+  // Informer specific state (Match defaultInformerConfig structure)
+  const [informerSeqLen, setInformerSeqLen] = useState(defaultInformerConfig.seq_len);
+  const [informerPredLen, setInformerPredLen] = useState(defaultInformerConfig.pred_len);
+  const [informerDModel, setInformerDModel] = useState(defaultInformerConfig.d_model);
+  const [informerNHeads, setInformerNHeads] = useState(defaultInformerConfig.n_heads);
+  const [informerELayers, setInformerELayers] = useState(defaultInformerConfig.e_layers);
+  const [informerDLayers, setInformerDLayers] = useState(defaultInformerConfig.d_layers);
+  const [informerDFF, setInformerDFF] = useState(defaultInformerConfig.d_ff);
+  const [informerDropout, setInformerDropout] = useState(defaultInformerConfig.dropout);
+  const [informerActivation, setInformerActivation] = useState<'relu' | 'gelu'>(defaultInformerConfig.activation);
+  const [informerLearningRate, setInformerLearningRate] = useState(defaultInformerConfig.learningRate);
+  const [informerBatchSize, setInformerBatchSize] = useState(defaultInformerConfig.batchSize);
+  const [informerEpochs, setInformerEpochs] = useState(defaultInformerConfig.epochs);
+
 
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>('idle');
   const [trainingMessage, setTrainingMessage] = useState<string>('');
@@ -180,7 +213,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [trainingProgress, setTrainingProgress] = useState<number | null>(null);
 
 
-  // --- Indicator Fetching Logic --- (No changes needed here)
+  // --- Indicator Fetching Logic ---
   const fetchIndicators = useCallback(async () => {
       if (isFetchingIndicators) return;
     setIsFetchingIndicators(true);
@@ -217,7 +250,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
      const startFetching = () => {
         fetchIndicators();
         if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current);
-        indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 5000);
+        indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 5000); // Refresh every 5 seconds
     };
 
     const stopFetching = () => {
@@ -233,18 +266,20 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
          startFetching();
     } else {
          stopFetching();
+         // Fetch once if expanded and not fetched yet
          if (isExpanded && indicators.lastUpdated === "N/A") {
              console.log("[AnalysisPanel] Fetching initial indicators for non-active tab.");
              fetchIndicators();
          }
     }
 
+    // Cleanup interval on component unmount or tab change
     return () => stopFetching();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, fetchIndicators, isExpanded]);
 
 
-  // --- Data Collection Logic --- (No changes needed here)
+  // --- Data Collection Logic ---
   const handleCollectData = async () => {
      if (collectionStatus === 'collecting-historical') return;
 
@@ -253,20 +288,26 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
         return;
     }
 
+     // Ensure end date includes the full day
      const startTimeMs = dateRange.from.getTime();
-     const endTimeMs = dateRange.to.getTime() + (24 * 60 * 60 * 1000) - 1;
+     // Set end time to the very end of the selected day
+     const endDate = new Date(dateRange.to);
+     endDate.setHours(23, 59, 59, 999);
+     const endTimeMs = endDate.getTime();
+
 
      console.log(`[AnalysisPanel] Collecting historical data from ${new Date(startTimeMs).toISOString()} to ${new Date(endTimeMs).toISOString()}`);
      setCollectionStatus('collecting-historical');
      setCollectionMessage(`Collecting data from ${format(dateRange.from, "LLL dd, y")} to ${format(dateRange.to, "LLL dd, y")}... (this may take a while)`);
 
     try {
+      // Call the action which now handles chunking internally
       const result = await collectBinanceOhlcvData({
         symbol: 'BTCUSDT',
         interval: '1m',
-        limit: 1000,
         startTime: startTimeMs,
         endTime: endTimeMs,
+        // limit is handled internally for chunking
       });
 
       if (result.success) {
@@ -289,9 +330,11 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     } finally {
        // Keep status indicator for a bit longer
        setTimeout(() => {
-           setCollectionStatus('idle');
-           setCollectionMessage('');
-        }, 8000); // Reset after 8 seconds
+           if (collectionStatus !== 'collecting-historical') { // Only reset if not still collecting
+               setCollectionStatus('idle');
+               setCollectionMessage('');
+           }
+        }, 8000); // Reset after 8 seconds if finished
     }
   };
 
@@ -299,50 +342,25 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
    const handleStartTraining = async () => {
     if (trainingStatus === 'training') return;
 
-    let config: LstmTrainingConfig | NBeatsTrainingConfig | LightGBMTrainingConfig | DLinearTrainingConfig;
+    let config: LstmTrainingConfig | NBeatsTrainingConfig | LightGBMTrainingConfig | DLinearTrainingConfig | InformerTrainingConfig;
 
     // Determine config based on selectedModel and useDefaultConfig
     switch (selectedModel) {
       case 'LSTM':
-        config = useDefaultConfig
-          ? defaultLstmConfig
-          : {
-              units: lstmUnits, layers: lstmLayers, timesteps: lstmTimesteps, dropout: lstmDropout,
-              learningRate: lstmLearningRate, batchSize: lstmBatchSize, epochs: lstmEpochs,
-            };
+        config = useDefaultConfig ? defaultLstmConfig : { units: lstmUnits, layers: lstmLayers, timesteps: lstmTimesteps, dropout: lstmDropout, learningRate: lstmLearningRate, batchSize: lstmBatchSize, epochs: lstmEpochs };
         break;
       case 'N-BEATS':
-        config = useDefaultConfig
-          ? defaultNBeatsConfig
-          : {
-              input_chunk_length: nbeatsInputChunk, output_chunk_length: nbeatsOutputChunk,
-              num_stacks: nbeatsNumStacks, num_blocks: nbeatsNumBlocks, num_layers: nbeatsNumLayers,
-              layer_widths: nbeatsLayerWidths, learningRate: nbeatsLearningRate,
-              batchSize: nbeatsBatchSize, epochs: nbeatsEpochs,
-            };
+        config = useDefaultConfig ? defaultNBeatsConfig : { input_chunk_length: nbeatsInputChunk, output_chunk_length: nbeatsOutputChunk, num_stacks: nbeatsNumStacks, num_blocks: nbeatsNumBlocks, num_layers: nbeatsNumLayers, layer_widths: nbeatsLayerWidths, learningRate: nbeatsLearningRate, batchSize: nbeatsBatchSize, epochs: nbeatsEpochs };
         break;
       case 'LightGBM':
-        config = useDefaultConfig
-          ? defaultLightGBMConfig
-          : {
-              num_leaves: lgbmNumLeaves, learningRate: lgbmLearningRate,
-              feature_fraction: lgbmFeatureFraction, bagging_fraction: lgbmBaggingFraction,
-              bagging_freq: lgbmBaggingFreq, boosting_type: lgbmBoostingType,
-              numIterations: lgbmNumIterations, lags: lgbmLags, forecast_horizon: lgbmForecastHorizon,
-              // Add batchSize/epochs from default for consistency, though script uses numIterations
-              batchSize: defaultLightGBMConfig.batchSize, epochs: defaultLightGBMConfig.epochs
-            };
+        config = useDefaultConfig ? defaultLightGBMConfig : { num_leaves: lgbmNumLeaves, learningRate: lgbmLearningRate, feature_fraction: lgbmFeatureFraction, bagging_fraction: lgbmBaggingFraction, bagging_freq: lgbmBaggingFreq, boosting_type: lgbmBoostingType, numIterations: lgbmNumIterations, lags: lgbmLags, forecast_horizon: lgbmForecastHorizon, batchSize: defaultLightGBMConfig.batchSize, epochs: defaultLightGBMConfig.epochs };
         break;
-       case 'DLinear': // Add case for DLinear
-        config = useDefaultConfig
-          ? defaultDLinearConfig
-          : {
-              input_chunk_length: dlinearInputChunk, output_chunk_length: dlinearOutputChunk,
-              kernel_size: dlinearKernelSize, shared_weights: dlinearSharedWeights,
-              const_init: dlinearConstInit, learningRate: dlinearLearningRate,
-              batchSize: dlinearBatchSize, epochs: dlinearEpochs,
-            };
+       case 'DLinear':
+        config = useDefaultConfig ? defaultDLinearConfig : { input_chunk_length: dlinearInputChunk, output_chunk_length: dlinearOutputChunk, kernel_size: dlinearKernelSize, shared_weights: dlinearSharedWeights, const_init: dlinearConstInit, learningRate: dlinearLearningRate, batchSize: dlinearBatchSize, epochs: dlinearEpochs };
         break;
+       case 'Informer':
+         config = useDefaultConfig ? defaultInformerConfig : { seq_len: informerSeqLen, pred_len: informerPredLen, d_model: informerDModel, n_heads: informerNHeads, e_layers: informerELayers, d_layers: informerDLayers, d_ff: informerDFF, dropout: informerDropout, activation: informerActivation, learningRate: informerLearningRate, batchSize: informerBatchSize, epochs: informerEpochs };
+         break;
       default:
         toast({ title: "Error", description: "Invalid model selected.", variant: "destructive"});
         return;
@@ -352,47 +370,57 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
         modelType: selectedModel,
         config: config,
         trainTestSplitRatio: trainTestSplit[0] / 100,
+        target_column: targetColumn, // Pass target/features
+        feature_columns: featureColumns,
     };
 
     console.log(`[AnalysisPanel] Requesting ${selectedModel} Training Job with ${useDefaultConfig ? 'DEFAULT' : 'CUSTOM'} config:`, input);
 
     setTrainingStatus('training');
     setTrainingMessage(`Requesting ${selectedModel} training...`);
-    setValidationResults([]);
+    setValidationResults([]); // Clear previous results
     setTrainingProgress(5); // Simulate starting progress
 
-    // Simulate progress increase
+    // Simulate progress increase (more realistically)
+    let currentProgress = 5;
     const progressInterval = setInterval(() => {
         setTrainingProgress(prev => {
-            if (prev === null || prev >= 95) return prev;
-            return Math.min(95, prev + Math.floor(Math.random() * 10) + 5);
+             if (prev === null || prev >= 98) { // Stop slightly before 100
+                clearInterval(progressInterval);
+                return prev;
+            };
+             // Increase by a smaller, variable amount
+             const increment = Math.random() * 5 + 1; // 1 to 6
+             currentProgress = Math.min(98, prev + increment);
+             return currentProgress;
         });
-    }, 1500);
+    }, 2000); // Update less frequently
 
 
     try {
         // Call the generic startTrainingJob action
         const result: TrainingResult = await startTrainingJob(input);
 
-        clearInterval(progressInterval);
+        clearInterval(progressInterval); // Clear interval once backend responds
 
         if (result.success) {
             setTrainingStatus('completed');
-            setTrainingProgress(100);
+            setTrainingProgress(100); // Set to 100 on success
             setTrainingMessage(result.message || `${selectedModel} Training Completed.`);
             const validationData: ValidationResult[] = [];
-            if (result.results?.rmse) {
+            if (result.results?.rmse !== undefined) { // Check for undefined explicitly
                 validationData.push({ model: selectedModel, metric: 'RMSE', value: result.results.rmse.toFixed(4) });
             }
-            if (result.results?.mae) {
+            if (result.results?.mae !== undefined) { // Check for undefined explicitly
                 validationData.push({ model: selectedModel, metric: 'MAE', value: result.results.mae.toFixed(4) });
             }
-            setValidationResults(validationData);
+             // Prepend new results to existing ones (or replace if you prefer)
+            setValidationResults(prev => [...validationData, ...prev.filter(r => r.model !== selectedModel)]);
             toast({ title: `${selectedModel} Training`, description: result.message });
             console.log(`[AnalysisPanel] ${selectedModel} Training Job successful:`, result);
         } else {
             setTrainingStatus('error');
-            setTrainingProgress(null);
+            setTrainingProgress(null); // Clear progress on error
             const errorMsg = result.message || `Backend ${selectedModel} job failed.`;
             setTrainingMessage(`Error: ${errorMsg}`);
             toast({ title: `${selectedModel} Training Error`, description: errorMsg, variant: "destructive" });
@@ -409,9 +437,11 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
     } finally {
         // Keep status indicator for a bit longer
         setTimeout(() => {
-             setTrainingStatus('idle');
-             setTrainingProgress(null);
-             // Optionally clear message after timeout: setTrainingMessage('');
+             if (trainingStatus !== 'training') { // Only reset if not still training
+                 setTrainingStatus('idle');
+                 setTrainingProgress(null);
+                 // Optionally clear message after timeout: setTrainingMessage('');
+             }
         }, 8000);
     }
    };
@@ -419,39 +449,42 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
    // --- Render specific config inputs based on selectedModel ---
    const renderModelConfigInputs = () => {
      const commonDisabled = useDefaultConfig || trainingStatus === 'training';
-     const gridClass = cn("grid grid-cols-2 gap-x-4 gap-y-2 transition-opacity", commonDisabled && "opacity-50 pointer-events-none");
+     // Consistent grid styling
+     const gridClass = cn("grid grid-cols-2 gap-x-4 gap-y-2 transition-opacity duration-300", commonDisabled && "opacity-60 pointer-events-none");
+     const inputClass = "h-7 text-xs"; // Consistent input size
+     const labelClass = "text-xs"; // Consistent label size
 
      switch (selectedModel) {
        case 'LSTM':
          return (
              <div className={gridClass}>
                  <div className="space-y-1">
-                     <Label htmlFor="lstm-units" className="text-xs">Units/Layer</Label>
-                     <Input id="lstm-units" type="number" value={lstmUnits} onChange={(e) => setLstmUnits(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={commonDisabled} />
+                     <Label htmlFor="lstm-units" className={labelClass}>Units/Layer</Label>
+                     <Input id="lstm-units" type="number" value={lstmUnits} onChange={(e) => setLstmUnits(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className={inputClass} disabled={commonDisabled} />
                  </div>
                  <div className="space-y-1">
-                     <Label htmlFor="lstm-layers" className="text-xs">Layers</Label>
-                     <Input id="lstm-layers" type="number" value={lstmLayers} onChange={(e) => setLstmLayers(parseInt(e.target.value) || 1)} min="1" max="5" className="h-7 text-xs" disabled={commonDisabled} />
+                     <Label htmlFor="lstm-layers" className={labelClass}>Layers</Label>
+                     <Input id="lstm-layers" type="number" value={lstmLayers} onChange={(e) => setLstmLayers(parseInt(e.target.value) || 1)} min="1" max="5" className={inputClass} disabled={commonDisabled} />
                  </div>
                  <div className="space-y-1">
-                     <Label htmlFor="lstm-timesteps" className="text-xs">Timesteps (Lookback)</Label>
-                     <Input id="lstm-timesteps" type="number" value={lstmTimesteps} onChange={(e) => setLstmTimesteps(parseInt(e.target.value) || 10)} min="10" max="120" step="10" className="h-7 text-xs" disabled={commonDisabled} />
+                     <Label htmlFor="lstm-timesteps" className={labelClass}>Timesteps (Lookback)</Label>
+                     <Input id="lstm-timesteps" type="number" value={lstmTimesteps} onChange={(e) => setLstmTimesteps(parseInt(e.target.value) || 10)} min="10" max="120" step="10" className={inputClass} disabled={commonDisabled} />
                  </div>
                  <div className="space-y-1">
-                     <Label htmlFor="lstm-dropout" className="text-xs">Dropout Rate</Label>
-                     <Input id="lstm-dropout" type="number" value={lstmDropout} onChange={(e) => setLstmDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.8" step="0.1" className="h-7 text-xs" disabled={commonDisabled} />
+                     <Label htmlFor="lstm-dropout" className={labelClass}>Dropout Rate</Label>
+                     <Input id="lstm-dropout" type="number" value={lstmDropout} onChange={(e) => setLstmDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.8" step="0.1" className={inputClass} disabled={commonDisabled} />
                  </div>
                  <div className="space-y-1">
-                     <Label htmlFor="lstm-lr" className="text-xs">Learning Rate</Label>
-                     <Input id="lstm-lr" type="number" value={lstmLearningRate} onChange={(e) => setLstmLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={commonDisabled} />
+                     <Label htmlFor="lstm-lr" className={labelClass}>Learning Rate</Label>
+                     <Input id="lstm-lr" type="number" value={lstmLearningRate} onChange={(e) => setLstmLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className={inputClass} disabled={commonDisabled} />
                  </div>
                  <div className="space-y-1">
-                     <Label htmlFor="lstm-batch" className="text-xs">Batch Size</Label>
-                     <Input id="lstm-batch" type="number" value={lstmBatchSize} onChange={(e) => setLstmBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={commonDisabled} />
+                     <Label htmlFor="lstm-batch" className={labelClass}>Batch Size</Label>
+                     <Input id="lstm-batch" type="number" value={lstmBatchSize} onChange={(e) => setLstmBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className={inputClass} disabled={commonDisabled} />
                  </div>
                  <div className="space-y-1 col-span-2">
-                     <Label htmlFor="lstm-epochs" className="text-xs">Epochs</Label>
-                     <Input id="lstm-epochs" type="number" value={lstmEpochs} onChange={(e) => setLstmEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={commonDisabled} />
+                     <Label htmlFor="lstm-epochs" className={labelClass}>Epochs</Label>
+                     <Input id="lstm-epochs" type="number" value={lstmEpochs} onChange={(e) => setLstmEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className={inputClass} disabled={commonDisabled} />
                  </div>
              </div>
          );
@@ -459,40 +492,40 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
             return (
                 <div className={gridClass}>
                     <div className="space-y-1">
-                        <Label htmlFor="nbeats-input" className="text-xs">Input Chunk</Label>
-                        <Input id="nbeats-input" type="number" value={nbeatsInputChunk} onChange={(e) => setNbeatsInputChunk(parseInt(e.target.value) || 10)} min="5" max="100" step="5" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-input" className={labelClass}>Input Chunk</Label>
+                        <Input id="nbeats-input" type="number" value={nbeatsInputChunk} onChange={(e) => setNbeatsInputChunk(parseInt(e.target.value) || 10)} min="5" max="100" step="5" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="nbeats-output" className="text-xs">Output Chunk</Label>
-                        <Input id="nbeats-output" type="number" value={nbeatsOutputChunk} onChange={(e) => setNbeatsOutputChunk(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-output" className={labelClass}>Output Chunk</Label>
+                        <Input id="nbeats-output" type="number" value={nbeatsOutputChunk} onChange={(e) => setNbeatsOutputChunk(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="nbeats-stacks" className="text-xs">Num Stacks</Label>
-                        <Input id="nbeats-stacks" type="number" value={nbeatsNumStacks} onChange={(e) => setNbeatsNumStacks(parseInt(e.target.value) || 10)} min="1" max="50" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-stacks" className={labelClass}>Num Stacks</Label>
+                        <Input id="nbeats-stacks" type="number" value={nbeatsNumStacks} onChange={(e) => setNbeatsNumStacks(parseInt(e.target.value) || 10)} min="1" max="50" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="nbeats-blocks" className="text-xs">Blocks/Stack</Label>
-                        <Input id="nbeats-blocks" type="number" value={nbeatsNumBlocks} onChange={(e) => setNbeatsNumBlocks(parseInt(e.target.value) || 1)} min="1" max="5" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-blocks" className={labelClass}>Blocks/Stack</Label>
+                        <Input id="nbeats-blocks" type="number" value={nbeatsNumBlocks} onChange={(e) => setNbeatsNumBlocks(parseInt(e.target.value) || 1)} min="1" max="5" className={inputClass} disabled={commonDisabled} />
                     </div>
                      <div className="space-y-1">
-                        <Label htmlFor="nbeats-layers" className="text-xs">Layers/Block</Label>
-                        <Input id="nbeats-layers" type="number" value={nbeatsNumLayers} onChange={(e) => setNbeatsNumLayers(parseInt(e.target.value) || 2)} min="1" max="8" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-layers" className={labelClass}>Layers/Block</Label>
+                        <Input id="nbeats-layers" type="number" value={nbeatsNumLayers} onChange={(e) => setNbeatsNumLayers(parseInt(e.target.value) || 2)} min="1" max="8" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="nbeats-widths" className="text-xs">Layer Widths</Label>
-                        <Input id="nbeats-widths" type="number" value={nbeatsLayerWidths} onChange={(e) => setNbeatsLayerWidths(parseInt(e.target.value) || 128)} min="32" max="512" step="32" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-widths" className={labelClass}>Layer Widths</Label>
+                        <Input id="nbeats-widths" type="number" value={nbeatsLayerWidths} onChange={(e) => setNbeatsLayerWidths(parseInt(e.target.value) || 128)} min="32" max="512" step="32" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="nbeats-lr" className="text-xs">Learning Rate</Label>
-                        <Input id="nbeats-lr" type="number" value={nbeatsLearningRate} onChange={(e) => setNbeatsLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-lr" className={labelClass}>Learning Rate</Label>
+                        <Input id="nbeats-lr" type="number" value={nbeatsLearningRate} onChange={(e) => setNbeatsLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className={inputClass} disabled={commonDisabled} />
                     </div>
                      <div className="space-y-1">
-                        <Label htmlFor="nbeats-batch" className="text-xs">Batch Size</Label>
-                        <Input id="nbeats-batch" type="number" value={nbeatsBatchSize} onChange={(e) => setNbeatsBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-batch" className={labelClass}>Batch Size</Label>
+                        <Input id="nbeats-batch" type="number" value={nbeatsBatchSize} onChange={(e) => setNbeatsBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1 col-span-2">
-                        <Label htmlFor="nbeats-epochs" className="text-xs">Epochs</Label>
-                        <Input id="nbeats-epochs" type="number" value={nbeatsEpochs} onChange={(e) => setNbeatsEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="nbeats-epochs" className={labelClass}>Epochs</Label>
+                        <Input id="nbeats-epochs" type="number" value={nbeatsEpochs} onChange={(e) => setNbeatsEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <p className="text-xs text-muted-foreground col-span-2">(N-BEATS script is placeholder)</p>
                 </div>
@@ -501,93 +534,476 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
             return (
                 <div className={gridClass}>
                      <div className="space-y-1">
-                        <Label htmlFor="lgbm-leaves" className="text-xs">Num Leaves</Label>
-                        <Input id="lgbm-leaves" type="number" value={lgbmNumLeaves} onChange={(e) => setLgbmNumLeaves(parseInt(e.target.value) || 20)} min="10" max="100" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-leaves" className={labelClass}>Num Leaves</Label>
+                        <Input id="lgbm-leaves" type="number" value={lgbmNumLeaves} onChange={(e) => setLgbmNumLeaves(parseInt(e.target.value) || 20)} min="10" max="100" step="1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="lgbm-lr" className="text-xs">Learning Rate</Label>
-                        <Input id="lgbm-lr" type="number" value={lgbmLearningRate} onChange={(e) => setLgbmLearningRate(parseFloat(e.target.value) || 0.01)} min="0.001" max="0.1" step="0.001" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-lr" className={labelClass}>Learning Rate</Label>
+                        <Input id="lgbm-lr" type="number" value={lgbmLearningRate} onChange={(e) => setLgbmLearningRate(parseFloat(e.target.value) || 0.01)} min="0.001" max="0.1" step="0.001" className={inputClass} disabled={commonDisabled} />
                     </div>
                      <div className="space-y-1">
-                        <Label htmlFor="lgbm-feat-frac" className="text-xs">Feature Fraction</Label>
-                        <Input id="lgbm-feat-frac" type="number" value={lgbmFeatureFraction} onChange={(e) => setLgbmFeatureFraction(parseFloat(e.target.value) || 0.1)} min="0.1" max="1.0" step="0.1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-feat-frac" className={labelClass}>Feature Fraction</Label>
+                        <Input id="lgbm-feat-frac" type="number" value={lgbmFeatureFraction} onChange={(e) => setLgbmFeatureFraction(parseFloat(e.target.value) || 0.1)} min="0.1" max="1.0" step="0.1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="lgbm-bag-frac" className="text-xs">Bagging Fraction</Label>
-                        <Input id="lgbm-bag-frac" type="number" value={lgbmBaggingFraction} onChange={(e) => setLgbmBaggingFraction(parseFloat(e.target.value) || 0.1)} min="0.1" max="1.0" step="0.1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-bag-frac" className={labelClass}>Bagging Fraction</Label>
+                        <Input id="lgbm-bag-frac" type="number" value={lgbmBaggingFraction} onChange={(e) => setLgbmBaggingFraction(parseFloat(e.target.value) || 0.1)} min="0.1" max="1.0" step="0.1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="lgbm-bag-freq" className="text-xs">Bagging Freq</Label>
-                        <Input id="lgbm-bag-freq" type="number" value={lgbmBaggingFreq} onChange={(e) => setLgbmBaggingFreq(parseInt(e.target.value) || 1)} min="0" max="20" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-bag-freq" className={labelClass}>Bagging Freq</Label>
+                        <Input id="lgbm-bag-freq" type="number" value={lgbmBaggingFreq} onChange={(e) => setLgbmBaggingFreq(parseInt(e.target.value) || 1)} min="0" max="20" step="1" className={inputClass} disabled={commonDisabled} />
                     </div>
                      <div className="space-y-1">
-                        <Label htmlFor="lgbm-boosting" className="text-xs">Boosting Type</Label>
+                        <Label htmlFor="lgbm-boosting" className={labelClass}>Boosting Type</Label>
                         <Select value={lgbmBoostingType} onValueChange={(v) => setLgbmBoostingType(v as 'gbdt'|'dart'|'goss')} disabled={commonDisabled}>
-                            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className={inputClass}><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="gbdt" className="text-xs">gbdt</SelectItem>
-                                <SelectItem value="dart" className="text-xs">dart</SelectItem>
-                                <SelectItem value="goss" className="text-xs">goss</SelectItem>
+                                <SelectItem value="gbdt" className={labelClass}>gbdt</SelectItem>
+                                <SelectItem value="dart" className={labelClass}>dart</SelectItem>
+                                <SelectItem value="goss" className={labelClass}>goss</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="lgbm-lags" className="text-xs">Lag Features</Label>
-                        <Input id="lgbm-lags" type="number" value={lgbmLags} onChange={(e) => setLgbmLags(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-lags" className={labelClass}>Lag Features</Label>
+                        <Input id="lgbm-lags" type="number" value={lgbmLags} onChange={(e) => setLgbmLags(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="lgbm-horizon" className="text-xs">Forecast Horizon</Label>
-                        <Input id="lgbm-horizon" type="number" value={lgbmForecastHorizon} onChange={(e) => setLgbmForecastHorizon(parseInt(e.target.value) || 1)} min="1" max="10" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-horizon" className={labelClass}>Forecast Horizon</Label>
+                        <Input id="lgbm-horizon" type="number" value={lgbmForecastHorizon} onChange={(e) => setLgbmForecastHorizon(parseInt(e.target.value) || 1)} min="1" max="10" step="1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1 col-span-2">
-                        <Label htmlFor="lgbm-iterations" className="text-xs">Iterations</Label>
-                        <Input id="lgbm-iterations" type="number" value={lgbmNumIterations} onChange={(e) => setLgbmNumIterations(parseInt(e.target.value) || 50)} min="20" max="1000" step="10" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="lgbm-iterations" className={labelClass}>Iterations</Label>
+                        <Input id="lgbm-iterations" type="number" value={lgbmNumIterations} onChange={(e) => setLgbmNumIterations(parseInt(e.target.value) || 50)} min="20" max="1000" step="10" className={inputClass} disabled={commonDisabled} />
                     </div>
                 </div>
             );
-        case 'DLinear': // Add case for DLinear
+        case 'DLinear':
             return (
                 <div className={gridClass}>
                     <div className="space-y-1">
-                        <Label htmlFor="dlinear-input" className="text-xs">Input Chunk</Label>
-                        <Input id="dlinear-input" type="number" value={dlinearInputChunk} onChange={(e) => setDlinearInputChunk(parseInt(e.target.value) || 10)} min="5" max="100" step="5" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="dlinear-input" className={labelClass}>Input Chunk</Label>
+                        <Input id="dlinear-input" type="number" value={dlinearInputChunk} onChange={(e) => setDlinearInputChunk(parseInt(e.target.value) || 10)} min="5" max="100" step="5" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="dlinear-output" className="text-xs">Output Chunk</Label>
-                        <Input id="dlinear-output" type="number" value={dlinearOutputChunk} onChange={(e) => setDlinearOutputChunk(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="dlinear-output" className={labelClass}>Output Chunk</Label>
+                        <Input id="dlinear-output" type="number" value={dlinearOutputChunk} onChange={(e) => setDlinearOutputChunk(parseInt(e.target.value) || 1)} min="1" max="20" step="1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="dlinear-kernel" className="text-xs">Kernel Size</Label>
-                        <Input id="dlinear-kernel" type="number" value={dlinearKernelSize} onChange={(e) => setDlinearKernelSize(parseInt(e.target.value) || 25)} min="1" max="50" step="1" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="dlinear-kernel" className={labelClass}>Kernel Size</Label>
+                        <Input id="dlinear-kernel" type="number" value={dlinearKernelSize} onChange={(e) => setDlinearKernelSize(parseInt(e.target.value) || 25)} min="1" max="50" step="1" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1 flex items-center justify-between col-span-2">
-                         <Label htmlFor="dlinear-shared" className="text-xs">Shared Weights</Label>
+                         <Label htmlFor="dlinear-shared" className={labelClass}>Shared Weights</Label>
                          <Switch id="dlinear-shared" checked={dlinearSharedWeights} onCheckedChange={setDlinearSharedWeights} disabled={commonDisabled} />
                     </div>
                      <div className="space-y-1 flex items-center justify-between col-span-2">
-                         <Label htmlFor="dlinear-constinit" className="text-xs">Constant Init</Label>
+                         <Label htmlFor="dlinear-constinit" className={labelClass}>Constant Init</Label>
                          <Switch id="dlinear-constinit" checked={dlinearConstInit} onCheckedChange={setDlinearConstInit} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="dlinear-lr" className="text-xs">Learning Rate</Label>
-                        <Input id="dlinear-lr" type="number" value={dlinearLearningRate} onChange={(e) => setDlinearLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="dlinear-lr" className={labelClass}>Learning Rate</Label>
+                        <Input id="dlinear-lr" type="number" value={dlinearLearningRate} onChange={(e) => setDlinearLearningRate(parseFloat(e.target.value) || 0.001)} min="0.00001" max="0.01" step="0.0001" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1">
-                        <Label htmlFor="dlinear-batch" className="text-xs">Batch Size</Label>
-                        <Input id="dlinear-batch" type="number" value={dlinearBatchSize} onChange={(e) => setDlinearBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="dlinear-batch" className={labelClass}>Batch Size</Label>
+                        <Input id="dlinear-batch" type="number" value={dlinearBatchSize} onChange={(e) => setDlinearBatchSize(parseInt(e.target.value) || 32)} min="16" max="256" step="16" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <div className="space-y-1 col-span-2">
-                        <Label htmlFor="dlinear-epochs" className="text-xs">Epochs</Label>
-                        <Input id="dlinear-epochs" type="number" value={dlinearEpochs} onChange={(e) => setDlinearEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className="h-7 text-xs" disabled={commonDisabled} />
+                        <Label htmlFor="dlinear-epochs" className={labelClass}>Epochs</Label>
+                        <Input id="dlinear-epochs" type="number" value={dlinearEpochs} onChange={(e) => setDlinearEpochs(parseInt(e.target.value) || 50)} min="10" max="500" step="10" className={inputClass} disabled={commonDisabled} />
                     </div>
                     <p className="text-xs text-muted-foreground col-span-2">(DLinear script is placeholder)</p>
                 </div>
             );
+         case 'Informer': // Add Informer configuration inputs
+            return (
+                <div className={gridClass}>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-seqlen" className={labelClass}>Seq Len (Input)</Label>
+                        <Input id="informer-seqlen" type="number" value={informerSeqLen} onChange={(e) => setInformerSeqLen(parseInt(e.target.value) || 32)} min="16" max="192" step="8" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-predlen" className={labelClass}>Pred Len (Output)</Label>
+                        <Input id="informer-predlen" type="number" value={informerPredLen} onChange={(e) => setInformerPredLen(parseInt(e.target.value) || 8)} min="1" max="48" step="1" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-dmodel" className={labelClass}>Model Dim (d_model)</Label>
+                        <Input id="informer-dmodel" type="number" value={informerDModel} onChange={(e) => setInformerDModel(parseInt(e.target.value) || 256)} min="64" max="1024" step="64" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-heads" className={labelClass}>Attention Heads</Label>
+                        <Input id="informer-heads" type="number" value={informerNHeads} onChange={(e) => setInformerNHeads(parseInt(e.target.value) || 4)} min="1" max="16" step="1" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-elayers" className={labelClass}>Encoder Layers</Label>
+                        <Input id="informer-elayers" type="number" value={informerELayers} onChange={(e) => setInformerELayers(parseInt(e.target.value) || 1)} min="1" max="6" step="1" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-dlayers" className={labelClass}>Decoder Layers</Label>
+                        <Input id="informer-dlayers" type="number" value={informerDLayers} onChange={(e) => setInformerDLayers(parseInt(e.target.value) || 1)} min="1" max="6" step="1" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                     <div className="space-y-1">
+                        <Label htmlFor="informer-dff" className={labelClass}>FeedForward Dim</Label>
+                        <Input id="informer-dff" type="number" value={informerDFF} onChange={(e) => setInformerDFF(parseInt(e.target.value) || 1024)} min="256" max="4096" step="256" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                     <div className="space-y-1">
+                        <Label htmlFor="informer-dropout" className={labelClass}>Dropout Rate</Label>
+                        <Input id="informer-dropout" type="number" value={informerDropout} onChange={(e) => setInformerDropout(parseFloat(e.target.value) || 0.0)} min="0.0" max="0.5" step="0.05" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                     <div className="space-y-1">
+                        <Label htmlFor="informer-activation" className={labelClass}>Activation</Label>
+                        <Select value={informerActivation} onValueChange={(v) => setInformerActivation(v as 'relu' | 'gelu')} disabled={commonDisabled}>
+                            <SelectTrigger className={inputClass}><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="relu" className={labelClass}>ReLU</SelectItem>
+                                <SelectItem value="gelu" className={labelClass}>GELU</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-lr" className={labelClass}>Learning Rate</Label>
+                        <Input id="informer-lr" type="number" value={informerLearningRate} onChange={(e) => setInformerLearningRate(parseFloat(e.target.value) || 0.0001)} min="0.00001" max="0.001" step="0.00001" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="informer-batch" className={labelClass}>Batch Size</Label>
+                        <Input id="informer-batch" type="number" value={informerBatchSize} onChange={(e) => setInformerBatchSize(parseInt(e.target.value) || 16)} min="8" max="128" step="8" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                        <Label htmlFor="informer-epochs" className={labelClass}>Epochs</Label>
+                        <Input id="informer-epochs" type="number" value={informerEpochs} onChange={(e) => setInformerEpochs(parseInt(e.target.value) || 5)} min="1" max="50" step="1" className={inputClass} disabled={commonDisabled} />
+                    </div>
+                    <p className="text-xs text-muted-foreground col-span-2">(Informer script is placeholder)</p>
+                </div>
+            );
 
        default:
+         // Should not happen with typed selectedModel
          return null;
      }
    };
+
+  // --- Render Accordion for Ensemble Tab ---
+   const renderEnsembleAccordion = () => (
+       <Accordion type="multiple" className="w-full" defaultValue={['collect-data', 'model-training']}>
+           {/* 1. Collect Data Section */}
+           <AccordionItem value="collect-data" className="border-b border-border">
+               <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground">
+                   <div className="flex items-center gap-2">
+                       <DatabaseZap className="h-4 w-4" />
+                       Collect OHLCV Data
+                   </div>
+               </AccordionTrigger>
+               <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
+                    <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
+                    <div className="flex flex-wrap items-center gap-2">
+                       <Popover>
+                           <PopoverTrigger asChild>
+                               <Button
+                               id="date"
+                               variant={"outline"}
+                               size="sm"
+                               className={cn(
+                                   "w-[260px] justify-start text-left font-normal h-7 text-xs",
+                                   !dateRange && "text-muted-foreground"
+                               )}
+                                disabled={collectionStatus === 'collecting-historical'}
+                               >
+                               <CalendarIconLucide className="mr-2 h-3 w-3" />
+                               {dateRange?.from ? (
+                                   dateRange.to ? (
+                                   <>
+                                       {format(dateRange.from, "LLL dd, y")} -{" "}
+                                       {format(dateRange.to, "LLL dd, y")}
+                                   </>
+                                   ) : (
+                                   format(dateRange.from, "LLL dd, y")
+                                   )
+                               ) : (
+                                   <span>Pick a date range</span>
+                               )}
+                               </Button>
+                           </PopoverTrigger>
+                           <PopoverContent className="w-auto p-0" align="start">
+                               <Calendar
+                                   initialFocus
+                                   mode="range"
+                                   defaultMonth={dateRange?.from}
+                                   selected={dateRange}
+                                   onSelect={setDateRange}
+                                   numberOfMonths={2}
+                                   disabled={(date) => date > new Date()}
+                               />
+                           </PopoverContent>
+                       </Popover>
+                       <Button
+                           size="sm"
+                           variant="outline"
+                           className="text-xs h-7"
+                           onClick={handleCollectData}
+                           disabled={collectionStatus === 'collecting-historical' || !dateRange?.from || !dateRange?.to}
+                       >
+                           {(collectionStatus === 'collecting-historical') ? (
+                               <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                           ) : (
+                               <DatabaseZap className="h-3 w-3 mr-1" />
+                           )}
+                           Collect Range
+                       </Button>
+                    </div>
+                   {(collectionStatus !== 'idle' || collectionMessage) && (
+                        <div className="pt-1">
+                           <span className={cn(
+                               "text-xs px-1.5 py-0.5 rounded",
+                               collectionStatus === 'collecting-historical' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
+                               collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                               collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
+                               collectionStatus === 'idle' && collectionMessage && "text-muted-foreground bg-muted/50"
+                           )}>
+                               {collectionMessage || collectionStatus.replace('-', ' ')}
+                           </span>
+                        </div>
+                   )}
+                    <p className="text-xs text-muted-foreground pt-1">Collects 1-minute data for the specified range and saves to Supabase.</p>
+               </AccordionContent>
+           </AccordionItem>
+
+           {/* 2. Model Training Section */}
+            <AccordionItem value="model-training" className="border-b border-border">
+               <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground">
+                   <div className="flex items-center gap-2">
+                       <Brain className="h-4 w-4" />
+                       Model Training
+                   </div>
+               </AccordionTrigger>
+               <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
+                   <p className="text-xs text-muted-foreground">Configure and train time series forecasting models using collected data.</p>
+
+                   {/* Data Selection (Target/Features) - Optional */}
+                    <div className="space-y-2 border-t border-border pt-3">
+                        <Label htmlFor="target-column" className="text-xs">Target Column</Label>
+                         <Select value={targetColumn} onValueChange={setTargetColumn} disabled={trainingStatus === 'training'}>
+                              <SelectTrigger id="target-column" className="h-8 text-xs">
+                                  <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  {/* Add more potential target columns if needed */}
+                                  <SelectItem value="close" className="text-xs">close</SelectItem>
+                                  <SelectItem value="open" className="text-xs">open</SelectItem>
+                                  <SelectItem value="high" className="text-xs">high</SelectItem>
+                                  <SelectItem value="low" className="text-xs">low</SelectItem>
+                              </SelectContent>
+                          </Select>
+                         {/* Basic Feature Selection (could be more advanced) */}
+                         <Label className="text-xs">Feature Columns</Label>
+                          <Input
+                              type="text"
+                              value={featureColumns.join(', ')}
+                              onChange={(e) => setFeatureColumns(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                              placeholder="e.g., open, high, low, close, volume"
+                              className="h-8 text-xs"
+                              disabled={trainingStatus === 'training'}
+                           />
+                            <p className="text-xs text-muted-foreground">Comma-separated list of features from OHLCV table.</p>
+                     </div>
+
+                   {/* Model Selection */}
+                   <div className="space-y-2 border-t border-border pt-3">
+                       <Label htmlFor="model-select" className="text-xs">Select Model</Label>
+                       <Select
+                           value={selectedModel}
+                           onValueChange={(value) => setSelectedModel(value as ModelType)}
+                           disabled={trainingStatus === 'training'}
+                       >
+                           <SelectTrigger id="model-select" className="h-8 text-xs">
+                               <SelectValue placeholder="Select a model..." />
+                           </SelectTrigger>
+                           <SelectContent>
+                               <SelectItem value="LSTM" className="text-xs">LSTM</SelectItem>
+                               <SelectItem value="N-BEATS" className="text-xs">N-BEATS</SelectItem>
+                               <SelectItem value="LightGBM" className="text-xs">LightGBM</SelectItem>
+                               <SelectItem value="DLinear" className="text-xs">DLinear</SelectItem>
+                               <SelectItem value="Informer" className="text-xs">Informer</SelectItem> {/* Add Informer */}
+                           </SelectContent>
+                       </Select>
+                   </div>
+
+                   {/* Train/Test Split */}
+                   <div className="space-y-2 border-t border-border pt-3">
+                       <div className="flex items-center justify-between">
+                           <Label htmlFor="train-test-split" className="text-xs flex items-center gap-1"><SplitSquareHorizontal className="h-3 w-3"/>Train/Test Split</Label>
+                           <span className="text-xs text-muted-foreground">{trainTestSplit[0]}% / {100 - trainTestSplit[0]}%</span>
+                       </div>
+                       <Slider
+                           id="train-test-split"
+                           min={10}
+                           max={90}
+                           step={5}
+                           value={trainTestSplit}
+                           onValueChange={setTrainTestSplit}
+                           className="w-[95%] mx-auto pt-1"
+                           disabled={trainingStatus === 'training'}
+                       />
+                   </div>
+
+                   {/* Model Configuration (Conditional) */}
+                   <div className="space-y-3 border-t border-border pt-3">
+                       <div className="flex items-center justify-between">
+                           <Label className="text-xs font-medium flex items-center gap-1">
+                                {useDefaultConfig ? <Settings className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}
+                                {selectedModel} Configuration
+                           </Label>
+                           <div className="flex items-center space-x-2">
+                               <Label htmlFor="config-switch" className="text-xs text-muted-foreground">
+                                    {useDefaultConfig ? "Default" : "Custom"}
+                               </Label>
+                               <Switch
+                                   id="config-switch"
+                                   checked={!useDefaultConfig} // Inverted logic: checked = custom
+                                   onCheckedChange={(checked) => setUseDefaultConfig(!checked)}
+                                   disabled={trainingStatus === 'training'}
+                               />
+                           </div>
+                       </div>
+                       {/* Render specific inputs */}
+                       {renderModelConfigInputs()}
+
+                       {/* Start Training Button */}
+                       <Button size="sm" variant="outline" className="text-xs h-7" onClick={handleStartTraining} disabled={trainingStatus === 'training'}>
+                           {trainingStatus === 'training' ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                           ) : (
+                               <Play className="h-3 w-3 mr-1" />
+                           )}
+                           Start Training
+                       </Button>
+
+                       {/* Training Status & Progress */}
+                       {(trainingStatus !== 'idle' || trainingMessage) && (
+                           <div className="pt-1 space-y-1">
+                               {trainingStatus === 'training' && trainingProgress !== null && (
+                                   <Progress value={trainingProgress} className="h-2 w-full" />
+                               )}
+                               <span className={cn(
+                                   "text-xs px-1.5 py-0.5 rounded block w-fit", // Use block for message positioning
+                                   trainingStatus === 'training' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50", // Removed pulse for progress bar
+                                   trainingStatus === 'completed' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                                   trainingStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
+                                   trainingStatus === 'idle' && trainingMessage && "text-muted-foreground bg-muted/50"
+                               )}>
+                                   {trainingMessage || trainingStatus}
+                                   {trainingStatus === 'training' && trainingProgress !== null && ` (${trainingProgress.toFixed(0)}%)`}
+                               </span>
+                           </div>
+                        )}
+                       <p className="text-xs text-muted-foreground pt-1">Note: Triggers a backend Python script. Ensure Python environment and dependencies are set up.</p>
+                   </div>
+
+
+                    {/* Model Validation Results */}
+                    <div className="space-y-2 border-t border-border pt-3">
+                        <Label className="text-xs block">Validation Results</Label>
+                        <Table>
+                           <TableHeader>
+                               <TableRow>
+                                   <TableHead className="text-xs h-8">Model</TableHead>
+                                   <TableHead className="text-xs h-8">Metric</TableHead>
+                                   <TableHead className="text-right text-xs h-8">Value</TableHead>
+                               </TableRow>
+                           </TableHeader>
+                           <TableBody>
+                               {trainingStatus === 'training' && validationResults.length === 0 && (
+                                   <>
+                                    <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-2/3 bg-muted" /></TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-1/2 bg-muted" /></TableCell></TableRow>
+                                   </>
+                               )}
+                               {/* Display existing results even while training */}
+                               {validationResults.length === 0 && trainingStatus !== 'training' && (
+                                   <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground text-xs py-2">No validation results yet.</TableCell></TableRow>
+                               )}
+                               {validationResults.map((result, index) => (
+                                   <TableRow key={`${result.model}-${index}`}>
+                                       <TableCell className="text-xs py-1">{result.model}</TableCell>
+                                       <TableCell className="text-xs py-1">{result.metric}</TableCell>
+                                       <TableCell className="text-right text-xs py-1">{result.value}</TableCell>
+                                   </TableRow>
+                               ))}
+                               {/* Loading indicator row specifically during training if results exist */}
+                                {trainingStatus === 'training' && validationResults.length > 0 && (
+                                     <TableRow>
+                                         <TableCell colSpan={3} className="py-1">
+                                            <Skeleton className="h-4 w-1/3 bg-muted" />
+                                         </TableCell>
+                                    </TableRow>
+                                )}
+                           </TableBody>
+                       </Table>
+                    </div>
+
+               </AccordionContent>
+           </AccordionItem>
+
+           {/* 3. Model Testing Section */}
+           <AccordionItem value="model-testing" className="border-b-0">
+               <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground">
+                   <div className="flex items-center gap-2">
+                       <History className="h-4 w-4" />
+                       Model Testing
+                   </div>
+               </AccordionTrigger>
+               <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
+                   <p className="text-xs text-muted-foreground">Perform backtesting and front testing on trained models.</p>
+                   <div className="space-y-2 border-t border-border pt-3">
+                        <Label className="text-xs">Testing Configuration (Placeholder)</Label>
+                        <Select disabled={validationResults.length === 0 || trainingStatus === 'training'}>
+                           <SelectTrigger className="h-8 text-xs">
+                               <SelectValue placeholder="Select Trained Model..." />
+                           </SelectTrigger>
+                            <SelectContent>
+                                {validationResults.filter(vr => vr.metric === 'RMSE' || vr.metric === 'MAE').map(vr => ( // Filter for main validation results
+                                    <SelectItem key={vr.model} value={vr.model.toLowerCase()} className="text-xs">{vr.model} (Trained)</SelectItem>
+                                ))}
+                                 {validationResults.length === 0 && (
+                                    <SelectItem value="none" disabled className="text-xs">No models trained yet</SelectItem>
+                                 )}
+                            </SelectContent>
+                       </Select>
+                        <div className="flex gap-2 pt-1">
+                            <Input type="text" placeholder="Backtest Period (e.g., 30d)" className="h-8 text-xs" disabled />
+                            <Input type="text" placeholder="Front Test Period (e.g., 7d)" className="h-8 text-xs" disabled />
+                       </div>
+                   </div>
+                   <Button size="sm" variant="outline" className="text-xs h-7" disabled>
+                       <Play className="h-3 w-3 mr-1" />
+                       Run Tests (Placeholder)
+                   </Button>
+                    <Label className="text-xs text-muted-foreground pt-2 block">Test Results (Placeholder)</Label>
+                    <Table>
+                       <TableHeader>
+                           <TableRow>
+                               <TableHead className="text-xs h-8">Model</TableHead>
+                               <TableHead className="text-xs h-8">Metric</TableHead>
+                               <TableHead className="text-right text-xs h-8">Value</TableHead>
+                           </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                           <TableRow>
+                               <TableCell className="text-xs py-1">{validationResults[0]?.model ?? 'N/A'}</TableCell>
+                               <TableCell className="text-xs py-1">P/L %</TableCell>
+                               <TableCell className="text-right text-xs py-1">-</TableCell>
+                           </TableRow>
+                            <TableRow>
+                               <TableCell className="text-xs py-1">{validationResults[0]?.model ?? 'N/A'}</TableCell>
+                               <TableCell className="text-xs py-1">Sharpe Ratio</TableCell>
+                               <TableCell className="text-right text-xs py-1">-</TableCell>
+                           </TableRow>
+                       </TableBody>
+                   </Table>
+               </AccordionContent>
+           </AccordionItem>
+       </Accordion>
+   );
 
 
   return (
@@ -631,315 +1047,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                <div className="p-3 space-y-1">
                     {/* Ensemble Tab Content */}
                     <TabsContent value="ensemble" className="mt-0">
-                         <Accordion type="multiple" className="w-full" defaultValue={['collect-data', 'model-training']}>
-                            {/* 1. Collect Data Section */}
-                            <AccordionItem value="collect-data" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-t text-foreground">
-                                    <div className="flex items-center gap-2">
-                                        <DatabaseZap className="h-4 w-4" />
-                                        Collect OHLCV Data
-                                    </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-2 pb-4 space-y-3">
-                                     <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
-                                     <div className="flex flex-wrap items-center gap-2">
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                id="date"
-                                                variant={"outline"}
-                                                size="sm"
-                                                className={cn(
-                                                    "w-[260px] justify-start text-left font-normal h-7 text-xs",
-                                                    !dateRange && "text-muted-foreground"
-                                                )}
-                                                 disabled={collectionStatus === 'collecting-historical'}
-                                                >
-                                                <CalendarIconLucide className="mr-2 h-3 w-3" />
-                                                {dateRange?.from ? (
-                                                    dateRange.to ? (
-                                                    <>
-                                                        {format(dateRange.from, "LLL dd, y")} -{" "}
-                                                        {format(dateRange.to, "LLL dd, y")}
-                                                    </>
-                                                    ) : (
-                                                    format(dateRange.from, "LLL dd, y")
-                                                    )
-                                                ) : (
-                                                    <span>Pick a date range</span>
-                                                )}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="start">
-                                                <Calendar
-                                                    initialFocus
-                                                    mode="range"
-                                                    defaultMonth={dateRange?.from}
-                                                    selected={dateRange}
-                                                    onSelect={setDateRange}
-                                                    numberOfMonths={2}
-                                                    disabled={(date) => date > new Date()}
-                                                />
-                                            </PopoverContent>
-                                        </Popover>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="text-xs h-7"
-                                            onClick={handleCollectData}
-                                            disabled={collectionStatus === 'collecting-historical' || !dateRange?.from || !dateRange?.to}
-                                        >
-                                            {(collectionStatus === 'collecting-historical') ? (
-                                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                            ) : (
-                                                <DatabaseZap className="h-3 w-3 mr-1" />
-                                            )}
-                                            Collect Range
-                                        </Button>
-                                     </div>
-                                    {(collectionStatus !== 'idle' || collectionMessage) && (
-                                         <div className="pt-1">
-                                            <span className={cn(
-                                                "text-xs px-1.5 py-0.5 rounded",
-                                                collectionStatus === 'collecting-historical' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
-                                                collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
-                                                collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
-                                                collectionStatus === 'idle' && collectionMessage && "text-muted-foreground bg-muted/50"
-                                            )}>
-                                                {collectionMessage || collectionStatus.replace('-', ' ')}
-                                            </span>
-                                         </div>
-                                    )}
-                                     <p className="text-xs text-muted-foreground pt-1">Collects 1-minute data for the specified range and saves to Supabase.</p>
-                                </AccordionContent>
-                            </AccordionItem>
-
-                            {/* 2. Model Training Section */}
-                             <AccordionItem value="model-training" className="border-b border-border">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground">
-                                    <div className="flex items-center gap-2">
-                                        <Brain className="h-4 w-4" />
-                                        Model Training
-                                    </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
-                                    <p className="text-xs text-muted-foreground">Configure and train time series forecasting models using collected data.</p>
-
-                                    {/* Model Selection */}
-                                    <div className="space-y-2 border-t border-border pt-3">
-                                        <Label htmlFor="model-select" className="text-xs">Select Model</Label>
-                                        <Select
-                                            value={selectedModel}
-                                            onValueChange={(value) => setSelectedModel(value as ModelType)}
-                                            disabled={trainingStatus === 'training'}
-                                        >
-                                            <SelectTrigger id="model-select" className="h-8 text-xs">
-                                                <SelectValue placeholder="Select a model..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="LSTM" className="text-xs">LSTM</SelectItem>
-                                                <SelectItem value="N-BEATS" className="text-xs">N-BEATS</SelectItem>
-                                                <SelectItem value="LightGBM" className="text-xs">LightGBM</SelectItem>
-                                                 <SelectItem value="DLinear" className="text-xs">DLinear</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {/* Train/Test Split */}
-                                    <div className="space-y-2 border-t border-border pt-3">
-                                        <div className="flex items-center justify-between">
-                                            <Label htmlFor="train-test-split" className="text-xs flex items-center gap-1"><SplitSquareHorizontal className="h-3 w-3"/>Train/Test Split</Label>
-                                            <span className="text-xs text-muted-foreground">{trainTestSplit[0]}% / {100 - trainTestSplit[0]}%</span>
-                                        </div>
-                                        <Slider
-                                            id="train-test-split"
-                                            min={10}
-                                            max={90}
-                                            step={5}
-                                            value={trainTestSplit}
-                                            onValueChange={setTrainTestSplit}
-                                            className="w-[95%] mx-auto pt-1"
-                                            disabled={trainingStatus === 'training'}
-                                        />
-                                    </div>
-
-                                    {/* Model Configuration (Conditional) */}
-                                    <div className="space-y-3 border-t border-border pt-3">
-                                        <div className="flex items-center justify-between">
-                                            <Label className="text-xs font-medium flex items-center gap-1">
-                                                 {useDefaultConfig ? <Settings className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}
-                                                 {selectedModel} Configuration
-                                            </Label>
-                                            <div className="flex items-center space-x-2">
-                                                <Label htmlFor="config-switch" className="text-xs text-muted-foreground">
-                                                     {useDefaultConfig ? "Default" : "Custom"}
-                                                </Label>
-                                                <Switch
-                                                    id="config-switch"
-                                                    checked={!useDefaultConfig} // Inverted logic: checked = custom
-                                                    onCheckedChange={(checked) => setUseDefaultConfig(!checked)}
-                                                    disabled={trainingStatus === 'training'}
-                                                />
-                                            </div>
-                                        </div>
-                                        {/* Render specific inputs */}
-                                        {renderModelConfigInputs()}
-
-                                        {/* Start Training Button */}
-                                        <Button size="sm" variant="outline" className="text-xs h-7" onClick={handleStartTraining} disabled={trainingStatus === 'training'}>
-                                            {trainingStatus === 'training' ? (
-                                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                            ) : (
-                                                <Play className="h-3 w-3 mr-1" />
-                                            )}
-                                            Start Training
-                                        </Button>
-
-                                        {/* Training Status & Progress */}
-                                        {(trainingStatus !== 'idle' || trainingMessage) && (
-                                            <div className="pt-1 space-y-1">
-                                                {trainingStatus === 'training' && trainingProgress !== null && (
-                                                    <Progress value={trainingProgress} className="h-2 w-full" />
-                                                )}
-                                                <span className={cn(
-                                                    "text-xs px-1.5 py-0.5 rounded block w-fit", // Use block for message positioning
-                                                    trainingStatus === 'training' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
-                                                    trainingStatus === 'completed' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
-                                                    trainingStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
-                                                    trainingStatus === 'idle' && trainingMessage && "text-muted-foreground bg-muted/50"
-                                                )}>
-                                                    {trainingMessage || trainingStatus}
-                                                    {trainingStatus === 'training' && trainingProgress !== null && ` (${trainingProgress.toFixed(0)}%)`}
-                                                </span>
-                                            </div>
-                                         )}
-                                        <p className="text-xs text-muted-foreground pt-1">Note: This triggers a backend Python script.</p>
-                                    </div>
-
-
-                                     {/* Model Validation Results */}
-                                     <div className="space-y-2 border-t border-border pt-3">
-                                         <Label className="text-xs block">Validation Results</Label>
-                                         <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="text-xs h-8">Model</TableHead>
-                                                    <TableHead className="text-xs h-8">Metric</TableHead>
-                                                    <TableHead className="text-right text-xs h-8">Value</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {trainingStatus === 'training' && (
-                                                    <>
-                                                     <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-2/3 bg-muted" /></TableCell></TableRow>
-                                                     <TableRow><TableCell colSpan={3}><Skeleton className="h-4 w-1/2 bg-muted" /></TableCell></TableRow>
-                                                    </>
-                                                )}
-                                                {(trainingStatus === 'completed' || trainingStatus === 'error') && validationResults.length === 0 && trainingStatus !== 'training' && (
-                                                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground text-xs py-2">No validation results yet.</TableCell></TableRow>
-                                                )}
-                                                {validationResults.map((result, index) => (
-                                                    <TableRow key={index}>
-                                                        <TableCell className="text-xs py-1">{result.model}</TableCell>
-                                                        <TableCell className="text-xs py-1">{result.metric}</TableCell>
-                                                        <TableCell className="text-right text-xs py-1">{result.value}</TableCell>
-                                                    </TableRow>
-                                                ))}
-                                                {/* Placeholder for other models if not trained */}
-                                                 {!validationResults.some(r => r.model === 'LSTM') && trainingStatus !== 'training' && (
-                                                     <TableRow className="opacity-50">
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">LSTM</TableCell>
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">RMSE</TableCell>
-                                                        <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
-                                                    </TableRow>
-                                                 )}
-                                                {!validationResults.some(r => r.model === 'N-BEATS') && trainingStatus !== 'training' && (
-                                                    <TableRow className="opacity-50">
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">N-BEATS</TableCell>
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">RMSE</TableCell>
-                                                        <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
-                                                    </TableRow>
-                                                )}
-                                                {!validationResults.some(r => r.model === 'LightGBM') && trainingStatus !== 'training' && (
-                                                     <TableRow className="opacity-50">
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">LightGBM</TableCell>
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">MAE</TableCell>
-                                                        <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
-                                                    </TableRow>
-                                                )}
-                                                {!validationResults.some(r => r.model === 'DLinear') && trainingStatus !== 'training' && (
-                                                     <TableRow className="opacity-50">
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">DLinear</TableCell>
-                                                        <TableCell className="text-xs py-1 text-muted-foreground">RMSE</TableCell>
-                                                        <TableCell className="text-right text-xs py-1 text-muted-foreground">-</TableCell>
-                                                    </TableRow>
-                                                 )}
-                                            </TableBody>
-                                        </Table>
-                                     </div>
-
-                                </AccordionContent>
-                            </AccordionItem>
-
-                            {/* 3. Model Testing Section */}
-                            <AccordionItem value="model-testing" className="border-b-0">
-                                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground">
-                                    <div className="flex items-center gap-2">
-                                        <History className="h-4 w-4" />
-                                        Model Testing
-                                    </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
-                                    <p className="text-xs text-muted-foreground">Perform backtesting and front testing on trained models.</p>
-                                    <div className="space-y-2 border-t border-border pt-3">
-                                         <Label className="text-xs">Testing Configuration (Placeholder)</Label>
-                                         <Select disabled={validationResults.length === 0 || trainingStatus === 'training'}>
-                                            <SelectTrigger className="h-8 text-xs">
-                                                <SelectValue placeholder="Select Trained Model..." />
-                                            </SelectTrigger>
-                                             <SelectContent>
-                                                 {validationResults.map(vr => (
-                                                     <SelectItem key={vr.model} value={vr.model.toLowerCase()} className="text-xs">{vr.model} (Trained)</SelectItem>
-                                                 ))}
-                                                  {validationResults.length === 0 && (
-                                                     <SelectItem value="none" disabled className="text-xs">No models trained yet</SelectItem>
-                                                  )}
-                                             </SelectContent>
-                                        </Select>
-                                         <div className="flex gap-2 pt-1">
-                                             <Input type="text" placeholder="Backtest Period (e.g., 30d)" className="h-8 text-xs" disabled />
-                                             <Input type="text" placeholder="Front Test Period (e.g., 7d)" className="h-8 text-xs" disabled />
-                                        </div>
-                                    </div>
-                                    <Button size="sm" variant="outline" className="text-xs h-7" disabled>
-                                        <Play className="h-3 w-3 mr-1" />
-                                        Run Tests (Placeholder)
-                                    </Button>
-                                     <Label className="text-xs text-muted-foreground pt-2 block">Test Results (Placeholder)</Label>
-                                     <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="text-xs h-8">Model</TableHead>
-                                                <TableHead className="text-xs h-8">Metric</TableHead>
-                                                <TableHead className="text-right text-xs h-8">Value</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            <TableRow>
-                                                <TableCell className="text-xs py-1">{validationResults[0]?.model ?? 'N/A'}</TableCell>
-                                                <TableCell className="text-xs py-1">P/L %</TableCell>
-                                                <TableCell className="text-right text-xs py-1">-</TableCell>
-                                            </TableRow>
-                                             <TableRow>
-                                                <TableCell className="text-xs py-1">{validationResults[0]?.model ?? 'N/A'}</TableCell>
-                                                <TableCell className="text-xs py-1">Sharpe Ratio</TableCell>
-                                                <TableCell className="text-right text-xs py-1">-</TableCell>
-                                            </TableRow>
-                                        </TableBody>
-                                    </Table>
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
+                         {renderEnsembleAccordion()}
                     </TabsContent>
 
                     {/* RL Tab Content */}
@@ -1002,16 +1110,17 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     indicators.lastUpdated
                                 )}
                                 {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                                <span onClick={(e) => {e.stopPropagation(); fetchIndicators();}} className="ml-1">
+                                {/* Wrap button in a div or span to attach onClick */}
+                                <span onClick={(e) => { e.stopPropagation(); fetchIndicators(); }} className="ml-1 cursor-pointer">
                                      <Button
                                         variant="ghost"
                                         size="icon"
                                         disabled={isFetchingIndicators}
                                         className="h-5 w-5 text-muted-foreground hover:text-foreground"
                                         title="Refresh Indicators"
+                                        aria-label="Refresh Indicators"
                                     >
                                         <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
-                                        <span className="sr-only">Refresh Indicators</span>
                                     </Button>
                                 </span>
                             </div>
