@@ -1,89 +1,226 @@
 // src/app/page.tsx
-"use client"; // Add 'use client' because we are using useState hook
+"use client";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, type MouseEvent, type TouchEvent } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { AssetSummary } from "@/components/assets/asset-summary";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
-import { AnalysisPanel } from "@/components/analysis/analysis-panel"; // Import the new panel
+import { AnalysisPanel } from "@/components/analysis/analysis-panel";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from '@/lib/utils';
 
 export default function Home() {
   const [isAssetExpanded, setIsAssetExpanded] = useState(true);
-  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true); // State for the analysis panel
-  const [isChatOpen, setIsChatOpen] = useState(false); // State for chat popover
+  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  // State for draggable button position
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  // Refs for drag handling
+  const dragButtonRef = useRef<HTMLButtonElement>(null);
+  const isDraggingRef = useRef(false);
+  const startPosRef = useRef({ x: 0, y: 0 });
+  const initialPosRef = useRef({ x: 0, y: 0 });
+
+  // Effect to position button initially and handle window resize
+  useEffect(() => {
+    const button = dragButtonRef.current;
+    const parent = button?.offsetParent; // Get the nearest positioned ancestor
+    if (button && parent) {
+      // Initial position: bottom-right corner relative to the parent container
+      const initialX = parent.clientWidth - button.offsetWidth - 24; // 24px = 1.5rem (right-6)
+      const initialY = parent.clientHeight - button.offsetHeight - 24; // 24px = 1.5rem (bottom-6)
+      setPosition({ x: initialX, y: initialY });
+    }
+
+    const handleResize = () => {
+       if (button && parent) {
+         // Adjust position on resize to stay relative to bottom-right, avoiding going off-screen
+         const newX = Math.min(
+           position.x,
+           parent.clientWidth - button.offsetWidth - 24
+         );
+         const newY = Math.min(
+           position.y,
+           parent.clientHeight - button.offsetHeight - 24
+         );
+         setPosition({ x: Math.max(0, newX), y: Math.max(0, newY) }); // Ensure it doesn't go off-left/top
+       }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+     // Re-run if position.x/y changes might be too frequent, rely on parent dimensions change if possible
+  }, []); // Run once on mount
+
+  // Mouse down handler
+  const handleMouseDown = (e: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => {
+    // Prevent drag if clicking inside popover content area
+    if (isChatOpen && (e.target as HTMLElement).closest('[data-radix-popover-content]')) {
+      return;
+    }
+
+    isDraggingRef.current = true;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    startPosRef.current = { x: clientX, y: clientY };
+    initialPosRef.current = { x: position.x, y: position.y };
+    dragButtonRef.current?.classList.add('cursor-grabbing');
+
+    // Prevent text selection during drag
+    e.preventDefault();
+  };
+
+  // Mouse move handler (added in useEffect)
+  const handleMouseMove = (e: globalThis.MouseEvent | globalThis.TouchEvent) => {
+    if (!isDraggingRef.current || !dragButtonRef.current) return;
+
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+    const dx = clientX - startPosRef.current.x;
+    const dy = clientY - startPosRef.current.y;
+
+    const parent = dragButtonRef.current.offsetParent as HTMLElement;
+    if (!parent) return;
+
+    // Calculate new position, constraining within parent bounds
+    let newX = initialPosRef.current.x + dx;
+    let newY = initialPosRef.current.y + dy;
+
+    // Constrain X
+    newX = Math.max(0, newX); // Prevent moving past left edge
+    newX = Math.min(newX, parent.clientWidth - dragButtonRef.current.offsetWidth); // Prevent moving past right edge
+
+    // Constrain Y
+    newY = Math.max(0, newY); // Prevent moving past top edge
+    newY = Math.min(newY, parent.clientHeight - dragButtonRef.current.offsetHeight); // Prevent moving past bottom edge
+
+
+    setPosition({ x: newX, y: newY });
+  };
+
+  // Mouse up handler (added in useEffect)
+  const handleMouseUp = () => {
+    if (isDraggingRef.current) {
+      isDraggingRef.current = false;
+      dragButtonRef.current?.classList.remove('cursor-grabbing');
+    }
+  };
+
+  // Effect to add and remove global mouse move/up listeners
+  useEffect(() => {
+    if (isDraggingRef.current) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchmove', handleMouseMove);
+      window.addEventListener('touchend', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleMouseMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    }
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+       window.removeEventListener('touchmove', handleMouseMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isDraggingRef.current]); // Dependency on dragging state
+
 
   // Toggle for asset summary
   const handleAssetToggle = () => {
-      setIsAssetExpanded(!isAssetExpanded);
+    setIsAssetExpanded(!isAssetExpanded);
   };
 
-   // Toggle for the analysis panel
-   const handleAnalysisToggle = () => {
-      setIsAnalysisExpanded(!isAnalysisExpanded);
-   };
-
+  // Toggle for the analysis panel
+  const handleAnalysisToggle = () => {
+    setIsAnalysisExpanded(!isAnalysisExpanded);
+  };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden p-4 gap-4 relative"> {/* Added relative positioning */}
+    // Changed to relative positioning to act as offsetParent for the button
+    <div className="flex h-screen bg-background overflow-hidden p-4 gap-4 relative">
       {/* Left Analysis Panel */}
-       <aside className={cn(
-            "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out",
-            isAnalysisExpanded ? 'w-72' : 'w-16' // Adjust width based on expansion
-        )}>
-             <AnalysisPanel isExpanded={isAnalysisExpanded} onToggle={handleAnalysisToggle} />
-        </aside>
+      <aside className={cn(
+        "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out",
+        isAnalysisExpanded ? 'w-72' : 'w-16'
+      )}>
+        <AnalysisPanel isExpanded={isAnalysisExpanded} onToggle={handleAnalysisToggle} />
+      </aside>
 
-
-      {/* Main content area for the chart - Takes remaining space */}
+      {/* Main content area for the chart */}
       <main className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border">
         <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
         <div className="flex-1 p-0 overflow-hidden">
-         <TradingViewWidget />
+          <TradingViewWidget />
         </div>
       </main>
 
       {/* Right Container for Asset Summary */}
       <aside className="w-96 flex flex-col gap-4 flex-shrink-0">
-         {/* Asset Summary Container */}
-         <div className={cn(
-             "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card",
-             // Use flex-1 to take full height when chat is a popover
-             isAssetExpanded ? 'flex-1' : 'flex-shrink-0 h-auto'
-           )}>
-            <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} />
-         </div>
+        <div className={cn(
+          "flex flex-col overflow-hidden transition-all duration-300 ease-in-out border border-border rounded-lg shadow-md bg-card",
+          isAssetExpanded ? 'flex-1' : 'flex-shrink-0 h-auto'
+        )}>
+          <AssetSummary isExpanded={isAssetExpanded} onToggle={handleAssetToggle} />
+        </div>
       </aside>
 
-       {/* Chat Popover */}
+      {/* Chat Popover */}
       <Popover open={isChatOpen} onOpenChange={setIsChatOpen}>
         <PopoverTrigger asChild>
-           {/* Fixed Chat Icon Button */}
+          {/* Draggable Chat Icon Button */}
           <Button
-            variant="default" // Use primary gradient
+            ref={dragButtonRef}
+            variant="default"
             size="icon"
-            className="fixed bottom-6 right-6 rounded-full h-14 w-14 shadow-lg z-50" // Positioned bottom-right, rounded, larger size
+            className="absolute bottom-6 right-6 rounded-full h-14 w-14 shadow-lg z-50 cursor-grab active:cursor-grabbing" // Use absolute positioning, add grab cursors
+            style={{
+              transform: `translate(${position.x}px, ${position.y}px)`, // Apply dynamic position
+              touchAction: 'none', // Prevent default touch behavior like scrolling
+              bottom: 'auto', // Override default fixed positioning
+              right: 'auto', // Override default fixed positioning
+              left: 0, // Required for transform to work correctly with absolute
+              top: 0   // Required for transform to work correctly with absolute
+            }}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleMouseDown} // Handle touch events as well
             aria-label="Toggle Chat"
+            onClick={(e) => {
+                 // Prevent popover opening if dragging just finished
+                if (Math.abs(position.x - initialPosRef.current.x) > 5 || Math.abs(position.y - initialPosRef.current.y) > 5) {
+                    e.stopPropagation(); // Stop click event if moved significantly
+                }
+            }}
           >
-            <MessageCircle className="h-7 w-7" /> {/* Larger icon */}
+            <MessageCircle className="h-7 w-7" />
           </Button>
         </PopoverTrigger>
-         {/* Define width and height for the popover content */}
         <PopoverContent
-            side="top" // Open popover above the button
-            align="end" // Align to the right edge of the trigger
-            className="w-[400px] h-[550px] p-0 border-border shadow-xl bg-card flex flex-col overflow-hidden" // Set dimensions, remove padding, add styles
-            onOpenAutoFocus={(e) => e.preventDefault()} // Prevent autofocus stealing focus
+          side="top"
+          align="end"
+           // Adjust sideOffset to avoid overlap if button is near edge
+          sideOffset={10}
+          className="w-[400px] h-[550px] p-0 border-border shadow-xl bg-card flex flex-col overflow-hidden"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          // Optional: Prevent pointer events on content from closing popover during drag attempt
+          onPointerDownOutside={(e) => {
+             // If the target is the draggable button, prevent closing
+             if (dragButtonRef.current?.contains(e.target as Node)) {
+               e.preventDefault();
+             }
+          }}
         >
-           {/* ChatWindow now rendered inside PopoverContent */}
-           {/* Pass dummy handlers as ChatWindow expects them, though they won't be used for expand/collapse */}
-           <ChatWindow isExpanded={true} onToggle={() => {}} />
+          <ChatWindow />
         </PopoverContent>
       </Popover>
-
     </div>
   );
 }

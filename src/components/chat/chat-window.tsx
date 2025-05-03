@@ -22,6 +22,7 @@ import type { MessageHistory } from "@/lib/supabase-client"; // Import the type 
 // Add a temporary client-side ID for rendering keys before DB ID exists
 type Message = MessageHistory & { clientId?: string };
 
+// Removed isExpanded and onToggle from props
 interface ChatWindowProps {}
 
 export const ChatWindow: FC<ChatWindowProps> = () => {
@@ -166,17 +167,16 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
   };
 
   return (
+    // Removed className related to expansion state
     <div className="flex flex-col h-full w-full overflow-hidden bg-card">
       <CardHeader className="border-b border-border flex-shrink-0 p-3 flex flex-row items-center justify-between">
         <CardTitle className="text-lg font-medium text-foreground">YINSEN</CardTitle>
+        {/* Removed toggle button */}
       </CardHeader>
 
       <CardContent className="flex-1 p-0 overflow-hidden">
-         {/* Added horizontal scroll */}
         <ScrollArea className="h-full" viewportRef={viewportRef} orientation="both">
-           {/* Added min-w-max to allow horizontal scrolling */}
-          <div className="space-y-1 p-3 min-w-max"> {/* Reduced space-y, consistent padding */}
-            {/* Show loading skeletons for history */}
+          <div className="space-y-1 p-3 min-w-max">
             {isLoadingHistory && (
               <>
                 <Skeleton className="h-10 rounded-lg p-3 w-3/4 bg-muted ml-auto" />
@@ -184,24 +184,20 @@ export const ChatWindow: FC<ChatWindowProps> = () => {
                 <Skeleton className="h-10 rounded-lg p-3 w-2/3 bg-muted ml-auto" />
               </>
             )}
-             {/* Render actual messages once loaded */}
             {!isLoadingHistory && messages.map((msg) => (
-               // Use db id if available, fallback to client id
               <ChatMessage key={msg.id ?? msg.clientId} role={msg.role} content={msg.content} />
             ))}
-            {/* Loading indicator for AI response */}
             {isLoading && (
-              <div className="flex items-start gap-2 justify-start pt-1"> {/* Consistent spacing */}
-                 <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1 invisible"> {/* Placeholder for alignment */}
+              <div className="flex items-start gap-2 justify-start pt-1">
+                 <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1 invisible">
                   <AvatarFallback></AvatarFallback>
                 </Avatar>
-                <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" /> {/* Match bubble style */}
+                <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" />
               </div>
             )}
           </div>
         </ScrollArea>
       </CardContent>
-      {/* Input remains the same */}
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
     </div>
   );
