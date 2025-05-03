@@ -73,7 +73,7 @@ export default function Home() {
       {/* Right Chat Panel: Shrinkable width, full height */}
       <aside className={cn(
         "flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out h-full", // Ensure full height
-        isChatExpanded ? 'w-96' : 'w-16'
+        isChatExpanded ? 'w-[32rem]' : 'w-16' // Increased width for expanded chat
       )}>
          {/* Pass props to ChatWindow to handle its own toggle/state */}
         <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle} />
@@ -81,3 +81,4 @@ export default function Home() {
     </div>
   );
 }
+
