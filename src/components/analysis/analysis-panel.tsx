@@ -4,7 +4,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal, Settings, Settings2 } from 'lucide-react'; // Added Settings icons
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal, Settings, Settings2, Layers, Target } from 'lucide-react'; // Added Layers, Target icons
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -37,6 +37,7 @@ import { startTrainingJob } from '@/actions/train-lstm'; // Keep file name for n
 // Import all config types, including DLinear and Informer
 import type { LstmTrainingConfig, NBeatsTrainingConfig, LightGBMTrainingConfig, DLinearTrainingConfig, InformerTrainingConfig, DeepARTrainingConfig, TrainingResult } from '@/actions/train-lstm'; // Added DeepARTrainingConfig
 import { Progress } from "@/components/ui/progress"; // Import Progress
+import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
 
 
 interface AnalysisPanelProps {
@@ -1021,7 +1022,91 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                </AccordionContent>
            </AccordionItem>
 
-           {/* 3. Model Testing Section */}
+           {/* 3. Combine Models (Ensemble Prediction) Section - NEW */}
+            <AccordionItem value="combine-models" className="border-b border-border">
+                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-none text-foreground">
+                    <div className="flex items-center gap-2">
+                        <Layers className="h-4 w-4" />
+                        Combine Models (Ensemble)
+                    </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-2 pt-2 pb-4 space-y-4">
+                    <p className="text-xs text-muted-foreground">Combine predictions from trained models using a meta-learner.</p>
+
+                    {/* Base Model Selection */}
+                    <div className="space-y-2 border-t border-border pt-3">
+                        <Label className="text-xs block">Select Base Models</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {['LSTM', 'N-BEATS', 'LightGBM', 'DLinear', 'Informer', 'DeepAR'].map(model => {
+                                // Check if validation results exist for this model
+                                const isTrained = validationResults.some(r => r.model === model);
+                                return (
+                                    <div key={model} className="flex items-center space-x-2">
+                                        <Checkbox id={`check-${model}`} disabled={!isTrained || trainingStatus === 'training'} />
+                                        <Label htmlFor={`check-${model}`} className={cn("text-xs font-normal", !isTrained && "text-muted-foreground opacity-50")}>
+                                            {model} {isTrained ? '' : '(Not Trained)'}
+                                        </Label>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <p className="text-xs text-muted-foreground pt-1">Select models whose predictions will be combined.</p>
+                    </div>
+
+                     {/* Meta-Model Selection */}
+                     <div className="space-y-2 border-t border-border pt-3">
+                        <Label htmlFor="meta-model-select" className="text-xs">Select Meta-Model</Label>
+                        <Select disabled={trainingStatus === 'training'}>
+                            <SelectTrigger id="meta-model-select" className="h-8 text-xs">
+                                <SelectValue placeholder="e.g., XGBoost, Linear Regression..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="xgboost" className="text-xs">XGBoost (Placeholder)</SelectItem>
+                                <SelectItem value="linear" className="text-xs">Linear Regression (Placeholder)</SelectItem>
+                                <SelectItem value="voting" className="text-xs">Voting Classifier (Placeholder)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground pt-1">The model used to combine base model predictions.</p>
+                    </div>
+
+                    {/* Execute Ensemble Prediction */}
+                     <div className="space-y-2 border-t border-border pt-3">
+                        <Button size="sm" variant="outline" className="text-xs h-7" disabled={trainingStatus === 'training'}>
+                            <Target className="h-3 w-3 mr-1" />
+                            Generate Ensemble Prediction (Placeholder)
+                        </Button>
+                         {/* Placeholder for status/results */}
+                        <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
+                     </div>
+
+                     {/* Ensemble Prediction Results */}
+                     <div className="space-y-2 border-t border-border pt-3">
+                         <Label className="text-xs block">Ensemble Prediction Result</Label>
+                         <Table>
+                             <TableHeader>
+                                <TableRow>
+                                    <TableHead className="text-xs h-8">Timeframe</TableHead>
+                                    <TableHead className="text-right text-xs h-8">Predicted Value</TableHead>
+                                </TableRow>
+                             </TableHeader>
+                             <TableBody>
+                                <TableRow>
+                                    <TableCell className="text-xs py-1">Next 1 min</TableCell>
+                                    <TableCell className="text-right text-xs py-1">-</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell className="text-xs py-1">Next 5 min</TableCell>
+                                    <TableCell className="text-right text-xs py-1">-</TableCell>
+                                </TableRow>
+                             </TableBody>
+                         </Table>
+                     </div>
+
+                </AccordionContent>
+            </AccordionItem>
+
+
+           {/* 4. Model Testing Section */}
            <AccordionItem value="model-testing" className="border-b-0">
                <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:bg-accent/50 rounded-b text-foreground">
                    <div className="flex items-center gap-2">
