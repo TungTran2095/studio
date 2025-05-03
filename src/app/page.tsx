@@ -37,8 +37,8 @@ export default function Home() {
 
       {/* Center Content Area (Flex column) */}
       <div className="flex-1 flex flex-col gap-2 p-2 overflow-hidden">
-        {/* Top Chart Panel */}
-        <div className="flex-[3] flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border">
+        {/* Top Chart Panel - Changed flex-[3] to flex-1 */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border">
             <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0">BTC/USDT Price Chart</h1>
             <div className="flex-1 p-0 overflow-hidden">
                 <TradingViewWidget />
