@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal } from 'lucide-react'; // Added SplitSquareHorizontal
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input"; // For placeholder inputs
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // For model selection placeholder
+import { Slider } from "@/components/ui/slider"; // For train/test split placeholder
 
 
 interface AnalysisPanelProps {
@@ -60,6 +61,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const { toast } = useToast();
   const indicatorsIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
+  const [trainTestSplit, setTrainTestSplit] = useState([80]); // Placeholder state for slider
 
   // --- Indicator Fetching Logic ---
   const fetchIndicators = useCallback(async () => {
@@ -325,10 +327,30 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-2 pt-1 pb-3 space-y-3">
-                                    <p className="text-xs text-muted-foreground">Train time series forecasting models using collected data.</p>
-                                    {/* Placeholder for model selection */}
-                                    <div className="space-y-1">
-                                        <Label htmlFor="model-select" className="text-xs">Select Model(s)</Label>
+                                    <p className="text-xs text-muted-foreground">Configure and train time series forecasting models.</p>
+
+                                    {/* Train/Test Split */}
+                                    <div className="space-y-2 border-t border-border pt-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="train-test-split" className="text-xs flex items-center gap-1"><SplitSquareHorizontal className="h-3 w-3"/>Train/Test Split</Label>
+                                            <span className="text-xs text-muted-foreground">{trainTestSplit[0]}% / {100 - trainTestSplit[0]}%</span>
+                                        </div>
+                                        <Slider
+                                            id="train-test-split"
+                                            min={10}
+                                            max={90}
+                                            step={5}
+                                            value={trainTestSplit}
+                                            onValueChange={setTrainTestSplit}
+                                            className="w-[95%] mx-auto"
+                                            disabled
+                                        />
+                                        <p className="text-xs text-muted-foreground pt-1">Adjust the percentage of data used for training vs. testing. (Placeholder)</p>
+                                    </div>
+
+                                    {/* Model Selection & Training Parameters */}
+                                    <div className="space-y-2 border-t border-border pt-3">
+                                        <Label htmlFor="model-select" className="text-xs">Select Model(s) & Configure</Label>
                                         <Select disabled>
                                             <SelectTrigger id="model-select" className="h-8 text-xs">
                                                 <SelectValue placeholder="e.g., ARIMA, LSTM, Prophet..." />
@@ -340,17 +362,43 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                                 <SelectItem value="other">Other...</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                     </div>
-                                     {/* Placeholder for training parameters */}
-                                    <div className="space-y-1">
-                                        <Label htmlFor="epochs" className="text-xs">Training Parameters (Example)</Label>
-                                        <Input id="epochs" type="number" placeholder="Epochs" className="h-8 text-xs" disabled/>
+                                         {/* Placeholder for parameters */}
+                                        <div className="space-y-1">
+                                            <Input id="epochs" type="number" placeholder="Epochs" className="h-8 text-xs" disabled/>
+                                        </div>
+                                        <Button size="sm" variant="outline" className="text-xs h-7" disabled>
+                                            <Play className="h-3 w-3 mr-1" />
+                                            Start Training (Placeholder)
+                                        </Button>
+                                         <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
                                     </div>
-                                    <Button size="sm" variant="outline" className="text-xs h-7" disabled>
-                                        <Play className="h-3 w-3 mr-1" />
-                                        Start Training (Placeholder)
-                                    </Button>
-                                     <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
+
+                                     {/* Model Validation Results */}
+                                     <div className="space-y-2 border-t border-border pt-3">
+                                         <Label className="text-xs block">Validation Results (Placeholder)</Label>
+                                         <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs h-8">Model</TableHead>
+                                                    <TableHead className="text-xs h-8">Metric</TableHead>
+                                                    <TableHead className="text-right text-xs h-8">Value</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell className="text-xs py-1">N/A</TableCell>
+                                                    <TableCell className="text-xs py-1">RMSE</TableCell>
+                                                    <TableCell className="text-right text-xs py-1">-</TableCell>
+                                                </TableRow>
+                                                 <TableRow>
+                                                    <TableCell className="text-xs py-1">N/A</TableCell>
+                                                    <TableCell className="text-xs py-1">MAE</TableCell>
+                                                    <TableCell className="text-right text-xs py-1">-</TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                     </div>
+
                                 </AccordionContent>
                             </AccordionItem>
 
@@ -395,12 +443,12 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                         <TableBody>
                                             <TableRow>
                                                 <TableCell className="text-xs py-1">N/A</TableCell>
-                                                <TableCell className="text-xs py-1">Accuracy</TableCell>
+                                                <TableCell className="text-xs py-1">P/L %</TableCell>
                                                 <TableCell className="text-right text-xs py-1">-</TableCell>
                                             </TableRow>
                                              <TableRow>
                                                 <TableCell className="text-xs py-1">N/A</TableCell>
-                                                <TableCell className="text-xs py-1">RMSE</TableCell>
+                                                <TableCell className="text-xs py-1">Sharpe Ratio</TableCell>
                                                 <TableCell className="text-right text-xs py-1">-</TableCell>
                                             </TableRow>
                                         </TableBody>
