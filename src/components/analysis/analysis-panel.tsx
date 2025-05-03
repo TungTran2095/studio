@@ -1,20 +1,65 @@
 // src/components/analysis/analysis-panel.tsx
 "use client";
 
-import type { FC } from "react";
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit } from 'lucide-react'; // Import icons
+import type { FC } from 'react';
+import { useState, useEffect } from 'react'; // Import useState, useEffect
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw } from 'lucide-react'; // Import icons, add RefreshCw
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from '@/lib/utils';
 import { ScrollArea } from "@/components/ui/scroll-area"; // Import ScrollArea
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; // Import Table components
+import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
 
 interface AnalysisPanelProps {
   isExpanded: boolean;
   onToggle: () => void;
 }
 
+// Placeholder data for indicators
+const initialIndicators = {
+    "Moving Average (50)": "Loading...",
+    "Moving Average (200)": "Loading...",
+    "RSI (14)": "Loading...",
+    "MACD": "Loading...",
+    "Bollinger Bands": "Loading...",
+};
+
 export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) => {
+  // State for indicators and loading
+  const [indicators, setIndicators] = useState(initialIndicators);
+  const [isFetchingIndicators, setIsFetchingIndicators] = useState(false);
+
+  // Placeholder function to simulate fetching data
+  const fetchIndicators = () => {
+      setIsFetchingIndicators(true);
+      console.log("Simulating indicator fetch...");
+      // In a real app, fetch data from an API (e.g., Binance, TradingView API, etc.)
+      setTimeout(() => {
+           const now = new Date().toLocaleTimeString();
+           setIndicators({
+                "Moving Average (50)": (Math.random() * 10000 + 60000).toFixed(2), // Example values
+                "Moving Average (200)": (Math.random() * 5000 + 55000).toFixed(2),
+                "RSI (14)": (Math.random() * 40 + 30).toFixed(2), // Example RSI range
+                "MACD": `${(Math.random() * 100 - 50).toFixed(2)} / ${(Math.random() * 50 - 25).toFixed(2)}`, // Example MACD format
+                "Bollinger Bands": `Upper: ${(Math.random() * 2000 + 61000).toFixed(2)}, Lower: ${(Math.random() * 2000 + 58000).toFixed(2)}`,
+           });
+           setIsFetchingIndicators(false);
+           console.log("Simulated indicators updated at", now);
+      }, 1500); // Simulate network delay
+  };
+
+  // Fetch initially and maybe set an interval (optional)
+  useEffect(() => {
+    fetchIndicators(); // Fetch on component mount
+
+    // Optional: Fetch periodically (uncomment if needed, adjust interval)
+    // const intervalId = setInterval(fetchIndicators, 30000); // Fetch every 30 seconds
+    // return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, []);
+
+
   return (
     <Card className={cn(
       "flex flex-col h-full w-full overflow-hidden transition-all duration-300 ease-in-out border border-border shadow-md bg-card"
@@ -72,22 +117,51 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
                 <Separator />
 
-                {/* Placeholder Section 3: Indicators */}
+                {/* Section 3: Indicators */}
                 <div>
-                    <h4 className="text-md font-semibold mb-2 text-foreground flex items-center gap-2">
-                        <BarChart className="h-5 w-5 text-primary" />
-                        BTC/USDT Indicators
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                        View technical indicators for BTC/USDT. (Placeholder)
+                     <div className="flex justify-between items-center mb-2">
+                        <h4 className="text-md font-semibold text-foreground flex items-center gap-2">
+                            <BarChart className="h-5 w-5 text-primary" />
+                            BTC/USDT Indicators
+                        </h4>
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={fetchIndicators}
+                            disabled={isFetchingIndicators}
+                            className="h-6 w-6 text-foreground flex-shrink-0"
+                            title="Refresh Indicators"
+                        >
+                             <RefreshCw className={cn("h-4 w-4", isFetchingIndicators && "animate-spin")} />
+                             <span className="sr-only">Refresh Indicators</span>
+                        </Button>
+                     </div>
+                     <p className="text-sm text-muted-foreground mb-3">
+                        Real-time technical indicators for BTC/USDT. (Simulated data)
                     </p>
-                    <ul className="list-disc list-inside text-sm text-muted-foreground mt-2 space-y-1">
-                        <li>Moving Averages</li>
-                        <li>RSI</li>
-                        <li>MACD</li>
-                        <li>Bollinger Bands</li>
-                    </ul>
-                    {/* Add more UI elements here later */}
+                    {/* Table for Indicators */}
+                     <Table>
+                        <TableHeader>
+                            <TableRow className="border-border">
+                                <TableHead className="text-muted-foreground text-xs w-2/5">Indicator</TableHead>
+                                <TableHead className="text-right text-muted-foreground text-xs">Value</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {Object.entries(indicators).map(([key, value]) => (
+                                <TableRow key={key} className="border-border">
+                                    <TableCell className="font-medium text-foreground text-xs py-1.5">{key}</TableCell>
+                                    <TableCell className="text-right text-foreground text-xs py-1.5">
+                                        {isFetchingIndicators && value === "Loading..." ? (
+                                            <Skeleton className="h-4 w-20 ml-auto bg-muted" />
+                                        ) : (
+                                            value
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                     </Table>
                 </div>
              </div>
            </ScrollArea>
