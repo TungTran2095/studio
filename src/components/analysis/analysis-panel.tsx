@@ -339,11 +339,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
                                 <BarChart className="h-4 w-4 text-primary" />
                                 BTC/USDT Indicators
                             </h4>
-                            {/* Refresh button */}
+                            {/* Refresh button - Stop propagation to prevent Accordion toggle */}
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={(e) => { e.stopPropagation(); fetchIndicators(); }}
+                                onClick={(e) => {
+                                    e.stopPropagation(); // Prevent AccordionTrigger click
+                                    fetchIndicators();
+                                }}
                                 disabled={isFetchingIndicators}
                                 className="h-5 w-5 text-muted-foreground hover:text-foreground flex-shrink-0 mr-1"
                                 title="Refresh Indicators"
