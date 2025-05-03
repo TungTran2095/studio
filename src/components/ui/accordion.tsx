@@ -21,23 +21,27 @@ const AccordionItem = React.forwardRef<
 ))
 AccordionItem.displayName = "AccordionItem"
 
+// Use a div for the trigger to avoid nesting buttons
 const AccordionTrigger = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
-    {/* The Trigger itself is a button */}
+    {/* The Trigger itself is now a div, but acts like a button */}
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
-        // Use w-full, remove default padding, font-medium, hover:no-underline
-        "flex flex-1 items-center justify-between transition-all [&[data-state=open]>svg]:rotate-180 w-full",
+        "flex flex-1 items-center justify-between py-4 font-medium transition-all hover:underline [&[data-state=open]>svg]:rotate-180 cursor-pointer", // Use cursor-pointer
         className
       )}
       {...props}
+      // Use asChild prop if children is a single custom component, otherwise render div
+      // asChild={React.Children.count(children) === 1 && typeof children !== 'string'}
     >
-      {children}
-      {/* Chevron icon is part of the trigger button's content */}
+      {/* Ensure children are rendered within the trigger area */}
+       {/* Wrap children in a div to ensure proper layout */}
+       <div className="flex-1 text-left"> {children}</div>
+      {/* Chevron icon is part of the trigger's content */}
       <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
     </AccordionPrimitive.Trigger>
   </AccordionPrimitive.Header>
@@ -54,7 +58,7 @@ const AccordionContent = React.forwardRef<
     {...props}
   >
     {/* Adjusted padding for content */}
-    <div className={cn("pb-2 pt-0", className)}>{children}</div>
+    <div className={cn("pb-4 pt-0", className)}>{children}</div> {/* Use standard padding */}
   </AccordionPrimitive.Content>
 ))
 

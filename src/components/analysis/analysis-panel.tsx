@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide } from 'lucide-react'; // Renamed Calendar import
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -13,14 +13,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchTechnicalIndicators } from '@/actions/fetch-indicators';
 import type { IndicatorsData } from '@/actions/fetch-indicators';
-import { collectBinanceOhlcvData } from '@/actions/collect-data'; // Import the new collect action
+import { collectBinanceOhlcvData } from '@/actions/collect-data';
 import { useToast } from '@/hooks/use-toast';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover
-import { Calendar } from "@/components/ui/calendar"; // Import Calendar component
-import { format } from 'date-fns'; // Import date-fns for formatting and date manipulation
-import type { DateRange } from "react-day-picker"; // Import DateRange type
-import { Label } from "@/components/ui/label"; // Import Label
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs components
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from 'date-fns';
+import type { DateRange } from "react-day-picker";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Import Accordion components
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Input } from "@/components/ui/input"; // For placeholder inputs
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // For model selection placeholder
 
 
 interface AnalysisPanelProps {
@@ -29,7 +38,7 @@ interface AnalysisPanelProps {
 }
 
 // Type for collection status
-type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error'; // Removed 'collecting-latest'
+type CollectionStatus = 'idle' | 'collecting-historical' | 'success' | 'error';
 
 // Initial state for indicators
 const initialIndicators: IndicatorsData = {
@@ -82,7 +91,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
       setIsFetchingIndicators(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFetchingIndicators, toast]); // Removed fetchIndicators
+  }, [isFetchingIndicators, toast]);
 
   // Effect for indicators interval - Only run if indicators tab is active or initially
   useEffect(() => {
@@ -172,7 +181,8 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
        setCollectionStatus('idle');
        // Keep the message briefly
        setTimeout(() => {
-           if (collectionStatus !== 'collecting-historical') {
+           // Check status *again* before clearing message, in case another operation started
+           if (collectionStatus === 'idle') {
                setCollectionMessage('');
            }
         }, 5000);
@@ -200,11 +210,10 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
 
      {/* Content Area */}
       <CardContent className={cn(
-        "flex-1 p-0 overflow-hidden flex flex-col transition-opacity duration-300 ease-in-out", // Removed padding p-3, added flex-col
+        "flex-1 p-0 overflow-hidden flex flex-col transition-opacity duration-300 ease-in-out",
         !isExpanded && "opacity-0 p-0"
       )}>
         {isExpanded && (
-           // Use Tabs component
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
             <TabsList className="grid w-full grid-cols-3 h-9 flex-shrink-0 rounded-none border-b border-border bg-transparent p-0">
               <TabsTrigger value="ensemble" className="text-xs h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">
@@ -218,131 +227,227 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
               </TabsTrigger>
             </TabsList>
 
-            {/* Wrap TabsContent in a ScrollArea */}
             <ScrollArea className="flex-1 overflow-y-auto">
-               <div className="p-3 space-y-4"> {/* Add padding back inside ScrollArea */}
-                    <TabsContent value="ensemble" className="mt-0 space-y-3">
-                         {/* Data Collection Section */}
-                        <div className="space-y-2">
-                             <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
-                            {/* Historical Data Collection */}
-                             <div className="flex flex-wrap items-center gap-2">
-                                <Popover>
-                                    <PopoverTrigger asChild>
+               <div className="p-3 space-y-1"> {/* Reduced space-y */}
+                    {/* Ensemble Tab Content */}
+                    <TabsContent value="ensemble" className="mt-0">
+                         <Accordion type="multiple" className="w-full" defaultValue={['collect-data']}>
+                            {/* 1. Collect Data Section */}
+                            <AccordionItem value="collect-data" className="border-b-0">
+                                <AccordionTrigger className="text-sm font-medium py-2 px-2 hover:bg-accent/50 rounded">
+                                    <div className="flex items-center gap-2">
+                                        <DatabaseZap className="h-4 w-4" />
+                                        Collect OHLCV Data
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-2 pt-1 pb-3 space-y-3">
+                                     <Label className="text-xs text-muted-foreground">Collect BTC/USDT 1m OHLCV</Label>
+                                    {/* Historical Data Collection */}
+                                     <div className="flex flex-wrap items-center gap-2">
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                id="date"
+                                                variant={"outline"}
+                                                size="sm"
+                                                className={cn(
+                                                    "w-[260px] justify-start text-left font-normal h-7 text-xs",
+                                                    !dateRange && "text-muted-foreground"
+                                                )}
+                                                 disabled={collectionStatus === 'collecting-historical'}
+                                                >
+                                                <CalendarIconLucide className="mr-2 h-3 w-3" />
+                                                {dateRange?.from ? (
+                                                    dateRange.to ? (
+                                                    <>
+                                                        {format(dateRange.from, "LLL dd, y")} -{" "}
+                                                        {format(dateRange.to, "LLL dd, y")}
+                                                    </>
+                                                    ) : (
+                                                    format(dateRange.from, "LLL dd, y")
+                                                    )
+                                                ) : (
+                                                    <span>Pick a date range</span>
+                                                )}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    initialFocus
+                                                    mode="range"
+                                                    defaultMonth={dateRange?.from}
+                                                    selected={dateRange}
+                                                    onSelect={setDateRange}
+                                                    numberOfMonths={2}
+                                                    disabled={(date) => date > new Date()}
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
                                         <Button
-                                        id="date"
-                                        variant={"outline"}
-                                        size="sm"
-                                        className={cn(
-                                            "w-[260px] justify-start text-left font-normal h-7 text-xs",
-                                            !dateRange && "text-muted-foreground"
-                                        )}
-                                         disabled={collectionStatus === 'collecting-historical'}
+                                            size="sm"
+                                            variant="outline"
+                                            className="text-xs h-7"
+                                            onClick={handleCollectData}
+                                            disabled={collectionStatus === 'collecting-historical' || !dateRange?.from || !dateRange?.to}
                                         >
-                                        <CalendarIconLucide className="mr-2 h-3 w-3" />
-                                        {dateRange?.from ? (
-                                            dateRange.to ? (
-                                            <>
-                                                {format(dateRange.from, "LLL dd, y")} -{" "}
-                                                {format(dateRange.to, "LLL dd, y")}
-                                            </>
+                                            {(collectionStatus === 'collecting-historical') ? (
+                                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                                             ) : (
-                                            format(dateRange.from, "LLL dd, y")
-                                            )
-                                        ) : (
-                                            <span>Pick a date range</span>
-                                        )}
+                                                <DatabaseZap className="h-3 w-3 mr-1" />
+                                            )}
+                                            Collect Range
                                         </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                            initialFocus
-                                            mode="range"
-                                            defaultMonth={dateRange?.from}
-                                            selected={dateRange}
-                                            onSelect={setDateRange}
-                                            numberOfMonths={2}
-                                            disabled={(date) => date > new Date()}
-                                        />
-                                    </PopoverContent>
-                                </Popover>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs h-7"
-                                    onClick={handleCollectData}
-                                    disabled={collectionStatus === 'collecting-historical' || !dateRange?.from || !dateRange?.to}
-                                >
-                                    {(collectionStatus === 'collecting-historical') ? (
-                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                    ) : (
-                                        <DatabaseZap className="h-3 w-3 mr-1" />
+                                     </div>
+                                    {/* Status Indicator */}
+                                    {(collectionStatus !== 'idle' || collectionMessage) && (
+                                         <div className="pt-1">
+                                            <span className={cn(
+                                                "text-xs px-1.5 py-0.5 rounded",
+                                                collectionStatus === 'collecting-historical' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
+                                                collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
+                                                collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
+                                                collectionStatus === 'idle' && collectionMessage && "text-muted-foreground bg-muted/50"
+                                            )}>
+                                                {collectionMessage || collectionStatus.replace('-', ' ')}
+                                            </span>
+                                         </div>
                                     )}
-                                    Collect Range
-                                </Button>
-                             </div>
-                            {/* Status Indicator */}
-                            {(collectionStatus !== 'idle' || collectionMessage) && (
-                                 <div className="pt-1">
-                                    <span className={cn(
-                                        "text-xs px-1.5 py-0.5 rounded",
-                                        collectionStatus === 'collecting-historical' && "text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50 animate-pulse",
-                                        collectionStatus === 'success' && "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50",
-                                        collectionStatus === 'error' && "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50",
-                                        collectionStatus === 'idle' && collectionMessage && "text-muted-foreground bg-muted/50"
-                                    )}>
-                                        {collectionMessage || collectionStatus.replace('-', ' ')}
-                                    </span>
-                                 </div>
-                            )}
-                             <p className="text-xs text-muted-foreground pt-1">Note: Historical collection automatically fetches data in chunks. Ensure RLS policies allow upserts.</p>
-                        </div>
+                                     <p className="text-xs text-muted-foreground pt-1">Collects 1-minute data for the specified range and saves to Supabase.</p>
+                                </AccordionContent>
+                            </AccordionItem>
 
-                         <Separator className="my-2" />
-                         {/* Placeholder for model config */}
-                        <p className="text-xs text-muted-foreground">
-                            Configure and run ensemble learning models. (Placeholder)
-                        </p>
-                        <Button size="sm" variant="outline" className="text-xs h-6" disabled>Configure Model</Button>
+                            {/* 2. Model Training Section */}
+                             <AccordionItem value="model-training" className="border-b-0">
+                                <AccordionTrigger className="text-sm font-medium py-2 px-2 hover:bg-accent/50 rounded">
+                                    <div className="flex items-center gap-2">
+                                        <Brain className="h-4 w-4" />
+                                        Model Training
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-2 pt-1 pb-3 space-y-3">
+                                    <p className="text-xs text-muted-foreground">Train time series forecasting models using collected data.</p>
+                                    {/* Placeholder for model selection */}
+                                    <div className="space-y-1">
+                                        <Label htmlFor="model-select" className="text-xs">Select Model(s)</Label>
+                                        <Select disabled>
+                                            <SelectTrigger id="model-select" className="h-8 text-xs">
+                                                <SelectValue placeholder="e.g., ARIMA, LSTM, Prophet..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="arima">ARIMA</SelectItem>
+                                                <SelectItem value="lstm">LSTM</SelectItem>
+                                                <SelectItem value="prophet">Prophet</SelectItem>
+                                                <SelectItem value="other">Other...</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                     </div>
+                                     {/* Placeholder for training parameters */}
+                                    <div className="space-y-1">
+                                        <Label htmlFor="epochs" className="text-xs">Training Parameters (Example)</Label>
+                                        <Input id="epochs" type="number" placeholder="Epochs" className="h-8 text-xs" disabled/>
+                                    </div>
+                                    <Button size="sm" variant="outline" className="text-xs h-7" disabled>
+                                        <Play className="h-3 w-3 mr-1" />
+                                        Start Training (Placeholder)
+                                    </Button>
+                                     <p className="text-xs text-muted-foreground pt-1">Status: Idle</p>
+                                </AccordionContent>
+                            </AccordionItem>
+
+                            {/* 3. Model Testing Section */}
+                            <AccordionItem value="model-testing" className="border-b-0">
+                                <AccordionTrigger className="text-sm font-medium py-2 px-2 hover:bg-accent/50 rounded">
+                                    <div className="flex items-center gap-2">
+                                        <History className="h-4 w-4" />
+                                        Model Testing
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-2 pt-1 pb-3 space-y-3">
+                                    <p className="text-xs text-muted-foreground">Perform backtesting and front testing on trained models.</p>
+                                     {/* Placeholder for test config */}
+                                    <div className="space-y-1">
+                                         <Label className="text-xs">Testing Configuration</Label>
+                                         <Select disabled>
+                                            <SelectTrigger className="h-8 text-xs">
+                                                <SelectValue placeholder="Select Trained Model..." />
+                                            </SelectTrigger>
+                                            {/* Options would be populated with trained models */}
+                                        </Select>
+                                         <div className="flex gap-2 pt-1">
+                                             <Input type="text" placeholder="Backtest Period" className="h-8 text-xs" disabled />
+                                             <Input type="text" placeholder="Front Test Period" className="h-8 text-xs" disabled />
+                                        </div>
+                                    </div>
+                                    <Button size="sm" variant="outline" className="text-xs h-7" disabled>
+                                        <Play className="h-3 w-3 mr-1" />
+                                        Run Tests (Placeholder)
+                                    </Button>
+                                    {/* Placeholder for results table */}
+                                     <Label className="text-xs text-muted-foreground pt-2 block">Test Results</Label>
+                                     <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="text-xs h-8">Model</TableHead>
+                                                <TableHead className="text-xs h-8">Metric</TableHead>
+                                                <TableHead className="text-right text-xs h-8">Value</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            <TableRow>
+                                                <TableCell className="text-xs py-1">N/A</TableCell>
+                                                <TableCell className="text-xs py-1">Accuracy</TableCell>
+                                                <TableCell className="text-right text-xs py-1">-</TableCell>
+                                            </TableRow>
+                                             <TableRow>
+                                                <TableCell className="text-xs py-1">N/A</TableCell>
+                                                <TableCell className="text-xs py-1">RMSE</TableCell>
+                                                <TableCell className="text-right text-xs py-1">-</TableCell>
+                                            </TableRow>
+                                        </TableBody>
+                                    </Table>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </TabsContent>
 
+                    {/* RL Tab Content */}
                     <TabsContent value="rl" className="mt-0 space-y-2">
+                        {/* Add Accordion structure here if needed, similar to Ensemble */}
                         <p className="text-xs text-muted-foreground mb-2">
                             Train and deploy RL agents for trading strategies. (Placeholder)
                         </p>
                         <Button size="sm" variant="outline" className="text-xs h-6" disabled>Train Agent</Button>
                     </TabsContent>
 
+                     {/* Indicators Tab Content */}
                     <TabsContent value="indicators" className="mt-0 space-y-2">
                          <div className="flex justify-between items-center mb-2">
                             <p className="text-xs text-muted-foreground">
                                 Technical indicators for BTC/USDT (1h interval).
                             </p>
-                             <span className="text-xs text-muted-foreground flex items-center gap-1">
+                             <div className="text-xs text-muted-foreground flex items-center gap-1">
                                 Last updated:{" "}
                                 {indicators.lastUpdated === "N/A" || (isFetchingIndicators && indicators["Moving Average (50)"] === "Loading...") ? (
                                      <Skeleton className="h-3 w-14 inline-block bg-muted" />
                                 ) : (
                                     indicators.lastUpdated
                                 )}
-                                {/* Show loading spinner only when actively fetching */}
                                 {isFetchingIndicators && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                                {/* Manual Refresh Button */}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        fetchIndicators();
-                                    }}
-                                    disabled={isFetchingIndicators}
-                                    className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                                    title="Refresh Indicators"
-                                >
-                                    <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
-                                    <span className="sr-only">Refresh Indicators</span>
-                                </Button>
-                            </span>
+                                {/* Manual Refresh Button - Wrapped in a span to prevent nesting issues */}
+                                <span onClick={(e) => e.stopPropagation()}>
+                                     <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={fetchIndicators}
+                                        disabled={isFetchingIndicators}
+                                        className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                                        title="Refresh Indicators"
+                                    >
+                                        <RefreshCw className={cn("h-3 w-3", isFetchingIndicators && "animate-spin")} />
+                                        <span className="sr-only">Refresh Indicators</span>
+                                    </Button>
+                                </span>
+                            </div>
                          </div>
                         <Table>
                             <TableHeader>
