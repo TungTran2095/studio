@@ -54,17 +54,13 @@ To run this project, you will need to add the following environment variables to
             *   Click **New Policy** > Choose the **Enable read access for all users** template.
             *   Review and **Save policy**.
         *   **Policy 2: Enable Insert Access (Public - For Development):**
-            *   Click **New Policy** > **Get started quickly** > Choose the **Enable insert access for all users** template (if available).
-            *   *If template unavailable*, use the **SQL Editor** (Left Sidebar > SQL Editor > New query):
-                ```sql
-                -- Policy name: Allow public insert access for messages (DEV)
-                CREATE POLICY "Allow public insert access for messages (DEV)"
-                ON "public"."message_history"
-                AS PERMISSIVE FOR INSERT
-                TO public -- Allows anonymous users (via anon key)
-                WITH CHECK (true);
-                ```
-            *   Run the SQL and **Save policy**. (For production with authentication, change `TO public` to `TO authenticated` and add appropriate checks).
+            *   Click **New Policy** > Choose the **Get started quickly** section > Click **Create a new SQL policy**.
+            *   For **Policy name**, enter: `Allow public insert access`
+            *   For **Target roles**, select `public`.
+            *   For **USING expression**, enter `true`.
+            *   For **WITH CHECK expression**, enter `true`.
+            *   Make sure **Command** is `INSERT`.
+            *   Click **Review**, then **Save policy**.
 
     *   **For `OHLCV_BTC_USDT_1m` table:**
         *   **Policy 1: Enable Read Access (Public):**
@@ -72,20 +68,17 @@ To run this project, you will need to add the following environment variables to
             *   Choose the **Enable read access for all users** template.
             *   Review and **Save policy**.
         *   **Policy 2: Enable Insert/Update Access (Public - for Data Collection):**
-            *   Since the `collect-data.ts` action uses `upsert`, we need both INSERT and UPDATE permissions. Use the **SQL Editor**:
-                ```sql
-                -- Policy name: Allow public upsert access for OHLCV data
-                CREATE POLICY "Allow public upsert access for OHLCV data"
-                ON "public"."OHLCV_BTC_USDT_1m"
-                AS PERMISSIVE FOR ALL -- Grants INSERT, SELECT, UPDATE, DELETE (adjust if needed)
-                TO public -- Allows anon key access
-                USING (true) -- Condition for SELECT, UPDATE, DELETE
-                WITH CHECK (true); -- Condition for INSERT, UPDATE
-                ```
-            *   Run the SQL and **Save policy**. This broad policy allows the data collection script (using the anon key) to insert or update records.
+            *   Since the `collect-data.ts` action uses `upsert`, we need both INSERT and UPDATE permissions. Click **New Policy** for `OHLCV_BTC_USDT_1m`.
+            *   Select **Create a new SQL policy**.
+            *   For **Policy name**, enter: `Allow public upsert access`
+            *   For **Target roles**, select `public`.
+            *   For **Command**, select `ALL`.
+            *   For **USING expression**, enter `true`.
+            *   For **WITH CHECK expression**, enter `true`.
+            *   Click **Review**, then **Save policy**.
 
     **Troubleshooting RLS:** If you encounter "Permission denied. Check RLS policies." errors:
-        *   Verify in **Authentication > Policies** that *all necessary policies* (read, insert/update) exist and are enabled for *both* `message_history` and `OHLCV_BTC_USDT_1m`.
+        *   Verify in **Authentication > Policies** that *all necessary policies* (read, insert/upsert) exist and are enabled for *both* `message_history` and `OHLCV_BTC_USDT_1m`.
         *   Ensure the **target role** for insert/upsert policies is `public` (if not using Supabase Auth).
         *   Ensure `USING (true)` and `WITH CHECK (true)` are set for basic public access.
         *   Refresh your application after changing policies.
@@ -112,33 +105,53 @@ To use the Binance asset summary and trading features:
 ## Getting Started
 
 1.  **Install Node.js Dependencies:**
+    Open a terminal in the project directory (e.g., the integrated terminal in Firebase Studio).
     ```bash
     npm install
     ```
 2.  **Set up Environment Variables:** Create a `.env` file and add your Supabase URL/Key and optionally your Google AI Key as described above.
 
-3.  **Set up Python Environment (for LSTM Training):**
-    *   Ensure you have Python 3 installed (version 3.8 or higher recommended).
-    *   It's highly recommended to use a virtual environment:
+3.  **Set up Python Environment (for LSTM, N-BEATS, etc. Training):**
+    *   **Check Python Version**: In the terminal, verify Python 3 is installed (version 3.8 or higher recommended):
+        ```bash
+        python3 --version
+        ```
+        (If `python3` doesn't work, try `python --version`). Cloud shells usually have Python pre-installed.
+    *   **Create Virtual Environment**: It's highly recommended to use a virtual environment to isolate dependencies:
         ```bash
         python3 -m venv venv
-        # Activate the virtual environment
-        # On macOS/Linux:
-        source venv/bin/activate
-        # On Windows (Command Prompt/PowerShell):
-        .\venv\Scripts\activate
         ```
-    *   Install Python dependencies:
+    *   **Activate Virtual Environment**: Activate the environment you just created. The command depends on your shell:
+        ```bash
+        # For bash/zsh (common in cloud shells and Linux/macOS)
+        source venv/bin/activate
+
+        # If using fish shell:
+        # source venv/bin/activate.fish
+
+        # If using Windows Command Prompt:
+        # .\venv\Scripts\activate.bat
+
+        # If using Windows PowerShell:
+        # .\venv\Scripts\Activate.ps1
+        ```
+        Your terminal prompt should now show `(venv)` at the beginning.
+    *   **Install Python Dependencies**: Install the required Python packages using pip (or pip3):
         ```bash
         pip install -r requirements.txt
         ```
-        *Note: Installing TensorFlow might take some time and could require specific system dependencies (like CUDA for GPU support). Refer to the [official TensorFlow installation guide](https://www.tensorflow.org/install) if you encounter issues.*
+        *Note: Installing TensorFlow might take some time and could require specific system dependencies. Cloud shells often handle this, but refer to the [official TensorFlow installation guide](https://www.tensorflow.org/install) if you encounter issues.*
+    *   **(Deactivate when done - Optional)**: When you're finished working with Python scripts, you can deactivate the environment:
+        ```bash
+        deactivate
+        ```
 
 4.  **Run Development Server:**
+    Make sure you're in the project's root directory in the terminal.
     ```bash
     npm run dev
     ```
-    The application will be available at `http://localhost:9002`.
+    The application will be available at `http://localhost:9002`. You might need to use port forwarding or access the preview URL provided by the cloud shell environment.
 
 ## Features
 
@@ -149,9 +162,9 @@ To use the Binance asset summary and trading features:
 *   **Analysis Panel**:
     *   **Ensemble Tab**:
         *   Collect historical 1-minute OHLCV data for BTC/USDT into Supabase.
-        *   Trigger LSTM model training using the collected data (requires Python environment setup).
+        *   Trigger training for various models (LSTM, N-BEATS, LightGBM, DLinear, Informer, DeepAR) using the collected data (requires Python environment setup).
         *   View validation results (RMSE, MAE) after training.
-        *   Placeholder for model testing.
+        *   Placeholder for combining models and testing.
     *   **RL Tab**: Placeholder for Reinforcement Learning agent configuration and training.
     *   **Indicators Tab**: Displays real-time BTC/USDT technical indicators (refreshes periodically).
 ```
