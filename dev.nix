@@ -1,18 +1,39 @@
-{ pkgs ? import <nixpkgs> {} }:
+{
+  pkgs ? import <nixpkgs> {}
+}:
+
 let
-  inherit (pkgs) stdenv;
-  pythonWithPackages = pkgs.python311Full.withPackages (ps: with ps; [
+  pythonEnv = pkgs.python311.withPackages (ps: with ps; [
     pip
-    numpy
+    tensorflow  # Cài TensorFlow từ pip thay vì qua Nix
     pandas
-    tensorflow
+    scikit-learn
+    numpy
+    python-dotenv
+    lightgbm
+    # Supabase và Darts cài bằng pip
   ]);
 in
-stdenv.mkDerivation {
-  name = "studio-env";
-  buildInputs = with pkgs; [
-    nodejs
-    git
-    pythonWithPackages
+
+pkgs.mkShell {
+  buildInputs = [
+    pythonEnv
+    pkgs.git
   ];
+
+  shellHook = ''
+    echo "✅ Đang vào môi trường phát triển Python 3.11 (Nix + pip)"
+    
+    if [ ! -d .venv ]; then
+      echo "📦 Chưa có virtualenv, đang tạo..."
+      python -m venv .venv
+    fi
+
+    source .venv/bin/activate
+    echo "📂 Đã kích hoạt môi trường ảo .venv"
+
+    # Cài các gói pip chưa có trong nixpkgs
+    pip install --upgrade pip
+    pip install supabase darts
+  '';
 }
