@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack -p 9002",
+    "dev": "next dev -p 9002",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
@@ -44,7 +44,7 @@
     "firebase": "^11.3.0",
     "genkit": "^1.0.4",
     "lucide-react": "^0.475.0",
-    "next": "15.2.3",
+    "next": "^15.3.2",
     "node-binance-api": "^0.13.2",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",

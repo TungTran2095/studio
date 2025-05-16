@@ -1,6 +1,5 @@
-import type {NextConfig} from 'next';
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
@@ -20,9 +19,9 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-        allowedOrigins: ["localhost:9002", "studio.web.app", "studio.firebase.google.com"] // Add allowed origins if needed, especially for production
+      allowedOrigins: ["localhost:9002", "studio.web.app", "studio.firebase.google.com"]
     },
   },
 };
 
-export default nextConfig;
+export default nextConfig; 
