@@ -1,0 +1,18 @@
+
+tensorflow>=2.12.0 # Or a specific version compatible with your setup
+pandas>=1.5.0
+scikit-learn>=1.2.0
+numpy>=1.23.0
+supabase>=1.0.0 # Adjust based on the actual supabase-py version
+python-dotenv>=0.20.0
+lightgbm>=3.3.0 # Added for LightGBM model
+darts>=0.26.0 # Added for N-BEATS and DLinear placeholders
+
+# Potential dependencies for Informer (install if using PyTorch)
+# torch>=1.8.0
+# torchvision
+# torchaudio
+# PyTorch Forecasting (if using that library): pytorch-forecasting>=0.10.0
+
+# If using a specific Informer implementation library, add it here
+# Example: informer-pytorch (if such a package exists)
