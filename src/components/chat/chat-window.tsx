@@ -19,6 +19,7 @@ import type { MessageHistory } from "@/lib/supabase-client";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Bot as BotIcon, MessageSquare, ArrowDown } from "lucide-react";
 import { Bot } from "lucide-react";
+import { executeChatTrade } from "@/actions/chat-trade";
 
 // Use MessageHistory type for consistency
 // Add a temporary client-side ID for rendering keys before DB ID exists
@@ -176,6 +177,10 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
+      // Truyền API credentials cho trading nếu có
+      apiKey: apiKey,
+      apiSecret: apiSecret,
+      isTestnet: isTestnet,
     };
 
     try {
@@ -185,6 +190,26 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       });
       const result = await generateResponse(input);
       console.log("[ChatWindow] Received response from generateResponse:", result);
+
+      // Kiểm tra nếu AI phát hiện ý định giao dịch
+      if (result.tradingIntent && result.tradingIntent.detected && isConnected && apiKey && apiSecret) {
+        console.log("[ChatWindow] Phát hiện ý định giao dịch, thực hiện giao dịch...");
+        const tradeResult = await executeChatTrade(
+          result, 
+          apiKey as string, 
+          apiSecret as string, 
+          isTestnet
+        );
+        
+        // Thêm kết quả giao dịch vào phản hồi
+        if (tradeResult.success) {
+          result.response += `\n\n✅ Đã thực hiện giao dịch thành công! ${tradeResult.message}`;
+        } else {
+          result.response += `\n\n❌ Không thể thực hiện giao dịch: ${tradeResult.message}`;
+        }
+      } else if (result.tradingIntent && result.tradingIntent.detected && (!isConnected || !apiKey || !apiSecret)) {
+        result.response += `\n\n❌ Không thể thực hiện giao dịch vì bạn chưa kết nối tài khoản Binance. Vui lòng kết nối trong phần "Binance Account".`;
+      }
 
       const botMessageClientId = `bot-${Date.now()}`;
       // Luôn gán role là 'bot' cho message AI
