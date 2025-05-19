@@ -3,7 +3,7 @@
 
 import type { FC, MouseEvent, TouchEvent } from "react"; // Added touch event
 import { useState, useRef, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Import Card for structure
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
@@ -11,13 +11,14 @@ import { generateResponse } from "@/ai/flows/generate-response";
 import type { GenerateResponseInput } from "@/ai/flows/generate-response";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"; // Import Avatar components
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from '@/lib/utils';
-import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
-import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history'; // Import Supabase actions
-import type { MessageHistory } from "@/lib/supabase-client"; // Import the type for messages from DB
-import { Button } from "@/components/ui/button"; // Import Button
-import { ChevronLeft, ChevronRight, Bot as BotIcon, MessageSquare } from "lucide-react"; // Use BotIcon for collapsed state, added MessageSquare
+import { useAssetStore } from '@/store/asset-store';
+import { fetchChatHistory, saveChatMessage } from '@/actions/chat-history';
+import type { MessageHistory } from "@/lib/supabase-client";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight, Bot as BotIcon, MessageSquare, ArrowDown } from "lucide-react";
+import { Bot } from "lucide-react";
 
 // Use MessageHistory type for consistency
 // Add a temporary client-side ID for rendering keys before DB ID exists
@@ -33,7 +34,9 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true); // State for loading history
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const { toast } = useToast();
+  
   // Use credentials from the Zustand store
   const { apiKey, apiSecret, isTestnet, isConnected } = useAssetStore(state => ({
     apiKey: state.apiKey,
@@ -43,6 +46,16 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   }));
 
   const viewportRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Kiểm tra vị trí cuộn để hiển thị nút cuộn xuống
+  const checkScrollPosition = () => {
+    if (!viewportRef.current) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = viewportRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setShowScrollButton(!isNearBottom);
+  };
 
   // Fetch initial chat history on component mount
   useEffect(() => {
@@ -70,13 +83,55 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   // Scroll to bottom effect
   useEffect(() => {
     if (viewportRef.current && isExpanded) { // Only scroll if expanded
-      requestAnimationFrame(() => {
+      // Sử dụng smooth scroll
+      const scrollToBottom = () => {
         if (viewportRef.current) {
-          viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+          viewportRef.current.scrollTo({
+            top: viewportRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
         }
-      });
+      };
+
+      // Nếu đang tải hoặc vừa thêm tin nhắn mới, cuộn xuống
+      if (isLoading || messages.length > 0) {
+        scrollToBottom();
+        // Sau khi cuộn, ẩn nút scroll down
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+        scrollTimeoutRef.current = setTimeout(() => {
+          setShowScrollButton(false);
+        }, 500);
+      }
     }
-  }, [messages, isLoading, isLoadingHistory, isExpanded]); // Include isExpanded
+  }, [messages, isLoading, isLoadingHistory, isExpanded]);
+
+  // Theo dõi sự kiện cuộn
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleScroll = () => {
+      checkScrollPosition();
+    };
+
+    viewport.addEventListener('scroll', handleScroll);
+    return () => {
+      viewport.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // Hàm cuộn xuống dưới cùng khi nhấn nút
+  const scrollToBottom = () => {
+    if (viewportRef.current) {
+      viewportRef.current.scrollTo({
+        top: viewportRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+      setShowScrollButton(false);
+    }
+  };
 
   const handleSendMessage = async (messageContent: string) => {
     const userMessageClientId = `user-${Date.now()}`; // Simple client ID
@@ -92,59 +147,49 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       .then(result => {
         if (result.success) {
           console.log("[ChatWindow] User message saved successfully:", newUserMessage.clientId);
-          // Optionally update the message in state with DB ID if needed, but usually not necessary
         } else {
           console.error("[ChatWindow] Failed to save user message:", newUserMessage.clientId, result.error);
           toast({ title: "Error Saving Message", description: `Could not save your message: ${result.error}. Check console & Supabase RLS policies.`, variant: "destructive" });
-          // Optionally remove the message from UI if saving fails critically
-          // setMessages(prev => prev.filter(m => m.clientId !== newUserMessage.clientId));
         }
       })
       .catch(err => {
         console.error("[ChatWindow] Unexpected error calling saveChatMessage for user:", err);
         toast({ title: "Error", description: "An unexpected error occurred while saving your message.", variant: "destructive" });
       });
-    // --- End save user message ---
-
 
     // Prepare for AI
-    const credentialsAvailable = isConnected && apiKey && apiSecret; // Check connection status too
+    const credentialsAvailable = isConnected && apiKey && apiSecret;
     if (!credentialsAvailable) {
       console.warn("[ChatWindow] Binance not connected or API credentials NOT available in store. Trading intent might fail.");
-      // Removed the automatic check and toast for trade keywords as requested
-      // const tradeKeywords = ['buy', 'sell', 'order', 'trade', 'binance'];
-      // if (tradeKeywords.some(keyword => messageContent.toLowerCase().includes(keyword))) { ... }
     } else {
       console.log("[ChatWindow] Binance connected and API credentials found in store. Passing to generateResponse flow.");
     }
 
     // Get history for AI (use current UI state for context, exclude clientIds)
-     // Limit history sent to AI to avoid overly large context
-     const recentMessagesLimit = 10; // Example limit
-     const chatHistoryForAI = messages.slice(-recentMessagesLimit).map(({ role, content }) => ({
-       role,
-       content,
-     }));
-
+    const recentMessagesLimit = 15; // Tăng từ 10 lên 15 tin nhắn gần nhất
+    const chatHistoryForAI = messages.slice(-recentMessagesLimit).map(({ role, content }) => ({
+      role: (role as any) === "model" ? "bot" : role,
+      content,
+    }));
 
     // Pass credentials from store to the AI flow input
     const input: GenerateResponseInput = {
       message: messageContent,
       chatHistory: chatHistoryForAI,
-      // Only include credentials if they exist AND binance is connected
-      apiKey: credentialsAvailable ? apiKey! : undefined, // Use undefined if not available
-      apiSecret: credentialsAvailable ? apiSecret! : undefined, // Use undefined if not available
-      isTestnet: isTestnet ?? false, // Pass testnet status
     };
 
     try {
-      console.log("[ChatWindow] Calling generateResponse with input:", { ...input, apiKey: input.apiKey ? '***' : undefined, apiSecret: input.apiSecret ? '***' : undefined });
+      console.log("[ChatWindow] Calling generateResponse with input:", { 
+        message: input.message, 
+        chatHistoryLength: input.chatHistory?.length 
+      });
       const result = await generateResponse(input);
       console.log("[ChatWindow] Received response from generateResponse:", result);
 
       const botMessageClientId = `bot-${Date.now()}`;
-      // Add dummy id/created_at for local rendering
+      // Luôn gán role là 'bot' cho message AI
       const aiResponse: Message = { role: "bot", content: result.response, clientId: botMessageClientId, id: -2, created_at: new Date().toISOString() };
+      
       // Display AI response
       setMessages((prevMessages) => [...prevMessages, aiResponse]);
 
@@ -163,110 +208,163 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
         console.error("[ChatWindow] Unexpected error calling saveChatMessage for AI:", err);
         toast({ title: "Error", description: "An unexpected error occurred while saving the bot's response.", variant: "destructive" });
       });
-      // --- End save AI response ---
-
-
     } catch (error: any) {
       console.error("[ChatWindow] Error generating AI response:", error);
       let displayError = error?.message || "Failed to get response from AI. Please try again.";
-       // Check for the specific schema validation error from Genkit
-       if (error.message && error.message.includes("Schema validation failed") && error.message.includes('Expected object, received null')) {
-           displayError = "The AI returned an invalid response format (null). Please try again.";
-           console.error("[ChatWindow] AI returned null output, expected { response: string }");
-       } else if (error.message && error.message.includes("I need your API Key and API Secret")) {
-            displayError = "Connect your Binance account in the 'Binance Account' panel to use trading features.";
-       } else if (error.message && error.message.includes("I do not have access to your API Key")) {
-            displayError = "Connect your Binance account in the 'Binance Account' panel to use trading features."; // More specific error
-       }
-
+      
+      // Check for the specific schema validation error from Genkit
+      if (error.message && error.message.includes("Schema validation failed") && error.message.includes('Expected object, received null')) {
+        displayError = "The AI returned an invalid response format (null). Please try again.";
+        console.error("[ChatWindow] AI returned null output, expected { response: string }");
+      } else if (error.message && (
+        error.message.includes("I need your API Key and API Secret") || 
+        error.message.includes("I do not have access to your API Key")
+      )) {
+        displayError = "Connect your Binance account in the 'Binance Account' panel to use trading features.";
+      }
 
       toast({
         title: "Error Generating Response",
-        description: displayError, // Show potentially simplified error
+        description: displayError,
         variant: "destructive",
       });
-       // Remove the user message if AI fails? Optional.
-       // setMessages((prevMessages) => prevMessages.filter(m => m.clientId !== newUserMessage.clientId));
-
     } finally {
       setIsLoading(false); // Stop loading indicator
     }
   };
 
   return (
-    // Use Card for consistent styling with other panels
     <Card className={cn(
-        "flex flex-col h-full w-full overflow-hidden border-none shadow-none bg-card" // Use border-none and shadow-none as border is handled by parent div
+      "flex flex-col h-full w-full overflow-hidden border-l shadow-md transition-all duration-200 ease-in-out",
+      isExpanded ? "border bg-card" : "border-0 bg-card/95 backdrop-blur-sm"
     )}>
-      <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
-        {/* Show title only when expanded */}
+      <CardHeader className="p-3 border-b flex-shrink-0 flex flex-row items-center justify-between bg-card">
         <CardTitle className={cn(
-          "text-lg font-medium text-foreground transition-opacity duration-300 ease-in-out whitespace-nowrap overflow-hidden", // Added whitespace-nowrap and overflow-hidden
-          !isExpanded && "opacity-0 w-0" // Hide title when collapsed
+          "text-sm font-medium flex items-center gap-1.5 transition-all",
+          isExpanded ? "opacity-100" : "opacity-0 w-0"
         )}>
+          <Bot className="h-4 w-4 text-primary" />
           YINSEN
         </CardTitle>
-        {/* Toggle Button */}
-        <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground flex-shrink-0">
-           {/* Show ChevronLeft when expanded (to indicate collapse), ChevronRight when collapsed */}
-           {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-           <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Chat</span>
+        
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={onToggle} 
+          className={cn(
+            "h-7 w-7 flex-shrink-0 rounded-full",
+            !isExpanded && "bg-primary/10 hover:bg-primary/20 text-primary"
+          )}
+        >
+           {isExpanded ? <ChevronRight className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+           <span className="sr-only">{isExpanded ? 'Thu gọn' : 'Mở rộng'} Chat</span>
         </Button>
       </CardHeader>
 
-      {/* Conditionally render content based on isExpanded */}
       <CardContent className={cn(
-        "flex-1 p-0 overflow-hidden flex flex-col", // Use flex-col for inner structure
-        // Hide content based on isExpanded state
-        !isExpanded && "opacity-0 p-0"
+        "flex-1 p-0 overflow-hidden flex flex-col",
+        !isExpanded && "opacity-0 p-0 h-0"
       )}>
-         {/* Content is always rendered, but hidden via parent class */}
-           <>
-            {/* Enable horizontal and vertical scrolling */}
-            <ScrollArea className="flex-1" viewportRef={viewportRef} orientation="both">
-              {/* Wrap messages in a div that can expand horizontally */}
-              <div className={cn("space-y-1 p-3 min-w-max", !isExpanded && "hidden")}>
-                {isLoadingHistory && (
-                  <>
-                    {/* Skeletons for loading state */}
-                     <div className="flex items-start gap-2 justify-end pt-1">
-                        <Skeleton className="h-10 rounded-lg p-2.5 w-3/4 bg-muted rounded-br-none" />
-                        <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
-                          <AvatarFallback className="bg-accent"></AvatarFallback>
-                        </Avatar>
-                     </div>
-                      <div className="flex items-start gap-2 justify-start pt-1">
-                        <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
-                          <AvatarFallback className="bg-accent"></AvatarFallback>
-                        </Avatar>
-                        <Skeleton className="h-12 rounded-lg p-2.5 w-4/5 bg-muted rounded-bl-none" />
-                     </div>
-                     <div className="flex items-start gap-2 justify-end pt-1">
-                        <Skeleton className="h-10 rounded-lg p-2.5 w-2/3 bg-muted rounded-br-none" />
-                        <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
-                          <AvatarFallback className="bg-accent"></AvatarFallback>
-                        </Avatar>
-                     </div>
-                  </>
-                )}
-                {!isLoadingHistory && messages.map((msg) => (
-                  <ChatMessage key={msg.id ?? msg.clientId} role={msg.role} content={msg.content} />
-                ))}
-                {isLoading && (
-                  <div className="flex items-start gap-2 justify-start pt-1"> {/* Loading indicator for bot response */}
-                     <Avatar className="h-8 w-8 border border-border flex-shrink-0 mt-1">
-                        <AvatarFallback className="bg-accent"></AvatarFallback>
-                     </Avatar>
-                     <Skeleton className="h-10 rounded-lg p-2.5 w-1/2 bg-muted rounded-bl-none" /> {/* Match bubble style */}
-                  </div>
-                )}
+        <ScrollArea 
+          className="flex-1 w-full relative" 
+          viewportRef={viewportRef}
+          type="auto"
+        >
+          <div className={cn(
+            "w-full min-h-full", 
+            !isExpanded && "hidden"
+          )}>
+            {/* Tin nhắn chào mừng */}
+            {messages.length === 0 && !isLoadingHistory && (
+              <div className="p-4 text-center flex flex-col items-center justify-center h-full gap-3">
+                <Avatar className="h-12 w-12 border bg-primary/10">
+                  <AvatarFallback className="bg-primary/20">
+                    <Bot className="h-6 w-6 text-primary" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="max-w-md space-y-2">
+                  <h3 className="text-base font-medium">YINSEN - Trợ lý giao dịch của bạn</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Trò chuyện với YINSEN để nhận trợ giúp về giao dịch crypto và các thông tin thị trường.
+                  </p>
+                </div>
               </div>
-            </ScrollArea>
-             {/* Only render input when expanded */}
-            {isExpanded && <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />}
-           </>
-
+            )}
+            
+            {/* Loading skeleton */}
+            {isLoadingHistory && (
+              <>
+                {/* Skeleton messages in new style */}
+                <div className="py-4 px-4 border-b border-border/20">
+                  <div className="flex gap-3 items-start">
+                    <Skeleton className="h-8 w-8 rounded-full bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-20 bg-muted" />
+                      <Skeleton className="h-16 w-full bg-muted" />
+                    </div>
+                  </div>
+                </div>
+                <div className="py-4 px-4 border-b border-border/20 bg-muted/30">
+                  <div className="flex gap-3 items-start">
+                    <Skeleton className="h-8 w-8 rounded-full bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-20 bg-muted" />
+                      <Skeleton className="h-20 w-full bg-muted" />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+            
+            {/* Messages */}
+            {messages.length > 0 && messages.map((message) => (
+              <ChatMessage
+                key={message.clientId || message.id}
+                role={message.role}
+                content={message.content}
+              />
+            ))}
+            
+            {/* Loading indicator for new message */}
+            {isLoading && (
+              <div className="px-4 py-5 flex gap-4 border-b border-border/20 bg-muted/30 animate-pulse">
+                <div className="flex-shrink-0 pt-1">
+                  <Avatar className="h-8 w-8 border bg-primary/10">
+                    <AvatarFallback className="bg-primary/20">
+                      <Bot className="h-4 w-4 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-16 bg-muted" />
+                  <Skeleton className="h-4 w-3/4 bg-muted" />
+                  <Skeleton className="h-4 w-1/2 bg-muted" />
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Nút cuộn xuống */}
+          {showScrollButton && (
+            <Button
+              size="icon"
+              variant="outline"
+              className="absolute bottom-4 right-4 h-8 w-8 rounded-full shadow-md bg-background/90 backdrop-blur-sm"
+              onClick={scrollToBottom}
+            >
+              <ArrowDown className="h-4 w-4" />
+              <span className="sr-only">Cuộn xuống</span>
+            </Button>
+          )}
+        </ScrollArea>
       </CardContent>
+
+      <CardFooter className={cn(
+        "p-2 border-t mt-auto flex-shrink-0 bg-card",
+        !isExpanded && "opacity-0 p-0 h-0"
+      )}>
+        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      </CardFooter>
     </Card>
   );
 };

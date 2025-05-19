@@ -199,11 +199,40 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
             } else {
                  setTrades([]); // Clear trades on failure
                 console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error fetching trade history from action:`, result.error);
-                 // Always show error toast
+                
+                // Phân tích lỗi để hiển thị thông báo hữu ích hơn
+                let errorDescription = 'Lỗi không xác định.';
+                let variant: "default" | "destructive" = "destructive";
+                
+                if (result.error) {
+                  // Kiểm tra các lỗi phổ biến liên quan đến timestamp
+                  if (result.error.includes('timestamp')) {
+                    errorDescription = 'Lỗi đồng bộ thời gian với máy chủ Binance. Đang tự động khắc phục...';
+                    variant = "default"; // Đây là lỗi tạm thời, đã xử lý tự động
+                  } 
+                  // Lỗi chứng thực
+                  else if (result.error.includes('API-key') || result.error.includes('signature')) {
+                    errorDescription = 'Lỗi xác thực API key/secret. Vui lòng kiểm tra lại thông tin đăng nhập.';
+                  }
+                  // Lỗi quyền truy cập
+                  else if (result.error.includes('permission') || result.error.includes('authoriz')) {
+                    errorDescription = 'Không có quyền truy cập. API key có thể thiếu quyền đọc lịch sử giao dịch.';
+                  } 
+                  // Lỗi giới hạn rate
+                  else if (result.error.includes('rate limit') || result.error.includes('too many requests')) {
+                    errorDescription = 'Vượt quá giới hạn yêu cầu. Vui lòng thử lại sau ít phút.';
+                  }
+                  // Lỗi khác có thể xác định
+                  else {
+                    errorDescription = `${result.error}. Kiểm tra thông tin đăng nhập và quyền truy cập.`;
+                  }
+                }
+                
+                // Hiển thị toast với thông tin lỗi chi tiết hơn
                 toast({
-                title: "Error Fetching Trades",
-                description: `Failed to fetch trade history: ${result.error}. Check API permissions or rate limits.`,
-                variant: "destructive",
+                  title: "Lỗi khi tải lịch sử giao dịch",
+                  description: errorDescription,
+                  variant: variant,
                 });
             }
         } catch (error) {
@@ -285,18 +314,32 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         }
 
       } else {
-        // Clear state on error, keep credentials
-        setAssets([]);
-        setTrades([]);
         setOwnedSymbols([]);
         setIsConnected(false);
         console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error fetching assets from action:`, result.error);
-        // Always show error toast
-        toast({
-          title: "Error Fetching Assets",
-          description: `Failed to fetch assets: ${result.error}. Check credentials and permissions.`,
-          variant: "destructive",
-        });
+        
+        // Chỉ hiển thị toast thông báo lỗi khi là thao tác thủ công hoặc lần đầu kết nối thất bại
+        if (isManual || !isConnected) {
+          // Kiểm tra lỗi liên quan đến IP hoặc API key
+          if (result.error?.includes('IP không được phép') || result.error?.includes('API key không đúng') || result.error?.includes('-2015')) {
+            toast({
+              title: "Lỗi quyền hạn API key hoặc IP",
+              description: "API key hoặc IP không được phép. Vui lòng kiểm tra cài đặt IP trong tài khoản Binance của bạn.",
+              variant: "destructive",
+              action: (
+                <a href="/ip-check" target="_blank" className="rounded bg-destructive-foreground px-3 py-2 text-xs font-medium text-destructive">
+                  Kiểm tra IP
+                </a>
+              ),
+            });
+          } else {
+            toast({
+              title: "Lỗi kết nối đến Binance",
+              description: result.error || "Không thể kết nối tới Binance API.",
+              variant: "destructive",
+            });
+          }
+        }
       }
     } catch (error) {
       // Clear state on error, keep credentials
@@ -304,11 +347,20 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
       setTrades([]);
       setOwnedSymbols([]);
       setIsConnected(false);
-      console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error calling fetchBinanceAssets action:`, error);
-      // Always show error toast
+      
+      // Lấy thông tin lỗi chi tiết
+      let errorMessage = "Lỗi không xác định khi tải dữ liệu.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Error calling fetchBinanceAssets action:`, error);
+      } else {
+        console.error(`[${isManual ? 'Manual' : 'Auto'}-Fetch] Unknown error calling fetchBinanceAssets:`, error);
+      }
+      
+      // Hiển thị thông báo lỗi
       toast({
-        title: "Error",
-        description: "An unexpected error occurred while fetching assets. Please try again.",
+        title: "Lỗi",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

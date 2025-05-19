@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 export interface MessageHistory {
   id: number; // Corresponds to bigint or int8, primary key
   created_at: string; // Corresponds to timestamptz
-  role: 'user' | 'bot'; // Corresponds to text with constraint
+  role: 'user' | 'bot' | 'model'; // Cho phép 'model' như một vai trò hợp lệ, sẽ được chuyển sang 'bot' khi xử lý
   content: string; // Corresponds to text
 }
 

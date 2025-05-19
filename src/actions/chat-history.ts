@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 // Simple schema for a single message to be saved
 const SaveMessageSchema = z.object({
-  role: z.enum(['user', 'bot']),
+  role: z.enum(['user', 'bot', 'model']),
   content: z.string().min(1),
 });
 
@@ -66,7 +66,8 @@ export async function fetchChatHistory(): Promise<FetchHistoryResult> {
     const messages: MessageHistory[] = data?.map(item => ({
         id: item.id,
         created_at: item.created_at,
-        role: item.role as 'user' | 'bot', // Ensure role matches the enum
+        // Ensure role matches the enum - convert 'model' to 'bot' if found
+        role: item.role === 'model' ? 'bot' : (item.role as 'user' | 'bot'), 
         content: item.content,
     })) ?? [];
     return { success: true, data: messages };

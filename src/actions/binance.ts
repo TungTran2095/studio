@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import Binance from 'node-binance-api'; // Import the library
+import { TimeSync } from '@/lib/time-sync'; // Import TimeSync utility
 
 // Define the structure for an asset
 export interface Asset {
@@ -62,6 +63,251 @@ interface BinanceTradeHistoryResult {
     error?: string;
 }
 
+// Hàm trợ giúp xử lý lỗi Binance cụ thể
+function handleBinanceAPIError(error: any): { message: string; code?: number; retryable: boolean } {
+  // Chuẩn hóa cấu trúc lỗi từ nhiều định dạng có thể xảy ra
+  let errorCode: number | undefined;
+  let errorMessage: string = 'Unknown error';
+  let isRetryable: boolean = false;
+
+  // Trích xuất thông tin lỗi từ các định dạng khác nhau
+  if (error.body) {
+    try {
+      const parsed = JSON.parse(error.body);
+      errorCode = parsed.code;
+      errorMessage = parsed.msg || 'API error';
+    } catch {
+      errorMessage = error.body;
+    }
+  } else if (error.code && error.message) {
+    errorCode = typeof error.code === 'string' ? parseInt(error.code) : error.code;
+    errorMessage = error.message;
+  } else if (error.message) {
+    // Tìm mã lỗi trong message nếu có
+    const codeMatch = error.message.match(/code[:\s-]*(-?\d+)/i);
+    if (codeMatch) {
+      errorCode = parseInt(codeMatch[1]);
+    }
+    errorMessage = error.message;
+  }
+
+  // Xác định lỗi có thể retry hay không
+  const retryableCodes = [-1021, -1001, -1002, -1003, -1006, -1007, -2014]; // Thêm -2014 (API key invalid) vào danh sách retry
+  isRetryable = errorCode ? retryableCodes.includes(errorCode) : false;
+
+  // Xử lý đặc biệt cho lỗi API key
+  if (errorCode === -2014) {
+    errorMessage = 'API key không đúng định dạng. Hãy kiểm tra lại API key và đảm bảo không có kí tự đặc biệt.';
+    console.error('[handleBinanceAPIError] Phát hiện lỗi API key không hợp lệ, sẽ thử lại sau khi xử lý key...');
+  }
+  
+  // Xử lý đặc biệt cho lỗi quyền API key hoặc IP
+  if (errorCode === -2015) {
+    errorMessage = 'API key không có quyền hoặc IP không được phép. Vui lòng kiểm tra cài đặt API key trên Binance.';
+    console.error(`[handleBinanceAPIError] Phát hiện lỗi quyền API key hoặc IP: ${errorMessage}`);
+    console.error(`[handleBinanceAPIError] HƯỚNG DẪN:
+    1. Đăng nhập vào tài khoản Binance của bạn
+    2. Vào phần API Management 
+    3. Kiểm tra xem API key có quyền đọc (Read) hoặc không
+    4. Trong testnet, đảm bảo IP của bạn đã được đăng ký
+    5. Tìm địa chỉ IP hiện tại của bạn (search "what is my ip" trên Google)
+    6. Thêm IP vào danh sách IP được phép truy cập của API key`);
+  }
+
+  // Trả về thông tin lỗi đã chuẩn hóa
+  return {
+    message: errorMessage,
+    code: errorCode,
+    retryable: isRetryable
+  };
+}
+
+// Tạo hàm mới để khởi tạo Binance client an toàn hơn
+async function createSafeBinanceClient(apiKey: string, apiSecret: string, isTestnet: boolean = false) {
+  console.log('[createSafeBinanceClient] Bắt đầu khởi tạo client...');
+  
+  // Đồng bộ thời gian trước khi tạo client
+  try {
+    await TimeSync.syncWithServer();
+    console.log('[createSafeBinanceClient] Đã đồng bộ thời gian với Binance');
+  } catch (syncError) {
+    console.error('[createSafeBinanceClient] Lỗi đồng bộ thời gian:', syncError);
+    // Tiếp tục nhưng điều chỉnh offset thấp hơn nữa
+    TimeSync.adjustOffset(-10000); // Tăng từ -5000 lên -10000
+  }
+  
+  // Làm sạch API key - loại bỏ tiền tố "API Key: " nếu có
+  const cleanApiKey = apiKey.replace('API Key: ', '').trim();
+  console.log(`[createSafeBinanceClient] Đã xử lý API key - chiều dài: ${cleanApiKey.length}`);
+  
+  // Tạo client với cấu hình an toàn nhất
+  const client = new Binance().options({
+    APIKEY: cleanApiKey, // Sử dụng API key đã làm sạch
+    APISECRET: apiSecret,
+    // Sử dụng testnet nếu cần
+    ...(isTestnet && {
+      urls: {
+        base: 'https://testnet.binance.vision/api/',
+      },
+    }),
+    // Đảm bảo recvWindow nhỏ hơn 60000ms theo yêu cầu của Binance API
+    recvWindow: 50000, // Giảm từ 59000ms xuống 50000ms để an toàn hơn
+    // Tự tạo timestamp thay vì dùng method
+    timestamp: () => {
+      // Luôn trả về timestamp nhỏ hơn thời gian thực để đảm bảo không vượt quá giới hạn server
+      return TimeSync.getTimestamp();
+    },
+    // Bật gỡ lỗi
+    verbose: true,
+    // Tắt kết nối lại tự động
+    reconnect: false,
+    // Giảm timeout để phát hiện lỗi sớm hơn
+    timeout: 60000, // Giảm từ 120000ms xuống 60000ms
+    // Thêm useServerTime để Binance tự đồng bộ thời gian
+    useServerTime: true,
+    // Thêm các options quan trọng khác
+    family: 4, // Sử dụng IPv4
+    keepAlive: true,
+    // Thêm tham số để tăng khả năng xử lý lỗi
+    handleDrift: true, // Cho phép xử lý độ trễ
+  });
+  
+  console.log('[createSafeBinanceClient] Đã khởi tạo Binance client với timestamp cố định -180000ms và recvWindow=50000ms');
+  
+  return client;
+}
+
+// Retry logic đã được cải tiến
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 5,
+  initialDelayMs: number = 500,
+  options: { apiKey?: string; apiSecret?: string } = {}
+): Promise<T> {
+  let lastError: any;
+  let retries = 0;
+  let currentApiKey = options.apiKey;
+  let timestampRetries = 0; // Đếm số lần đã xử lý lỗi timestamp 
+  const maxTimestampRetries = 3; // Tối đa 3 lần xử lý lỗi timestamp
+
+  while (retries <= maxRetries) {
+    try {
+      if (retries > 0) {
+        console.log(`[Binance] Thử lại lần ${retries}/${maxRetries}...`);
+      }
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const errorInfo = handleBinanceAPIError(error);
+      
+      // Xử lý đặc biệt cho lỗi function is not a function
+      if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' && (
+          error.message.includes('is not a function') || 
+          error.message.includes('is not defined') ||
+          error.message.includes('is undefined')
+      )) {
+        console.error('[Binance] Lỗi phương thức không tồn tại:', error.message);
+        // Đây là lỗi nghiêm trọng liên quan đến cấu trúc API, không thể retry
+        throw new Error(`Lỗi gọi phương thức API: ${error.message}. Vui lòng kiểm tra cài đặt thư viện node-binance-api.`);
+      }
+      
+      // Xử lý đặc biệt cho lỗi API key
+      if (errorInfo.code === -2014 && currentApiKey) {
+        console.log('[Binance] Lỗi định dạng API key, đang xử lý...');
+        // Thử làm sạch API key
+        currentApiKey = currentApiKey.replace(/[^a-zA-Z0-9]/g, '').trim();
+        console.log(`[Binance] Đã làm sạch API key, chiều dài mới: ${currentApiKey?.length}`);
+        
+        // Nếu có callback cập nhật key, thực hiện nó
+        if (options.apiKey) {
+          options.apiKey = currentApiKey;
+          console.log('[Binance] Đã cập nhật API key đã làm sạch');
+        }
+        
+        retries++;
+        continue;
+      }
+      
+      // Xử lý đặc biệt cho lỗi timestamp
+      if (errorInfo.code === -1021) {
+        console.log('[Binance] Lỗi timestamp, đang xử lý...');
+        
+        // Kiểm tra nếu đã thử quá nhiều lần
+        if (timestampRetries >= maxTimestampRetries) {
+          console.error(`[Binance] Đã thử xử lý lỗi timestamp ${timestampRetries} lần không thành công. Bỏ qua.`);
+          throw new Error("Không thể đồng bộ thời gian với Binance API sau nhiều lần thử. Vui lòng kiểm tra đồng hồ máy tính của bạn.");
+        }
+        
+        timestampRetries++;
+        
+        // Kiểm tra trong nội dung lỗi xem timestamp đang sớm hay muộn
+        let isTimeAhead = false;
+        if (errorInfo.message && errorInfo.message.includes("ahead of")) {
+          isTimeAhead = true;
+          console.log("[Binance] Phát hiện timestamp đang nhanh hơn server, điều chỉnh về quá khứ");
+        }
+        
+        try {
+          // Cách mới: Lấy thời gian server trực tiếp
+          console.log("[Binance] Đang lấy thời gian server trực tiếp...");
+          const serverTime = await TimeSync.getActualServerTime();
+          const localTime = Date.now();
+          const diff = serverTime - localTime;
+          
+          console.log(`[Binance] Thời gian server: ${new Date(serverTime).toISOString()}, thời gian local: ${new Date(localTime).toISOString()}`);
+          console.log(`[Binance] Chênh lệch thời gian: ${diff}ms`);
+          
+          // Điều chỉnh timeOffset dựa trên chênh lệch thực tế và cộng thêm biên an toàn
+          if (isTimeAhead) {
+            // Nếu timestamp đang nhanh hơn server, tăng offset âm để bù vào (từ 30000 lên 60000ms)
+            const newOffset = diff - 60000;
+            TimeSync.setOffset(newOffset);
+            console.log(`[Binance] Đặt timeOffset = ${newOffset}ms (diff ${diff}ms - 60000ms margin)`);
+          } else {
+            // Nếu timestamp đang chậm hơn server, cần điều chỉnh thêm
+            TimeSync.setOffset(diff - 20000); // Tăng biên từ 10000 lên 20000ms
+            console.log(`[Binance] Đặt timeOffset = ${diff - 20000}ms (diff ${diff}ms - 20000ms margin)`);
+          }
+          
+          // Thử lại ngay lập tức không cần chờ delay
+          retries++;
+          continue;
+        } catch (syncError) {
+          console.error('[Binance] Lỗi khi lấy thời gian server:', syncError);
+          
+          // Nếu không thể lấy thời gian server, thực hiện phương pháp dự phòng
+          if (isTimeAhead) {
+            // Timestamp đang nhanh hơn server, thiết lập offset cố định -240 giây (tăng từ 180 lên 240 giây)
+            TimeSync.setOffset(-240000);
+            console.log('[Binance] Đặt offset cố định -240 giây để đảm bảo timestamp không vượt quá server');
+          } else {
+            // Nếu timestamp đang chậm hơn server, thiết lập offset +0
+            TimeSync.setOffset(0); 
+            console.log('[Binance] Đặt offset 0ms vì timestamp đang chậm hơn server');
+          }
+          
+          // Có thể đã điều chỉnh offset, thử lại ngay
+          retries++;
+          continue;
+        }
+      }
+      
+      // Chỉ retry nếu lỗi có thể retry và chưa vượt quá số lần thử lại
+      if (!errorInfo.retryable || retries >= maxRetries) {
+        console.error(`[Binance] Lỗi cuối cùng, không thể retry:`, errorInfo);
+        throw error;
+      }
+      
+      // Tính toán delay với exponential backoff
+      const delay = initialDelayMs * Math.pow(2, retries);
+      console.log(`[Binance] Lỗi ${errorInfo.code}: ${errorInfo.message}. Đợi ${delay}ms trước khi thử lại...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      retries++;
+    }
+  }
+
+  throw lastError;
+}
 
 // --- Fetch Assets Action ---
 export async function fetchBinanceAssets(
@@ -75,38 +321,30 @@ export async function fetchBinanceAssets(
     return { success: false, data: [], error: 'Invalid input.' };
   }
 
-  const { apiKey, apiSecret, isTestnet } = validationResult.data;
+  let { apiKey, apiSecret, isTestnet } = validationResult.data;
+  
+  // Làm sạch API key ngay từ đầu
+  apiKey = apiKey.replace(/API Key:\s+/i, '').trim();
+  console.log(`[fetchBinanceAssets] API key đã làm sạch, chiều dài: ${apiKey.length}`);
 
-  // Configure Binance client
+  // Khởi tạo client mới với phương pháp an toàn 
   let binance;
   try {
-      console.log('[fetchBinanceAssets] Initializing Binance client...');
-      binance = new Binance().options({
-        APIKEY: apiKey,
-        APISECRET: apiSecret,
-        // Use testnet URLs if isTestnet is true
-        ...(isTestnet && {
-          urls: {
-            base: 'https://testnet.binance.vision/api/',
-            // Add other testnet URLs if needed (e.g., for streams)
-          },
-        }),
-        // Consider adding recvWindow if requests time out
-        // recvWindow: 60000, // Increased timeout window
-      });
-      console.log('[fetchBinanceAssets] Binance client initialized.');
-      // Log available methods on the initialized object immediately
-      // console.log('[fetchBinanceAssets] Initialized Binance client methods:', Object.keys(binance));
+    binance = await createSafeBinanceClient(apiKey, apiSecret, isTestnet);
   } catch (initError: any) {
-       console.error('[fetchBinanceAssets] Failed to initialize Binance client:', initError);
-       return { success: false, data: [], error: `Failed to initialize Binance client: ${initError.message}` };
+    console.error('[fetchBinanceAssets] Failed to initialize Binance client:', initError);
+    return { success: false, data: [], error: `Failed to initialize Binance client: ${initError.message}` };
   }
 
-
   try {
-    // 1. Fetch account balances
+    // 1. Fetch account balances with retry logic
     console.log('[fetchBinanceAssets] Fetching balances...');
-    const balances = await binance.balance();
+    const balances = await withRetry(async () => {
+      // Thêm một lần đồng bộ thời gian vào thời điểm gọi API
+      TimeSync.adjustOffset(-2000); 
+      return await binance.balance();
+    }, 5, 500, { apiKey, apiSecret }); // Truyền thông tin API để có thể làm sạch khi cần
+    
     if (!balances) {
       console.error('[fetchBinanceAssets] Failed to fetch balances.');
       throw new Error('Failed to fetch balances.');
@@ -173,20 +411,23 @@ export async function fetchBinanceAssets(
     try {
         // Only fetch prices if we have symbols to fetch for
         if (symbolsToFetchPrices.size > 0) {
-            prices = await binance.prices();
-             if (!prices) {
+            prices = await withRetry(async () => {
+                return await binance.prices();
+            });
+            
+            if (!prices) {
                console.error('[fetchBinanceAssets] Failed to fetch prices (returned null/undefined).');
                throw new Error('Failed to fetch prices.');
-             }
-         } else {
+            }
+        } else {
             console.log('[fetchBinanceAssets] No symbols require price fetching.');
         }
     } catch (priceError: any) {
-        // Log the error but potentially continue if some prices were fetched before error
-         console.error('[fetchBinanceAssets] Error during price fetch:', priceError.message || priceError);
-         // Decide if this is fatal or if we can proceed with partial data
-         // For now, let's treat it as fatal to avoid incorrect calculations
-         throw new Error(`Failed to fetch all necessary prices: ${priceError.message}`);
+        // Xử lý lỗi với thông tin chi tiết hơn
+        const errorInfo = handleBinanceAPIError(priceError);
+        console.error('[fetchBinanceAssets] Error during price fetch:', errorInfo);
+        // Nếu đây là lỗi có thể khôi phục, chúng ta đã thử retry với withRetry
+        throw new Error(`Failed to fetch all necessary prices: ${errorInfo.message}`);
     }
 
     console.log('[fetchBinanceAssets] Prices received for', Object.keys(prices).length, 'pairs.');
@@ -268,6 +509,12 @@ export async function fetchBinanceAssets(
            // Depending on where it happened, maybe it's not fatal if basic prices (like BTCUSDT) were fetched
            errorMessage = `Error fetching prices for some pairs: ${error.message}. Results might be incomplete.`;
        }
+       else if (error.body && error.body.includes('-2015')) {
+         // Tìm nạp kết quả phân tích lỗi API key hoặc IP
+         errorMessage = 'API key của bạn không đúng, không có quyền truy cập, hoặc IP của bạn không được phép sử dụng API key này. Vui lòng kiểm tra lại cài đặt API key trong Binance.';
+         // Thêm hướng dẫn kiểm tra IP
+         errorMessage += '\n\nĐể kiểm tra IP của bạn và biết cách thêm vào whitelist, truy cập endpoint /api/ip-check của ứng dụng.';
+       }
        else {
          errorMessage = `API Error: ${error.message}`;
        }
@@ -284,159 +531,172 @@ export async function fetchBinanceAssets(
 export async function fetchBinanceTradeHistory(
     input: z.infer<typeof TradeHistoryInputSchema>
 ): Promise<BinanceTradeHistoryResult> {
-     console.log('[fetchBinanceTradeHistory] Input:', { apiKey: '***', apiSecret: '***', isTestnet: input.isTestnet, symbolsCount: input.symbols?.length, limit: input.limit });
+    console.log('[fetchBinanceTradeHistory] Input:', { 
+        apiKey: '***', 
+        apiSecret: '***', 
+        isTestnet: input.isTestnet,
+        symbols: input.symbols,
+        limit: input.limit
+    });
+    
+    // Validate input server-side
     const validationResult = TradeHistoryInputSchema.safeParse(input);
     if (!validationResult.success) {
         console.error('[fetchBinanceTradeHistory] Invalid input:', validationResult.error);
         return { success: false, data: [], error: 'Invalid input for trade history.' };
     }
 
-    // Destructure validated data, including the `symbols` array (trading pairs)
-    const { apiKey, apiSecret, isTestnet, symbols: tradingPairsToFetch, limit } = validationResult.data;
+    let { apiKey, apiSecret, isTestnet, symbols, limit } = validationResult.data;
+    
+    // Làm sạch API key ngay từ đầu
+    apiKey = apiKey.replace(/API Key:\s+/i, '').trim();
+    console.log(`[fetchBinanceTradeHistory] API key đã làm sạch, chiều dài: ${apiKey.length}`);
 
-    // Configure Binance client
+    // Khởi tạo client mới với phương pháp an toàn 
     let binance;
-     try {
-       console.log('[fetchBinanceTradeHistory] Initializing Binance client for trade history...');
-       binance = new Binance().options({
-         APIKEY: apiKey,
-         APISECRET: apiSecret,
-         ...(isTestnet && {
-             urls: { base: 'https://testnet.binance.vision/api/' },
-         }),
-         // recvWindow: 60000, // Consider increasing if timeouts occur
-       });
-        console.log('[fetchBinanceTradeHistory] Binance client initialized.');
-         // Log available methods immediately after initialization
-        // console.log('[fetchBinanceTradeHistory] Initialized Binance client methods:', Object.keys(binance));
-     } catch (initError: any) {
+    try {
+        binance = await createSafeBinanceClient(apiKey, apiSecret, isTestnet);
+    } catch (initError: any) {
         console.error('[fetchBinanceTradeHistory] Failed to initialize Binance client:', initError);
         return { success: false, data: [], error: `Failed to initialize Binance client: ${initError.message}` };
-     }
-
-
-    // ** REINFORCED CHECK: Verify if `trades` function exists (as `myTrades` seems incorrect for v0.13.x) **
-    console.log('[fetchBinanceTradeHistory] Checking for binance.trades method...');
-    console.log('[fetchBinanceTradeHistory] typeof binance.trades:', typeof binance?.trades); // Check for `trades`
-
-    if (typeof binance?.trades !== 'function') { // Check for `trades`
-      const errorMsg = 'Internal Server Error: Could not access trade history function (trades method not found on Binance client). Check library version (v0.13.x expected) or initialization.';
-      console.error(`[fetchBinanceTradeHistory] ${errorMsg}`);
-       // Log available properties/methods for inspection IF binance object exists
-      if (binance) {
-        console.error('[fetchBinanceTradeHistory] Binance client instance properties:', Object.keys(binance));
-      } else {
-          console.error('[fetchBinanceTradeHistory] Binance client object is undefined or null.');
-      }
-      return { success: false, data: [], error: errorMsg };
     }
-     console.log('[fetchBinanceTradeHistory] binance.trades method found. Proceeding...');
-    // ** END REINFORCED CHECK **
+
+    // Sửa đổi: Kiểm tra xem phương thức nào khả dụng
+    console.log('[fetchBinanceTradeHistory] Kiểm tra các phương thức Binance có sẵn');
+    // Kiểm tra nếu binance là một đối tượng hợp lệ
+    if (!binance) {
+        console.error('[fetchBinanceTradeHistory] Đối tượng Binance không tồn tại');
+        return { success: false, data: [], error: 'Không thể khởi tạo kết nối Binance' };
+    }
+
+    // Kiểm tra tất cả các phương thức có thể dùng cho lịch sử giao dịch
+    const hasMyTrades = typeof binance.myTrades === 'function';
+    const hasTrades = typeof binance.trades === 'function';
+    const hasGetMyTrades = typeof binance.getMyTrades === 'function';
+    const hasAllTrades = typeof binance.allTrades === 'function';
+    
+    console.log(`[fetchBinanceTradeHistory] Phương thức khả dụng: myTrades=${hasMyTrades}, trades=${hasTrades}, getMyTrades=${hasGetMyTrades}, allTrades=${hasAllTrades}`);
+    
+    // Chọn phương thức khả dụng theo thứ tự ưu tiên
+    let tradeMethod;
+    let methodName = '';
+    
+    if (hasMyTrades) {
+        tradeMethod = binance.myTrades.bind(binance);
+        methodName = 'myTrades';
+    } else if (hasGetMyTrades) {
+        tradeMethod = binance.getMyTrades.bind(binance);
+        methodName = 'getMyTrades';
+    } else if (hasTrades) {
+        tradeMethod = binance.trades.bind(binance);
+        methodName = 'trades';
+    } else if (hasAllTrades) {
+        tradeMethod = binance.allTrades.bind(binance);
+        methodName = 'allTrades';
+    }
+    
+    if (!tradeMethod) {
+        console.error('[fetchBinanceTradeHistory] Không tìm thấy phương thức hỗ trợ nào cho lịch sử giao dịch');
+        
+        // Log tất cả các phương thức có trong đối tượng binance để debug
+        console.log('[fetchBinanceTradeHistory] Các phương thức có trong Binance client:', Object.keys(binance).filter(key => typeof binance[key] === 'function'));
+        
+        return { 
+            success: false, 
+            data: [], 
+            error: 'Thư viện Binance API không hỗ trợ truy vấn lịch sử giao dịch. Vui lòng kiểm tra phiên bản thư viện node-binance-api.' 
+        };
+    }
+    
+    console.log(`[fetchBinanceTradeHistory] Sử dụng phương thức '${methodName}' để truy vấn lịch sử giao dịch`);
 
     try {
-        // The `symbols` are already provided in the input as `tradingPairsToFetch`
-        if (!tradingPairsToFetch || tradingPairsToFetch.length === 0) {
-             console.warn('[fetchBinanceTradeHistory] No trading pairs provided in input.');
-             // This case should ideally be prevented by the Zod schema (`.min(1)`)
-             return { success: false, data: [], error: "No trading pairs specified to fetch history for." };
+        // The `symbols` are already provided in the input
+        if (!symbols || symbols.length === 0) {
+            console.warn('[fetchBinanceTradeHistory] No trading pairs provided in input.');
+            return { success: false, data: [], error: "No trading pairs specified to fetch history for." };
         }
 
-        console.log(`[fetchBinanceTradeHistory] Fetching trades for ${tradingPairsToFetch.length} symbols (limit ${limit} per symbol): ${tradingPairsToFetch.slice(0, 10).join(', ')}${tradingPairsToFetch.length > 10 ? '...' : ''}`);
+        console.log(`[fetchBinanceTradeHistory] Fetching trades for ${symbols.length} symbols (limit ${limit} per symbol): ${symbols.slice(0, 10).join(', ')}${symbols.length > 10 ? '...' : ''}`);
 
+        // --- Special Handling: Exchange Info Setup ---
+        // 1. Fetch exchange info for symbol details - useful for understanding base/quote assets
+        let exchangeInfo: any;
+        try {
+            console.log('[fetchBinanceTradeHistory] Fetching exchange info...');
+            exchangeInfo = await withRetry(async () => {
+                // Điều chỉnh thêm timestamp trước khi gọi API
+                TimeSync.adjustOffset(-2000);
+                return await binance.exchangeInfo();
+            }, 5, 500, { apiKey, apiSecret });
+            console.log('[fetchBinanceTradeHistory] Exchange info fetched.');
+        } catch (infoError: any) {
+            console.error('[fetchBinanceTradeHistory] Error fetching exchange info:', handleBinanceAPIError(infoError));
+            // We can continue without exchange info, trades will just lack some additional metadata
+            exchangeInfo = { symbols: [] };
+        }
 
-        let allTrades: Trade[] = [];
+        // 2. Build a map of symbol details for easy lookup
+        const symbolDetails: { [key: string]: { baseAsset: string; quoteAsset: string; } } = {};
+        if (exchangeInfo && Array.isArray(exchangeInfo.symbols)) {
+            exchangeInfo.symbols.forEach((symbol: any) => {
+                if (symbol && symbol.symbol) {
+                    symbolDetails[symbol.symbol] = {
+                        baseAsset: symbol.baseAsset,
+                        quoteAsset: symbol.quoteAsset
+                    };
+                }
+            });
+        }
+        console.log(`[fetchBinanceTradeHistory] Loaded details for ${Object.keys(symbolDetails).length} symbols.`);
 
 
         // --- Fetch trades concurrently with error handling for each symbol ---
-        const fetchPromises = tradingPairsToFetch.map(symbol => {
+        const fetchPromises = symbols.map(symbol => {
             return new Promise<Trade[]>(async (resolve) => { // Make inner function async
                try {
-                   // Now we know binance.trades exists
-                   console.log(`[fetchBinanceTradeHistory] Calling binance.trades for ${symbol}...`);
-                   // Use binance.trades() which should be correct for v0.13.x
-                   const trades: any[] = await binance.trades(symbol, (error: any, trades: any[], symbol: string) => {
+                   // Use the selected trade method with withRetry
+                   console.log(`[fetchBinanceTradeHistory] Fetching trades for ${symbol}...`);
+                   
+                   // Sử dụng callback style cho phương thức trades                   
+                   TimeSync.adjustOffset(-2000);
+                   
+                   // Sử dụng phương thức trades với callback                   
+                   binance.trades(symbol, function(error: any, tradesData: any[], symbolName: string) {
                        if (error) {
-                           // Handle errors within the callback as well
-                           if (error?.body?.includes('-1121') || error?.message?.includes('Invalid symbol')) {
-                                // console.warn(`[fetchBinanceTradeHistory Callback] Skipping invalid symbol: ${symbol}`);
-                                resolve([]);
-                           } else if (error?.message?.includes('Duplicate') || error?.body?.includes('-1104')) {
-                               console.warn(`[fetchBinanceTradeHistory Callback] Duplicate request warning for ${symbol}, skipping: ${error.message}`);
-                               resolve([]);
-                           } else if (error?.message?.includes('Too many requests') || error?.body?.includes('-1003')) {
-                               console.warn(`[fetchBinanceTradeHistory Callback] Rate limited fetching trades for ${symbol}, skipping.`);
-                               resolve([]);
-                           } else if (error?.message?.includes('permissions') || error?.body?.includes('-2008')) {
-                                console.error(`[fetchBinanceTradeHistory Callback] Permission or API Key error for ${symbol}:`, error.message);
-                                resolve([]);
-                           }
-                           else {
-                                console.error(`[fetchBinanceTradeHistory Callback] Error fetching trades for ${symbol}:`, error);
-                                resolve([]); // Resolve empty to allow other symbols to proceed
-                           }
-                           return; // Exit callback on error
+                           console.error(`[fetchBinanceTradeHistory] Error fetching trades for ${symbol}:`, error);
+                           resolve([]);
+                           return;
                        }
-
-                       // --- Process successful trades ---
-                        if (Array.isArray(trades)) {
-                            // console.log(`[fetchBinanceTradeHistory Callback] Fetched ${trades.length} trades for ${symbol}`);
-
-                            // Determine Base and Quote Asset
-                            const knownQuoteAssets = ['USDT', 'USDC', 'TUSD', 'BUSD', 'FDUSD', 'BTC', 'ETH', 'BNB'];
-                            let baseAsset = symbol;
-                            let quoteAsset = '';
-                            for (const quote of knownQuoteAssets) {
-                                if (symbol.endsWith(quote) && symbol.length > quote.length) {
-                                    const potentialBase = symbol.substring(0, symbol.length - quote.length);
-                                    if (/^[A-Z0-9]+$/.test(potentialBase)) {
-                                        baseAsset = potentialBase;
-                                        quoteAsset = quote;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!quoteAsset && symbol.length > 3) {
-                                const potentialQuote = symbol.substring(symbol.length - 3);
-                                const potentialBase = symbol.substring(0, symbol.length - 3);
-                                if (/^[A-Z0-9]+$/.test(potentialBase) && /^[A-Z]+$/.test(potentialQuote)) {
-                                    baseAsset = potentialBase;
-                                    quoteAsset = potentialQuote;
-                                }
-                            }
-
-                            resolve(trades.map((trade: any) => ({
-                                symbol: trade.symbol,
-                                id: trade.id,
-                                orderId: trade.orderId,
-                                price: trade.price,
-                                qty: trade.qty,
-                                quoteQty: trade.quoteQty,
-                                commission: trade.commission,
-                                commissionAsset: trade.commissionAsset,
-                                time: trade.time,
-                                isBuyer: trade.isBuyer,
-                                isMaker: trade.isMaker,
-                                baseAsset: baseAsset,
-                                quoteAsset: quoteAsset,
-                            } as Trade)));
-                        } else {
-                            console.warn(`[fetchBinanceTradeHistory Callback] Received non-array response for ${symbol} trades:`, trades);
-                            resolve([]); // Return empty array if response is not as expected
-                        }
-                   }, { limit: limit }); // Pass limit as options object
-
-                   // The `await binance.trades` above might not directly return the trades
-                   // if the library uses callbacks primarily. The promise resolves
-                   // inside the callback. Let's check if the promise resolves immediately
-                   // or if we rely solely on the callback's resolve().
-                   // For safety, we primarily rely on the callback's resolve().
-
-               } catch (error: any) {
-                     // This catch block handles errors *during the initiation* of the `binance.trades` call,
-                     // NOT errors handled within the callback.
-                    console.error(`[fetchBinanceTradeHistory Outer Catch] Error initiating trades fetch for ${symbol}:`, error);
-                     // Resolve empty to allow other symbols to proceed
-                     resolve([]);
+                       
+                       // Check for valid response                       
+                       if (!tradesData || !Array.isArray(tradesData)) {
+                           console.warn(`[fetchBinanceTradeHistory] Unexpected response for ${symbol}:`, tradesData);
+                           resolve([]);
+                           return;
+                       }
+                       
+                       // Xử lý dữ liệu và resolve                       
+                       const processedTrades = tradesData.map((trade: any): Trade => {
+                           // Enhance trade with base/quote asset info if available                           
+                           if (symbolDetails[symbol]) {
+                               return {
+                                   ...trade,
+                                   baseAsset: symbolDetails[symbol].baseAsset,
+                                   quoteAsset: symbolDetails[symbol].quoteAsset
+                               };
+                           }
+                           // Return as-is if we don't have asset details                           
+                           return trade as Trade;
+                       });
+                       
+                       console.log(`[fetchBinanceTradeHistory] Fetched ${processedTrades.length} trades for ${symbol}.`);
+                       resolve(processedTrades);
+                   }, { limit });
+               } catch (tradeError: any) {
+                   // Instead of failing everything, just log error and return empty for this symbol
+                   console.error(`[fetchBinanceTradeHistory] Error fetching trades for ${symbol}:`, handleBinanceAPIError(tradeError));
+                   resolve([]);
                }
             });
         });
@@ -448,11 +708,12 @@ export async function fetchBinanceTradeHistory(
 
         results.forEach((result, index) => {
             if (result.status === 'fulfilled') {
-                allTrades = allTrades.concat(result.value);
+                // Log the success for the specific symbol that succeeded
+                console.log(`[fetchBinanceTradeHistory] Successfully fetched trades for symbol ${symbols[index]}`);
             } else {
                 // Log the error for the specific symbol that failed
                 failedSymbols++;
-                console.error(`[fetchBinanceTradeHistory] Failed to fetch trades for symbol ${tradingPairsToFetch[index]} (Promise Rejected):`, result.reason);
+                console.error(`[fetchBinanceTradeHistory] Failed to fetch trades for symbol ${symbols[index]} (Promise Rejected):`, result.reason);
                 // Optionally, you could add a partial error message to the final result
             }
         });
@@ -460,6 +721,7 @@ export async function fetchBinanceTradeHistory(
 
 
         // Sort trades by time, descending (most recent first)
+        const allTrades = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
         allTrades.sort((a, b) => b.time - a.time);
 
         console.log(`[fetchBinanceTradeHistory] Fetched a total of ${allTrades.length} trades. ${failedSymbols} symbols failed or were skipped.`);
@@ -483,6 +745,12 @@ export async function fetchBinanceTradeHistory(
             else if (error.message.includes('binance.trades is not a function')) { // Check for `trades`
                  errorMessage = 'Internal Server Error: Trade history feature unavailable (function missing). Check library version.';
                  console.error('[fetchBinanceTradeHistory] Caught error confirming trades function is missing.');
+            }
+            else if (error.body && error.body.includes('-2015')) {
+                // Tìm nạp kết quả phân tích lỗi API key hoặc IP
+                errorMessage = 'API key của bạn không đúng, không có quyền truy cập, hoặc IP của bạn không được phép sử dụng API key này. Vui lòng kiểm tra lại cài đặt API key trong Binance.';
+                // Thêm hướng dẫn kiểm tra IP
+                errorMessage += '\n\nĐể kiểm tra IP của bạn và biết cách thêm vào whitelist, truy cập endpoint /api/ip-check của ứng dụng.';
             }
             else {
                  errorMessage = `API Error: ${error.message}`;
