@@ -1,7 +1,10 @@
+"use client";
+
 import { AssetSummary } from "@/components/assets/asset-summary";
 import PortfolioAnalysis from "@/components/portfolio/portfolio-analysis";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Asset } from "@/actions/binance";
 
 export default function AssetsPage() {
   return (
@@ -56,20 +59,15 @@ function PortfolioAnalysisWrapper() {
   );
 }
 
-"use client";
-
-import { useEffect, useState as useStateClient } from "react";
-import { Asset } from "@/actions/binance";
-
 function ClientSideAnalysis() {
-  const [credentials, setCredentials] = useStateClient({
+  const [credentials, setCredentials] = useState({
     apiKey: "",
     apiSecret: "",
     isTestnet: true,
     useDefault: false
   });
   
-  const [assets, setAssets] = useStateClient<Asset[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   
   // Lấy thông tin đăng nhập và tài sản từ localStorage khi component được mount
   useEffect(() => {

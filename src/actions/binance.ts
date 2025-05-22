@@ -664,38 +664,82 @@ export async function fetchBinanceTradeHistory(
                    // Sử dụng callback style cho phương thức trades                   
                    TimeSync.adjustOffset(-2000);
                    
-                   // Sử dụng phương thức trades với callback                   
-                   binance.trades(symbol, function(error: any, tradesData: any[], symbolName: string) {
-                       if (error) {
-                           console.error(`[fetchBinanceTradeHistory] Error fetching trades for ${symbol}:`, error);
-                           resolve([]);
-                           return;
-                       }
-                       
-                       // Check for valid response                       
-                       if (!tradesData || !Array.isArray(tradesData)) {
-                           console.warn(`[fetchBinanceTradeHistory] Unexpected response for ${symbol}:`, tradesData);
-                           resolve([]);
-                           return;
-                       }
-                       
-                       // Xử lý dữ liệu và resolve                       
-                       const processedTrades = tradesData.map((trade: any): Trade => {
-                           // Enhance trade with base/quote asset info if available                           
-                           if (symbolDetails[symbol]) {
-                               return {
-                                   ...trade,
-                                   baseAsset: symbolDetails[symbol].baseAsset,
-                                   quoteAsset: symbolDetails[symbol].quoteAsset
-                               };
+                   // Thử sử dụng nhiều phương thức khác nhau theo thứ tự ưu tiên
+                   if (methodName === 'myTrades' || methodName === 'getMyTrades') {
+                       try {
+                           // Sử dụng phương thức myTrades hoặc getMyTrades để lấy lịch sử giao dịch của người dùng
+                           const myTradesData = await withRetry(async () => {
+                               return await tradeMethod(symbol, { limit });
+                           }, 5, 500, { apiKey, apiSecret });
+                           
+                           if (!myTradesData || !Array.isArray(myTradesData)) {
+                               console.warn(`[fetchBinanceTradeHistory] Unexpected response for ${symbol}:`, myTradesData);
+                               resolve([]);
+                               return;
                            }
-                           // Return as-is if we don't have asset details                           
-                           return trade as Trade;
-                       });
-                       
-                       console.log(`[fetchBinanceTradeHistory] Fetched ${processedTrades.length} trades for ${symbol}.`);
-                       resolve(processedTrades);
-                   }, { limit });
+                           
+                           // Xử lý dữ liệu myTrades
+                           const processedTrades = myTradesData.map((trade: any): Trade => {
+                               // Enhance trade with base/quote asset info if available                           
+                               if (symbolDetails[symbol]) {
+                                   return {
+                                       ...trade,
+                                       baseAsset: symbolDetails[symbol].baseAsset,
+                                       quoteAsset: symbolDetails[symbol].quoteAsset
+                                   };
+                               }
+                               // Return as-is if we don't have asset details                           
+                               return trade as Trade;
+                           });
+                           
+                           console.log(`[fetchBinanceTradeHistory] Fetched ${processedTrades.length} trades for ${symbol} using ${methodName}.`);
+                           resolve(processedTrades);
+                       } catch (myTradesError) {
+                           console.error(`[fetchBinanceTradeHistory] Error using ${methodName} for ${symbol}:`, myTradesError);
+                           // Fallback to trades method if myTrades fails
+                           console.log(`[fetchBinanceTradeHistory] Falling back to trades method for ${symbol}...`);
+                           fallbackToTradesMethod();
+                       }
+                   } else {
+                       // Sử dụng phương thức trades
+                       fallbackToTradesMethod();
+                   }
+                   
+                   // Hàm fallback sử dụng phương thức trades
+                   function fallbackToTradesMethod() {
+                       // Sử dụng phương thức trades với callback                   
+                       binance.trades(symbol, function(error: any, tradesData: any[], symbolName: string) {
+                           if (error) {
+                               console.error(`[fetchBinanceTradeHistory] Error fetching trades for ${symbol}:`, error);
+                               resolve([]);
+                               return;
+                           }
+                           
+                           // Check for valid response                       
+                           if (!tradesData || !Array.isArray(tradesData)) {
+                               console.warn(`[fetchBinanceTradeHistory] Unexpected response for ${symbol}:`, tradesData);
+                               resolve([]);
+                               return;
+                           }
+                           
+                           // Xử lý dữ liệu và resolve                       
+                           const processedTrades = tradesData.map((trade: any): Trade => {
+                               // Enhance trade with base/quote asset info if available                           
+                               if (symbolDetails[symbol]) {
+                                   return {
+                                       ...trade,
+                                       baseAsset: symbolDetails[symbol].baseAsset,
+                                       quoteAsset: symbolDetails[symbol].quoteAsset
+                                   };
+                               }
+                               // Return as-is if we don't have asset details                           
+                               return trade as Trade;
+                           });
+                           
+                           console.log(`[fetchBinanceTradeHistory] Fetched ${processedTrades.length} trades for ${symbol} using trades method.`);
+                           resolve(processedTrades);
+                       }, { limit });
+                   }
                } catch (tradeError: any) {
                    // Instead of failing everything, just log error and return empty for this symbol
                    console.error(`[fetchBinanceTradeHistory] Error fetching trades for ${symbol}:`, handleBinanceAPIError(tradeError));

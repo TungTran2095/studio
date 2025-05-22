@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TradeHistory } from "./trade-history";
 
 // Schema for the trading form
 const tradeFormSchema = z.object({
@@ -51,6 +53,7 @@ export const TradingPanel: FC = () => {
   const { apiKey, apiSecret, isTestnet, isConnected } = useAssetStore();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("trade");
 
   const form = useForm<z.infer<typeof tradeFormSchema>>({
     resolver: zodResolver(tradeFormSchema),
@@ -103,6 +106,9 @@ export const TradingPanel: FC = () => {
           description: result.message || `Successfully placed ${side} order.`,
         });
         form.reset(); // Reset form on success
+        
+        // Chuyển sang tab lịch sử giao dịch sau khi đặt lệnh thành công
+        setActiveTab("history");
       } else {
         toast({
           title: `Order Failed (${side})`,
@@ -125,140 +131,148 @@ export const TradingPanel: FC = () => {
   return (
     <Card className="flex flex-col h-full w-full overflow-hidden border-none shadow-none bg-transparent">
       <CardHeader className="p-3 border-b border-border flex-shrink-0">
-        <CardTitle className="text-lg font-medium text-foreground">Trade</CardTitle>
+        <CardTitle className="text-lg font-medium text-foreground">Giao dịch</CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 p-3 overflow-y-auto space-y-4">
-        <Form {...form}>
-          <form className="space-y-4">
-            {/* Symbol Input - Readonly for now, can be changed later */}
-            <FormField
-              control={form.control}
-              name="symbol"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Symbol</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      readOnly // Keep it simple for now
-                      className="h-8 text-xs bg-input border-border"
-                      disabled={isSubmitting}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
+      <CardContent className="flex-1 p-3 overflow-y-auto">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid grid-cols-2 mb-4">
+            <TabsTrigger value="trade">Đặt lệnh</TabsTrigger>
+            <TabsTrigger value="history">Lịch sử giao dịch</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="trade" className="space-y-4">
+            <Form {...form}>
+              <form className="space-y-4">
+                {/* Symbol Input - Readonly for now, can be changed later */}
+                <FormField
+                  control={form.control}
+                  name="symbol"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Symbol</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          readOnly // Keep it simple for now
+                          className="h-8 text-xs bg-input border-border"
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage className="text-xs" />
+                    </FormItem>
+                  )}
+                />
 
-            {/* Order Type Radio */}
-            <FormField
-              control={form.control}
-              name="orderType"
-              render={({ field }) => (
-                <FormItem className="space-y-2">
-                  <FormLabel className="text-xs">Order Type</FormLabel>
-                  <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="flex space-x-4"
-                      disabled={isSubmitting}
-                    >
-                      <FormItem className="flex items-center space-x-2 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="MARKET" id="market" />
-                        </FormControl>
-                        <FormLabel htmlFor="market" className="text-xs font-normal">Market</FormLabel>
-                      </FormItem>
-                      <FormItem className="flex items-center space-x-2 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="LIMIT" id="limit" />
-                        </FormControl>
-                        <FormLabel htmlFor="limit" className="text-xs font-normal">Limit</FormLabel>
-                      </FormItem>
-                    </RadioGroup>
-                  </FormControl>
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
+                {/* Order Type Radio */}
+                <FormField
+                  control={form.control}
+                  name="orderType"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-xs">Order Type</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex space-x-4"
+                          disabled={isSubmitting}
+                        >
+                          <FormItem className="flex items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <RadioGroupItem value="MARKET" id="market" />
+                            </FormControl>
+                            <FormLabel htmlFor="market" className="text-xs font-normal">Market</FormLabel>
+                          </FormItem>
+                          <FormItem className="flex items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <RadioGroupItem value="LIMIT" id="limit" />
+                            </FormControl>
+                            <FormLabel htmlFor="limit" className="text-xs font-normal">Limit</FormLabel>
+                          </FormItem>
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage className="text-xs" />
+                    </FormItem>
+                  )}
+                />
 
-            {/* Price Input (Conditional for LIMIT orders) */}
-            {orderType === 'LIMIT' && (
-              <FormField
-                control={form.control}
-                name="price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs">Price (USDT)</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="number"
-                        step="0.01" // Adjust step as needed
-                        placeholder="Enter limit price"
-                        className="h-8 text-xs bg-input border-border"
-                        disabled={isSubmitting}
-                        value={field.value ?? ''} // Handle undefined for controlled input
-                      />
-                    </FormControl>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
+                {/* Price Input (Conditional for LIMIT orders) */}
+                {orderType === 'LIMIT' && (
+                  <FormField
+                    control={form.control}
+                    name="price"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Price (USDT)</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="number"
+                            step="0.01" // Adjust step as needed
+                            placeholder="Enter limit price"
+                            className="h-8 text-xs bg-input border-border"
+                            disabled={isSubmitting}
+                            value={field.value ?? ''} // Handle undefined for controlled input
+                          />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
-            )}
 
-            {/* Quantity Input */}
-            <FormField
-              control={form.control}
-              name="quantity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Quantity (BTC)</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="number"
-                      step="0.00001" // Adjust step as needed
-                      placeholder="Enter amount"
-                      className="h-8 text-xs bg-input border-border"
-                      disabled={isSubmitting}
-                      value={field.value ?? ''} // Handle undefined for controlled input
-                    />
-                  </FormControl>
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
+                {/* Quantity Input */}
+                <FormField
+                  control={form.control}
+                  name="quantity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Quantity (BTC)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="0.00001" // Adjust step as needed
+                          placeholder="Enter amount"
+                          className="h-8 text-xs bg-input border-border"
+                          disabled={isSubmitting}
+                          value={field.value ?? ''} // Handle undefined for controlled input
+                        />
+                      </FormControl>
+                      <FormMessage className="text-xs" />
+                    </FormItem>
+                  )}
+                />
 
-            {/* Buy/Sell Buttons */}
-            <div className="grid grid-cols-2 gap-2 pt-2">
-                <Button
-                    type="button" // Prevent default form submission
-                    variant="default" // Consider specific buy/sell variants later
-                    className="bg-green-600 hover:bg-green-700 text-white h-9 text-sm" // Buy button style
-                    onClick={form.handleSubmit((values) => handleTrade(values, 'BUY'))}
-                    disabled={isSubmitting || !isConnected}
-                >
-                    {isSubmitting ? "Placing..." : "Buy BTC"}
-                </Button>
-                <Button
-                    type="button" // Prevent default form submission
-                    variant="destructive" // Use destructive for sell
-                    className="h-9 text-sm" // Sell button style
-                    onClick={form.handleSubmit((values) => handleTrade(values, 'SELL'))}
-                    disabled={isSubmitting || !isConnected}
-                >
-                    {isSubmitting ? "Placing..." : "Sell BTC"}
-                </Button>
-            </div>
-
-             {!isConnected && (
-                <p className="text-xs text-destructive text-center pt-2">Connect Binance account to enable trading.</p>
-             )}
-
-          </form>
-        </Form>
+                {/* Buy/Sell Buttons */}
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                    <Button
+                        type="button" // Prevent default form submission
+                        variant="default" // Consider specific buy/sell variants later
+                        className="bg-green-600 hover:bg-green-700 text-white h-9 text-sm" // Buy button style
+                        onClick={form.handleSubmit((values) => handleTrade(values, 'BUY'))}
+                        disabled={isSubmitting || !isConnected}
+                    >
+                        {isSubmitting ? "Placing..." : "Buy BTC"}
+                    </Button>
+                    <Button
+                        type="button" // Prevent default form submission
+                        variant="destructive" // Use destructive for sell
+                        className="h-9 text-sm" // Sell button style
+                        onClick={form.handleSubmit((values) => handleTrade(values, 'SELL'))}
+                        disabled={isSubmitting || !isConnected}
+                    >
+                        {isSubmitting ? "Placing..." : "Sell BTC"}
+                    </Button>
+                </div>
+              </form>
+            </Form>
+          </TabsContent>
+          
+          <TabsContent value="history">
+            <TradeHistory />
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

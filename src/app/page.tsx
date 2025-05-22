@@ -8,7 +8,7 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
 import { AnalysisPanel } from "@/components/analysis/analysis-panel";
 import { TradingPanel } from "@/components/trading/trading-panel";
-import { Book } from 'lucide-react';
+import { Book, LineChart, BarChart, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -44,12 +44,20 @@ export default function Home() {
         <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border relative">
             <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0 flex justify-between items-center">
               <span>BTC/USDT Price Chart</span>
-              <Link href="/books">
-                <Button variant="outline" size="sm" className="flex items-center gap-1 h-8">
-                  <Book className="h-4 w-4" />
-                  <span>Thư viện</span>
-                </Button>
-              </Link>
+              <div className="flex space-x-2">
+                <Link href="/trading/strategy">
+                  <Button variant="outline" size="sm" className="flex items-center gap-1 h-8">
+                    <TrendingUp className="h-4 w-4" />
+                    <span>Chiến lược giao dịch</span>
+                  </Button>
+                </Link>
+                <Link href="/books">
+                  <Button variant="outline" size="sm" className="flex items-center gap-1 h-8">
+                    <Book className="h-4 w-4" />
+                    <span>Thư viện</span>
+                  </Button>
+                </Link>
+              </div>
             </h1>
             <div className="flex-1 p-0 overflow-hidden">
                 <TradingViewWidget />
@@ -68,6 +76,28 @@ export default function Home() {
             <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card">
                 <TradingPanel />
             </div>
+        </div>
+        
+        {/* Shortcuts Row */}
+        <div className="flex-shrink-0 flex gap-2 overflow-hidden p-1">
+          <Link href="/trading/strategy" className="flex-1">
+            <Button variant="outline" className="w-full flex items-center justify-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              <span>Chiến lược giao dịch</span>
+            </Button>
+          </Link>
+          <Link href="/assets" className="flex-1">
+            <Button variant="outline" className="w-full flex items-center justify-center gap-2">
+              <BarChart className="h-5 w-5" />
+              <span>Quản lý tài sản</span>
+            </Button>
+          </Link>
+          <Link href="/technical" className="flex-1">
+            <Button variant="outline" className="w-full flex items-center justify-center gap-2">
+              <LineChart className="h-5 w-5" />
+              <span>Phân tích kỹ thuật</span>
+            </Button>
+          </Link>
         </div>
       </div>
 
