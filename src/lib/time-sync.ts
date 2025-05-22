@@ -3,8 +3,8 @@
  */
 
 export class TimeSync {
-  // Đặt hiệu số cực thấp (-10000ms) để đảm bảo timestamp luôn nhỏ hơn thời gian server nhiều
-  private static timeOffset: number = -10000; // Tăng từ -5000ms lên -10000ms
+  // Đặt hiệu số cực thấp (-20000ms) để đảm bảo timestamp luôn nhỏ hơn thời gian server nhiều
+  private static timeOffset: number = -20000; // Tăng từ -10000ms lên -20000ms
   private static isSynced: boolean = false;
   private static lastSyncTime: number = 0;
   private static readonly SYNC_INTERVAL_MS: number = 5 * 60 * 1000; // 5 phút
@@ -28,10 +28,13 @@ export class TimeSync {
       console.log('[TimeSync] Đang đồng bộ thời gian với Binance...');
       
       // Gọi Binance API để lấy thời gian server
-      // Thêm tham số nocache để tránh cache
-      const response = await fetch('https://api.binance.com/api/v3/time?nocache=' + now, {
+      // Thêm tham số nocache để tránh cache và sử dụng địa chỉ API thay thế
+      const response = await fetch('https://api1.binance.com/api/v3/time?nocache=' + now, {
         // Thêm timeout để tránh chờ quá lâu
-        signal: AbortSignal.timeout(5000) // 5 giây timeout
+        signal: AbortSignal.timeout(5000), // 5 giây timeout
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
       });
       
       if (!response.ok) {
@@ -49,13 +52,13 @@ export class TimeSync {
       this.lastServerTime = serverTime;
       const localTime = Date.now();
       
-      // Điều chỉnh hiệu số: luôn đảm bảo timestamp sẽ sớm hơn 10000ms so với thời gian server
-      this.timeOffset = serverTime - localTime - 10000; // Tăng từ 5000ms lên 10000ms
+      // Điều chỉnh hiệu số: luôn đảm bảo timestamp sẽ sớm hơn 20000ms so với thời gian server
+      this.timeOffset = serverTime - localTime - 20000; // Tăng từ 10000ms lên 20000ms
       this.isSynced = true;
       this.lastSyncTime = now;
       this.retryCount = 0; // Reset số lần thử lại
       
-      console.log(`[TimeSync] Đồng bộ thành công. Hiệu số: ${this.timeOffset}ms (đã trừ 10000ms dự phòng)`);
+      console.log(`[TimeSync] Đồng bộ thành công. Hiệu số: ${this.timeOffset}ms (đã trừ 20000ms dự phòng)`);
     } catch (error) {
       console.error('[TimeSync] Lỗi đồng bộ thời gian:', error);
       // Tăng số lần thử lại
@@ -69,7 +72,7 @@ export class TimeSync {
         console.error(`[TimeSync] Đã thử lại ${this.MAX_RETRY} lần không thành công. Giữ nguyên offset hiện tại.`);
         // Nếu không thể đồng bộ, giữ nguyên hiệu số hiện tại
         // Giảm thêm offset để đảm bảo an toàn
-        this.adjustOffset(-5000); // Tăng từ -1000 lên -5000
+        this.adjustOffset(-10000); // Tăng từ -5000 lên -10000
         this.retryCount = 0; // Reset counter
       }
     }
@@ -108,7 +111,7 @@ export class TimeSync {
    */
   static getTimestamp(): number {
     // Trả về thời gian hiện tại trừ đi một khoảng lớn để đảm bảo luôn nhỏ hơn server time
-    return Date.now() - 180000; // Tăng từ 150000ms lên 180000ms (3 phút)
+    return Date.now() - 300000; // Tăng từ 180000ms lên 300000ms (5 phút)
   }
 
   /**
@@ -119,8 +122,11 @@ export class TimeSync {
   static async getActualServerTime(): Promise<number> {
     try {
       // Gọi API time một cách trực tiếp với timeout
-      const response = await fetch('https://api.binance.com/api/v3/time?nocache=' + Date.now(), {
-        signal: AbortSignal.timeout(5000) // 5 giây timeout
+      const response = await fetch('https://api1.binance.com/api/v3/time?nocache=' + Date.now(), {
+        signal: AbortSignal.timeout(5000), // 5 giây timeout
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
       });
       
       if (!response.ok) {
@@ -138,18 +144,18 @@ export class TimeSync {
     } catch (error) {
       console.error('[TimeSync] Lỗi khi lấy thời gian server:', error);
       // Nếu không thể lấy thời gian server, trả về thời gian ước tính
-      return this.lastServerTime > 0 ? this.lastServerTime : Date.now() - 120000; // Tăng từ 90000 lên 120000
+      return this.lastServerTime > 0 ? this.lastServerTime : Date.now() - 240000; // Tăng từ 120000 lên 240000
     }
   }
 
   /**
    * Lấy timestamp đã được hiệu chỉnh đặc biệt cho Binance API
-   * Luôn trả về timestamp bé hơn thời gian thực ít nhất 2 giây
+   * Luôn trả về timestamp nhỏ hơn thời gian thực ít nhất 2 giây
    * @returns number Timestamp an toàn cho Binance
    */
   static getSafeTimestamp(): number {
-    // Timestamp tối thiểu sẽ nhỏ hơn thời gian hiện tại 2 giây
-    return Date.now() - 5000; // Tăng từ 2000ms lên 5000ms
+    // Timestamp tối thiểu sẽ nhỏ hơn thời gian hiện tại 
+    return Date.now() - 10000; // Tăng từ 5000ms lên 10000ms
   }
 
   /**
@@ -176,6 +182,6 @@ export class TimeSync {
    */
   static getSafeTimestampForTrading(): number {
     // Trả về thời gian còn thấp hơn nữa cho các giao dịch quan trọng
-    return Date.now() - 200000; // Tăng từ 180000ms lên 200000ms (hơn 3 phút)
+    return Date.now() - 400000; // Tăng từ 200000ms lên 400000ms (6.6 phút)
   }
 } 

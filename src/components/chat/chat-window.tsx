@@ -169,7 +169,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
     // Get history for AI (use current UI state for context, exclude clientIds)
     const recentMessagesLimit = 15; // Tăng từ 10 lên 15 tin nhắn gần nhất
     const chatHistoryForAI = messages.slice(-recentMessagesLimit).map(({ role, content }) => ({
-      role: (role as any) === "model" ? "bot" : role,
+      role: role,
       content,
     }));
 
@@ -178,8 +178,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       message: messageContent,
       chatHistory: chatHistoryForAI,
       // Truyền API credentials cho trading nếu có
-      apiKey: apiKey,
-      apiSecret: apiSecret,
+      apiKey: apiKey || undefined,
+      apiSecret: apiSecret || undefined,
       isTestnet: isTestnet,
     };
 

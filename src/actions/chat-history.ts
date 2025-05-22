@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 // Simple schema for a single message to be saved
 const SaveMessageSchema = z.object({
-  role: z.enum(['user', 'bot', 'model']),
+  role: z.enum(['user', 'bot']),
   content: z.string().min(1),
 });
 

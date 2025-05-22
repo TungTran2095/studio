@@ -3,11 +3,12 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
-import { PanelLeft } from "lucide-react"
+import { PanelLeft, Book, BarChart4 } from "lucide-react"
+import Link from "next/link"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -18,6 +19,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  Home,
+  // ... các import khác
+} from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -734,6 +739,45 @@ const SidebarMenuSubButton = React.forwardRef<
   )
 })
 SidebarMenuSubButton.displayName = "SidebarMenuSubButton"
+
+export function NavLinks() {
+  return (
+    <nav className="grid gap-1 px-2">
+      <Link
+        href="/"
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          "justify-start"
+        )}
+      >
+        <Home className="mr-2 h-4 w-4" />
+        Dashboard
+      </Link>
+
+      <Link
+        href="/backtesting"
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          "justify-start"
+        )}
+      >
+        <BarChart4 className="mr-2 h-4 w-4" />
+        Backtesting
+      </Link>
+
+      <Link
+        href="/books"
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          "justify-start"
+        )}
+      >
+        <Book className="mr-2 h-4 w-4" />
+        Thư viện sách
+      </Link>
+    </nav>
+  )
+}
 
 export {
   Sidebar,

@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal, Settings, Settings2, Layers, Target, Calculator, TrendingUp, LineChart } from 'lucide-react'; // Thêm icons cho quant
+import { ChevronLeft, ChevronRight, BarChart, Bot, BrainCircuit, RefreshCw, DatabaseZap, Loader2, Calendar as CalendarIconLucide, Play, History, Brain, SplitSquareHorizontal, Settings, Settings2, Layers, Target, Calculator, TrendingUp, LineChart, Bell } from 'lucide-react'; // Thêm icons cho quant
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -1262,6 +1262,14 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
               </TabsTrigger>
               <TabsTrigger value="indicators" className="text-xs h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">
                   <BarChart className="h-3.5 w-3.5 mr-1" /> Indicators
+              </TabsTrigger>
+              {/* Thêm tab Cảnh báo */}
+              <TabsTrigger 
+                value="alerts" 
+                className="text-xs h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary"
+                onClick={() => window.location.href = '/alerts'}
+              >
+                  <Bell className="h-3.5 w-3.5 mr-1" /> Cảnh báo
               </TabsTrigger>
             </TabsList>
 

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  yinsen:
+    build:
+      context: ../..
+      dockerfile: docker/yinsen/Dockerfile
+    container_name: yinsen-btc-trading
+    restart: unless-stopped
+    ports:
+      - "9002:9002"
+    volumes:
+      - yinsen_data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=9002
+      # Thêm biến môi trường Supabase - cần thay thế bằng giá trị thực
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    networks:
+      - yinsen_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9002/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  yinsen_network:
+    driver: bridge
+
+volumes:
+  yinsen_data:
+    driver: local 

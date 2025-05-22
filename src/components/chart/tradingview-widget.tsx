@@ -3,6 +3,12 @@
 
 import React, { useEffect, useRef, memo } from 'react';
 
+declare global {
+  interface Window {
+    TradingView: any;
+  }
+}
+
 export const TradingViewWidget: React.FC = memo(() => {
   const container = useRef<HTMLDivElement>(null);
   const scriptAdded = useRef(false); // Ref to track if script has been added
@@ -53,10 +59,10 @@ export const TradingViewWidget: React.FC = memo(() => {
     script.type = "text/javascript";
     script.async = true;
     script.onload = () => {
-        if (typeof window.TradingView !== 'undefined' && typeof (window as any).TradingView.widget === 'function') {
+        if (typeof window.TradingView !== 'undefined' && typeof window.TradingView.widget === 'function') {
            // Store the widget instance
            try {
-               widgetInstance.current = new (window as any).TradingView.widget(widgetConfig);
+               widgetInstance.current = new window.TradingView.widget(widgetConfig);
                scriptAdded.current = true; // Mark script as loaded and widget initialized
            } catch (error) {
                 console.error("Error initializing TradingView widget:", error);
@@ -93,14 +99,29 @@ export const TradingViewWidget: React.FC = memo(() => {
       observer.disconnect();
 
       // Remove widget instance if it exists
-      if (widgetInstance.current && typeof widgetInstance.current.remove === 'function') {
+      if (widgetInstance.current) {
         try {
-            widgetInstance.current.remove();
+            // Kiểm tra xem widget có hợp lệ và có phần tử cha (parentNode) không
+            const chartContainer = document.getElementById('tradingview_chart_container');
+            if (chartContainer && chartContainer.innerHTML) {
+                // Xóa nội dung của container thay vì gọi remove() để tránh lỗi parentNode
+                chartContainer.innerHTML = '';
+            }
+            
+            // Nếu widget có hàm remove, thử gọi nó một cách an toàn
+            if (typeof widgetInstance.current.remove === 'function') {
+                // Kiểm tra thêm điều kiện để đảm bảo an toàn
+                const iframe = document.querySelector('iframe._tv-chart');
+                if (iframe && iframe.parentNode) {
+                    widgetInstance.current.remove();
+                }
+            }
         } catch (error) {
             console.error("Error removing TradingView widget:", error);
         }
         widgetInstance.current = null;
       }
+      
       // Clean up the container div
       if (container.current) {
         while (container.current.firstChild) {

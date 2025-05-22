@@ -8,14 +8,13 @@ import { cn } from "@/lib/utils";
 import { Bot, User } from "lucide-react";
 
 interface ChatMessageProps {
-  role: "user" | "bot" | "model";
+  role: "user" | "bot";
   content: string;
 }
 
 export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
   const isUser = role === "user";
-  // Xử lý role "model" như là "bot"
-  const formattedRole = role === "model" ? "bot" : role;
+  // Role chỉ có thể là "user" hoặc "bot"
   const contentRef = useRef<HTMLDivElement>(null);
   
   // Tham chiếu đến tin nhắn để xử lý cắt khoảng trắng và định dạng

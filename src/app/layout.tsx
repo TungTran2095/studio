@@ -16,6 +16,7 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: 'YINSEN', // Updated title
   description: 'An AI powered chatbot and asset viewer inspired by Firebase Studio', // Updated description
+  viewport: 'width=device-width, initial-scale=1, maximum-scale=1', // Thêm cấu hình viewport
 };
 
 export default function RootLayout({

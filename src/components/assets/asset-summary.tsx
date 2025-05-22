@@ -39,13 +39,20 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns'; // For formatting timestamps
 import { useAssetStore } from '@/store/asset-store'; // Import Zustand store
+import { useRouter } from 'next/navigation'; // Import router
 
 // Schema for form validation - remains the same
 const formSchema = z.object({
   apiKey: z.string().min(1, { message: "API Key is required." }),
   apiSecret: z.string().min(1, { message: "API Secret is required." }),
   isTestnet: z.boolean().default(false),
+  useDefault: z.boolean().default(false), // Thêm trường mới cho tích chọn mặc định
 });
+
+// Định nghĩa thông số tài khoản mặc định
+const DEFAULT_API_KEY = "UrsDp0aGxKhpBaR8ELTWyJaAMLMUlDXHk038kx2XeqVQYm7DBQh4zJHxR6Veuryw";
+const DEFAULT_API_SECRET = "IqoUeRkJiUMkb4ly9VLXfzYsxaNOgvkV9CoxGJbByoyhehwKJ1CsI5EgA7ues937";
+const DEFAULT_IS_TESTNET = true;
 
 // Define props including isExpanded and onToggle
 interface AssetSummaryProps {
@@ -58,6 +65,7 @@ const TARGET_SYMBOLS = ['BTC', 'USDT']; // UPDATED: Only BTC and USDT
 const REFRESH_INTERVAL_MS = 5000; // 5 seconds
 
 export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) => {
+  const router = useRouter(); // Add router
   // Use state from Zustand store
   const {
     assets,
@@ -96,6 +104,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
       apiKey: apiKey || "",
       apiSecret: apiSecret || "",
       isTestnet: isTestnet || false,
+      useDefault: false, // Thêm giá trị mặc định cho useDefault
     },
   });
 
@@ -103,6 +112,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
    const watchedApiKey = useWatch({ control: form.control, name: 'apiKey' });
    const watchedApiSecret = useWatch({ control: form.control, name: 'apiSecret' });
    const watchedIsTestnet = useWatch({ control: form.control, name: 'isTestnet' });
+   const watchedUseDefault = useWatch({ control: form.control, name: 'useDefault' }); // Theo dõi trường useDefault
 
    // Update store when form values change
    useEffect(() => {
@@ -121,6 +131,15 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
      });
    }, [apiKey, apiSecret, isTestnet, form]);
 
+   // Xử lý khi thay đổi trạng thái "useDefault"
+   useEffect(() => {
+     if (watchedUseDefault) {
+       // Nếu chọn dùng mặc định, cập nhật form với thông tin mặc định
+       form.setValue('apiKey', DEFAULT_API_KEY);
+       form.setValue('apiSecret', DEFAULT_API_SECRET);
+       form.setValue('isTestnet', DEFAULT_IS_TESTNET);
+     }
+   }, [watchedUseDefault, form]);
 
    // Moved handleFetchTrades definition *before* handleFetchAssets
    // Function to fetch trade history using the Server Action and update store
@@ -397,7 +416,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         if (value === 'history' && isConnected && trades.length === 0 && !isLoadingTrades) {
              if (apiKey && apiSecret) {
                  console.log("Switching to history tab, fetching initial trades.");
-                handleFetchTrades({ apiKey, apiSecret, isTestnet }, ownedSymbols, true); // Treat as manual fetch on tab switch
+                handleFetchTrades({ apiKey, apiSecret, isTestnet, useDefault: false }, ownedSymbols, true); // Treat as manual fetch on tab switch
             } else {
                  console.warn("Switching to history tab, but credentials missing.");
                  setTrades([]);
@@ -416,7 +435,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
            if (isConnected && apiKey && apiSecret) {
                console.log("[Auto-Refresh] Refreshing data...");
                // Fetch assets first (isManual = false)
-               await handleFetchAssets({ apiKey, apiSecret, isTestnet }, false);
+               await handleFetchAssets({ apiKey, apiSecret, isTestnet, useDefault: false }, false);
                // handleFetchAssets will trigger handleFetchTrades if on the history tab
            } else {
                 // console.log("[Auto-Refresh] Skipping refresh: Not connected or credentials missing.");
@@ -548,19 +567,27 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         );
     };
 
+    // Handler để chuyển đến trang chi tiết portfolio
+    const handleGoToPortfolio = () => {
+        router.push('/portfolio');
+    };
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
-      <CardHeader className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between">
+      <CardHeader 
+        className="p-3 border-b border-border flex-shrink-0 flex flex-row items-center justify-between cursor-pointer"
+        onClick={handleGoToPortfolio} // Add click handler to navigate
+      >
         <CardTitle className="text-lg font-medium text-foreground">Binance Account</CardTitle>
         <div className="flex items-center gap-1">
              {/* Manual Refresh Button - Added Here */}
              <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => {
+                onClick={(e) => {
+                    e.stopPropagation(); // Prevent navigation on refresh button click
                     if (apiKey && apiSecret) {
-                        handleFetchAssets({ apiKey, apiSecret, isTestnet }, true); // Force manual fetch
+                        handleFetchAssets({ apiKey, apiSecret, isTestnet, useDefault: false }, true); // Force manual fetch
                     } else {
                         toast({ title: "Credentials Missing", description: "Cannot refresh without API credentials.", variant: "destructive" });
                     }
@@ -574,7 +601,16 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
              </Button>
 
             {/* Existing Expand/Collapse Toggle */}
-             <Button variant="ghost" size="icon" onClick={onToggle} className="h-6 w-6 text-foreground">
+            <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                    e.stopPropagation(); // Prevent navigation on toggle button click
+                    onToggle();
+                }}
+                className="h-6 w-6 text-foreground flex-shrink-0"
+                title={isExpanded ? "Collapse" : "Expand"}
+            >
                 {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 <span className="sr-only">{isExpanded ? 'Collapse' : 'Expand'} Binance Account</span>
             </Button>
@@ -586,10 +622,21 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
            <div className="space-y-3 border-b border-border pb-4 mb-4">
                 <div
                     className="flex items-center justify-between cursor-pointer"
-                    onClick={() => setIsCredentialsVisible(!isCredentialsVisible)}
+                    onClick={(e) => {
+                        e.stopPropagation(); // Prevent navigation when toggling credentials
+                        setIsCredentialsVisible(!isCredentialsVisible);
+                    }}
                 >
                     <Label className="text-sm font-medium text-foreground">API Credentials {isConnected ? <span className="text-green-500 text-xs">(Connected)</span> : <span className="text-red-500 text-xs">(Disconnected)</span>}</Label>
-                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground">
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-5 w-5 text-muted-foreground"
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent navigation on toggle button click
+                            setIsCredentialsVisible(!isCredentialsVisible);
+                        }}
+                    >
                         {isCredentialsVisible ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         <span className="sr-only">{isCredentialsVisible ? 'Hide' : 'Show'} Credentials</span>
                     </Button>
@@ -598,7 +645,33 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 {isCredentialsVisible && (
                     <Form {...form}>
                          {/* Pass true for isManual flag */}
-                        <form onSubmit={form.handleSubmit((values) => handleFetchAssets(values, true))} className="space-y-3 pt-2">
+                        <form 
+                            onSubmit={(e) => {
+                                e.stopPropagation(); // Prevent navigation on form submit
+                                form.handleSubmit((values) => handleFetchAssets(values, true))(e);
+                            }} 
+                            className="space-y-3 pt-2"
+                        >
+                            {/* Thêm ô tích chọn "Use Default Account" */}
+                            <FormField
+                                control={form.control}
+                                name="useDefault"
+                                render={({ field }) => (
+                                <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                                    <FormControl>
+                                    <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                        className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                                        disabled={isLoadingAssets}
+                                        onClick={(e) => e.stopPropagation()} // Prevent navigation on checkbox click
+                                    />
+                                    </FormControl>
+                                    <FormLabel className="text-xs font-normal">Sử dụng tài khoản mặc định</FormLabel>
+                                </FormItem>
+                                )}
+                            />
+
                             <FormField
                                 control={form.control}
                                 name="apiKey"
@@ -611,13 +684,15 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                                     {...field}
                                     type="password"
                                     className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
-                                    disabled={isLoadingAssets}
+                                    disabled={isLoadingAssets || watchedUseDefault} // Vô hiệu hóa nếu đang tải hoặc đã chọn mặc định
+                                    onClick={(e) => e.stopPropagation()} // Prevent navigation on input click
                                     />
                                     </FormControl>
                                     <FormMessage className="text-xs" />
                                 </FormItem>
                                 )}
                             />
+                            
                             <FormField
                                 control={form.control}
                                 name="apiSecret"
@@ -630,139 +705,135 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                                         {...field}
                                         type="password"
                                         className="h-8 text-xs bg-input border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
-                                        disabled={isLoadingAssets}
+                                        disabled={isLoadingAssets || watchedUseDefault} // Vô hiệu hóa nếu đang tải hoặc đã chọn mặc định
+                                        onClick={(e) => e.stopPropagation()} // Prevent navigation on input click
                                     />
                                     </FormControl>
                                     <FormMessage className="text-xs" />
                                 </FormItem>
                                 )}
                             />
-                            <div className="flex items-center justify-between">
-                                <FormField
+                            
+                            <FormField
                                 control={form.control}
                                 name="isTestnet"
                                 render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                <FormItem className="flex flex-row items-start space-x-2 space-y-0">
                                     <FormControl>
-                                        <Checkbox
+                                    <Checkbox
                                         checked={field.value}
                                         onCheckedChange={field.onChange}
-                                        id="testnet"
-                                        disabled={isLoadingAssets}
-                                        className="border-primary data-[state=checked]:bg-primary-gradient data-[state=checked]:text-primary-foreground"
-                                        />
+                                        className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                                        disabled={isLoadingAssets || watchedUseDefault} // Vô hiệu hóa nếu đang tải hoặc đã chọn mặc định
+                                        onClick={(e) => e.stopPropagation()} // Prevent navigation on checkbox click
+                                    />
                                     </FormControl>
-                                    <FormLabel htmlFor="testnet" className="text-xs font-normal text-foreground">
-                                        Use Testnet
-                                    </FormLabel>
-                                    </FormItem>
+                                    <FormLabel className="text-xs font-normal">Use Testnet</FormLabel>
+                                </FormItem>
                                 )}
-                                />
-                                <Button type="submit" size="sm" disabled={isLoadingAssets} className="text-xs h-8">
-                                {isLoadingAssets ? "Loading..." : "Load Assets"}
-                                </Button>
-                            </div>
+                            />
+                            
+                            <Button 
+                                type="submit" 
+                                variant="default" 
+                                size="sm" 
+                                disabled={isLoadingAssets}
+                                className="w-full mt-2"
+                                onClick={(e) => e.stopPropagation()} // Prevent navigation on button click
+                            >
+                                {isLoadingAssets ? "Loading..." : isConnected ? "Reload Assets" : "Load Assets"}
+                            </Button>
                         </form>
                     </Form>
                 )}
-           </div>
-
-
-          <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center mb-2">
-                <TabsList className="grid w-full grid-cols-2 h-9">
-                    <TabsTrigger value="summary" className="text-xs h-full">Summary</TabsTrigger>
-                    <TabsTrigger value="history" className="text-xs h-full">Trade History</TabsTrigger>
-                </TabsList>
-                {/* Refresh button is moved to CardHeader */}
             </div>
-
-
-            {/* Asset Summary Tab Content */}
-            <TabsContent value="summary" className="flex-1 overflow-hidden mt-0">
-              <ScrollArea className="h-full" viewportRef={summaryViewportRef} orientation="both">
-                <div className="min-w-max">
-                    <Table>
-                    <TableHeader>
-                        <TableRow className="border-border">
-                        <TableHead className="w-[100px] text-muted-foreground text-xs">Asset</TableHead>
-                        <TableHead className="text-muted-foreground text-xs">Symbol</TableHead>
-                        <TableHead className="text-right text-muted-foreground text-xs">Quantity</TableHead>
-                        <TableHead className="text-right text-muted-foreground text-xs">Value (USD)</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {renderAssetRows()}
-                    </TableBody>
-                    {/* Total Value Caption */}
-                    <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs text-left">
-                        {isLoadingAssets && assets.length > 0 && (
-                             <span className="flex items-center gap-1 animate-pulse">
-                                <RotateCw className="h-3 w-3 animate-spin" /> Updating...
-                            </span>
-                        )}
-                        {!isLoadingAssets && isConnected && assets.length > 0 && (
-                            `Total Value (${TARGET_SYMBOLS.join(' & ')}): $${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        )}
-                         {!isLoadingAssets && isConnected && assets.length === 0 && (
-                            `No balance found for ${TARGET_SYMBOLS.join(' or ')}.`
-                         )}
-                         {!isConnected && !isLoadingAssets && (
-                            "Enter API keys and click 'Load Assets'."
-                         )}
-                         {/* Add a small note about auto-refresh */}
-                         <span className="text-xs opacity-70 float-right">
-                             {isConnected ? `(Auto-refreshes every ${REFRESH_INTERVAL_MS / 1000}s)` : ''}
-                         </span>
-                    </TableCaption>
-                    </Table>
-                 </div>
-              </ScrollArea>
-            </TabsContent>
-
-            {/* Trade History Tab Content */}
-            <TabsContent value="history" className="flex-1 overflow-hidden mt-0">
-               <ScrollArea className="h-full" viewportRef={historyViewportRef} orientation="both">
-                 <div className="min-w-max">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="border-border">
-                                <TableHead className="text-muted-foreground text-xs whitespace-nowrap">Time</TableHead>
-                                <TableHead className="text-muted-foreground text-xs whitespace-nowrap">Pair</TableHead>
-                                <TableHead className="text-muted-foreground text-xs whitespace-nowrap">Side</TableHead>
-                                <TableHead className="text-right text-muted-foreground text-xs whitespace-nowrap">Price</TableHead>
-                                <TableHead className="text-right text-muted-foreground text-xs whitespace-nowrap">Amount</TableHead>
-                                <TableHead className="text-right text-muted-foreground text-xs whitespace-nowrap">Total</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {renderTradeRows()}
-                        </TableBody>
-                        {/* Trade History Caption */}
-                        <TableCaption className="sticky bottom-0 bg-card py-2 text-muted-foreground border-t border-border text-xs text-left">
-                            {isLoadingTrades && trades.length > 0 && (
-                                <span className="flex items-center gap-1 animate-pulse">
-                                     <RotateCw className="h-3 w-3 animate-spin" /> Updating...
-                                </span>
-                            )}
-                            {!isLoadingTrades && isConnected && trades.length > 0 && (
-                                `Showing last ${trades.length} relevant trades involving ${TARGET_SYMBOLS.join(' or ')}.`
-                            )}
-                            {!isLoadingTrades && isConnected && trades.length === 0 && (
-                                `No recent relevant trades found for ${TARGET_SYMBOLS.join(' or ')}.`
-                            )}
-                            {!isConnected && !isLoadingTrades && (
-                                "Load Assets first to view trade history."
-                            )}
-                            <span className="text-xs opacity-70 float-right">
-                                {isConnected ? `(Auto-refreshes every ${REFRESH_INTERVAL_MS / 1000}s)` : ''}
-                             </span>
-                        </TableCaption>
-                    </Table>
-                  </div>
-               </ScrollArea>
-            </TabsContent>
-          </Tabs>
+            
+            <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Tabs for Assets and History */}
+                <Tabs defaultValue="assets" className="flex-1 flex flex-col">
+                    <TabsList className="grid grid-cols-2 h-8 text-xs" onClick={(e) => e.stopPropagation()}>
+                        <TabsTrigger value="assets">Assets</TabsTrigger>
+                        <TabsTrigger value="history">Trade History</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="assets" className="flex-1 flex flex-col overflow-hidden">
+                        <ScrollArea className="flex-1">
+                            <Table className="w-full">
+                                <TableHeader className="sticky top-0 bg-card">
+                                    <TableRow className="text-muted-foreground text-xs hover:bg-transparent">
+                                        <TableHead className="w-20">Asset</TableHead>
+                                        <TableHead className="text-right">Quantity</TableHead>
+                                        <TableHead className="text-right">Value (USD)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {assets.length > 0 ? (
+                                        assets.map((asset) => (
+                                            <TableRow key={asset.symbol} className="text-xs h-9 hover:bg-muted/30 transition-colors">
+                                                <TableCell className="font-medium">{asset.symbol}</TableCell>
+                                                <TableCell className="text-right">
+                                                    {asset.quantity.toLocaleString(undefined, {
+                                                        minimumFractionDigits: 0,
+                                                        maximumFractionDigits: 8
+                                                    })}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    ${asset.totalValue.toLocaleString(undefined, {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2
+                                                    })}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow className="border-border">
+                                            <TableCell colSpan={3} className="h-24 text-center text-muted-foreground text-xs">
+                                                {!isConnected ? "Connect API to load assets." : (isLoadingAssets ? "Loading assets..." : "No assets found.")}
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </ScrollArea>
+                    </TabsContent>
+                    
+                    <TabsContent value="history" className="flex-1 flex flex-col overflow-hidden">
+                        <ScrollArea className="flex-1">
+                            <Table className="w-full">
+                                <TableHeader className="sticky top-0 bg-card">
+                                    <TableRow className="text-muted-foreground text-xs hover:bg-transparent">
+                                        <TableHead className="w-18">Symbol</TableHead>
+                                        <TableHead>Side</TableHead>
+                                        <TableHead className="text-right">Price</TableHead>
+                                        <TableHead className="text-right">Quantity</TableHead>
+                                        <TableHead className="text-right">Time</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {renderTradeRows()}
+                                </TableBody>
+                            </Table>
+                        </ScrollArea>
+                    </TabsContent>
+                </Tabs>
+                
+                {/* Bottom Action to Link to Full Report */}
+                {isConnected && (
+                    <div 
+                        className="flex justify-center items-center pt-3 mt-3 border-t border-border"
+                        onClick={(e) => e.stopPropagation()} // Prevent double navigation effect
+                    >
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full text-xs"
+                            onClick={handleGoToPortfolio}
+                        >
+                            Xem chi tiết danh mục đầu tư
+                        </Button>
+                    </div>
+                )}
+            </div>
         </CardContent>
       )}
     </div>

@@ -133,7 +133,7 @@ async function createSafeBinanceClient(apiKey: string, apiSecret: string, isTest
   } catch (syncError) {
     console.error('[createSafeBinanceClient] Lỗi đồng bộ thời gian:', syncError);
     // Tiếp tục nhưng điều chỉnh offset thấp hơn nữa
-    TimeSync.adjustOffset(-10000); // Tăng từ -5000 lên -10000
+    TimeSync.adjustOffset(-20000); // Tăng từ -10000 lên -20000
   }
   
   // Làm sạch API key - loại bỏ tiền tố "API Key: " nếu có
@@ -148,10 +148,18 @@ async function createSafeBinanceClient(apiKey: string, apiSecret: string, isTest
     ...(isTestnet && {
       urls: {
         base: 'https://testnet.binance.vision/api/',
+        api: 'https://testnet.binance.vision/api/'
       },
     }),
+    // Sử dụng URL phụ cho production
+    ...(!isTestnet && {
+      urls: {
+        base: 'https://api1.binance.com/api/',
+        api: 'https://api1.binance.com/api/' 
+      }
+    }),
     // Đảm bảo recvWindow nhỏ hơn 60000ms theo yêu cầu của Binance API
-    recvWindow: 50000, // Giảm từ 59000ms xuống 50000ms để an toàn hơn
+    recvWindow: 30000, // Giảm từ 50000ms xuống 30000ms để phù hợp với khuyến nghị của Binance
     // Tự tạo timestamp thay vì dùng method
     timestamp: () => {
       // Luôn trả về timestamp nhỏ hơn thời gian thực để đảm bảo không vượt quá giới hạn server
@@ -162,7 +170,7 @@ async function createSafeBinanceClient(apiKey: string, apiSecret: string, isTest
     // Tắt kết nối lại tự động
     reconnect: false,
     // Giảm timeout để phát hiện lỗi sớm hơn
-    timeout: 60000, // Giảm từ 120000ms xuống 60000ms
+    timeout: 30000, // Giảm từ 60000ms xuống 30000ms
     // Thêm useServerTime để Binance tự đồng bộ thời gian
     useServerTime: true,
     // Thêm các options quan trọng khác
@@ -170,9 +178,13 @@ async function createSafeBinanceClient(apiKey: string, apiSecret: string, isTest
     keepAlive: true,
     // Thêm tham số để tăng khả năng xử lý lỗi
     handleDrift: true, // Cho phép xử lý độ trễ
+    // Thêm User-Agent để tránh bị chặn
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
   });
   
-  console.log('[createSafeBinanceClient] Đã khởi tạo Binance client với timestamp cố định -180000ms và recvWindow=50000ms');
+  console.log('[createSafeBinanceClient] Đã khởi tạo Binance client với timestamp cố định -300000ms và recvWindow=30000ms');
   
   return client;
 }
@@ -314,27 +326,18 @@ export async function fetchBinanceAssets(
   input: z.infer<typeof BinanceInputSchema>
 ): Promise<BinanceAssetsResult> {
   console.log('[fetchBinanceAssets] Input:', { apiKey: '***', apiSecret: '***', isTestnet: input.isTestnet });
-  // Validate input server-side
-  const validationResult = BinanceInputSchema.safeParse(input);
-  if (!validationResult.success) {
-    console.error('[fetchBinanceAssets] Invalid input:', validationResult.error);
-    return { success: false, data: [], error: 'Invalid input.' };
-  }
 
-  let { apiKey, apiSecret, isTestnet } = validationResult.data;
+  // Làm sạch API key (loại bỏ các ký tự không hợp lệ)
+  let apiKey = input.apiKey.trim();
+  console.log('[fetchBinanceAssets] API key đã làm sạch, chiều dài:', apiKey.length);
+
+  const apiSecret = input.apiSecret.trim();
   
-  // Làm sạch API key ngay từ đầu
-  apiKey = apiKey.replace(/API Key:\s+/i, '').trim();
-  console.log(`[fetchBinanceAssets] API key đã làm sạch, chiều dài: ${apiKey.length}`);
-
-  // Khởi tạo client mới với phương pháp an toàn 
-  let binance;
-  try {
-    binance = await createSafeBinanceClient(apiKey, apiSecret, isTestnet);
-  } catch (initError: any) {
-    console.error('[fetchBinanceAssets] Failed to initialize Binance client:', initError);
-    return { success: false, data: [], error: `Failed to initialize Binance client: ${initError.message}` };
-  }
+  // Khởi tạo client Binance với các cài đặt an toàn
+  const binance = await createSafeBinanceClient(apiKey, apiSecret, input.isTestnet);
+  
+  // Mảng lưu trữ tài sản
+  const assets: Asset[] = [];
 
   try {
     // 1. Fetch account balances with retry logic
