@@ -123,7 +123,7 @@ function handleBinanceAPIError(error: any): { message: string; code?: number; re
 }
 
 // Tạo hàm mới để khởi tạo Binance client an toàn hơn
-async function createSafeBinanceClient(apiKey: string, apiSecret: string, isTestnet: boolean = false) {
+export async function createSafeBinanceClient(apiKey: string, apiSecret: string, isTestnet: boolean = false): Promise<any> {
   console.log('[createSafeBinanceClient] Bắt đầu khởi tạo client...');
   
   // Đồng bộ thời gian trước khi tạo client

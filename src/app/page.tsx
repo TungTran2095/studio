@@ -1,23 +1,27 @@
 // src/app/page.tsx
 "use client";
 
-import { useState, type FC } from 'react';
-import Link from 'next/link';
-import { AssetSummary } from "@/components/assets/asset-summary";
+import { useState } from 'react';
 import { ChatWindow } from "@/components/chat/chat-window";
-import { TradingViewWidget } from "@/components/chart/tradingview-widget";
-import { AnalysisPanel } from "@/components/analysis/analysis-panel";
-import { TradingPanel } from "@/components/trading/trading-panel";
-import { Book, LineChart, BarChart, TrendingUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { SidebarNavigation } from "@/components/workspace/sidebar-navigation";
+import { WorkspaceContent } from "@/components/workspace/workspace-content";
+import { ModuleId } from '@/types/workspace';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
-  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
-  const [isChatExpanded, setIsChatExpanded] = useState(false); // Default chat to collapsed
+  // Workspace state
+  const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  
+  // Chat state
+  const [isChatExpanded, setIsChatExpanded] = useState(true);
 
-  const handleAnalysisToggle = () => {
-    setIsAnalysisExpanded(!isAnalysisExpanded);
+  const handleModuleChange = (moduleId: ModuleId) => {
+    setActiveModule(moduleId);
+  };
+
+  const handleSidebarToggle = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed);
   };
 
   const handleChatToggle = () => {
@@ -25,87 +29,28 @@ export default function Home() {
   };
 
   return (
-    // Main container: Use flex row
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Left Analysis Panel */}
-      <div
-        className={cn(
-          "flex flex-col transition-all duration-300 ease-in-out h-full border-r border-border",
-          isAnalysisExpanded ? "w-1/3 min-w-[380px]" : "w-16" // Đã tăng kích thước từ w-1/5 lên w-1/3
-        )}
-      >
-        {/* AnalysisPanel controls its internal visibility */}
-        <AnalysisPanel isExpanded={isAnalysisExpanded} onToggle={handleAnalysisToggle} />
-      </div>
+      {/* Left: Workspace Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar Navigation */}
+        <SidebarNavigation
+          activeModule={activeModule}
+          onModuleChange={handleModuleChange}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleSidebarToggle}
+        />
 
-      {/* Center Content Area (Flex column) */}
-      <div className="flex-1 flex flex-col gap-2 p-2 overflow-hidden">
-        {/* Top Chart Panel - Changed flex-[3] to flex-1 */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-lg shadow-md border border-border relative">
-            <h1 className="text-lg font-semibold p-3 border-b border-border text-foreground flex-shrink-0 flex justify-between items-center">
-              <span>BTC/USDT Price Chart</span>
-              <div className="flex space-x-2">
-                <Link href="/trading/strategy">
-                  <Button variant="outline" size="sm" className="flex items-center gap-1 h-8">
-                    <TrendingUp className="h-4 w-4" />
-                    <span>Chiến lược giao dịch</span>
-                  </Button>
-                </Link>
-                <Link href="/books">
-                  <Button variant="outline" size="sm" className="flex items-center gap-1 h-8">
-                    <Book className="h-4 w-4" />
-                    <span>Thư viện</span>
-                  </Button>
-                </Link>
-              </div>
-            </h1>
-            <div className="flex-1 p-0 overflow-hidden">
-                <TradingViewWidget />
-            </div>
-        </div>
-
-        {/* Bottom Panels Area (Flex row) */}
-        <div className="flex-1 flex gap-2 overflow-hidden">
-            {/* Asset Summary Panel */}
-            <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card">
-                {/* AssetSummary internally handles its content visibility based on its own toggle */}
-                <AssetSummary isExpanded={true} onToggle={() => {}} />
-            </div>
-
-             {/* Trading Panel */}
-            <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg shadow-md bg-card">
-                <TradingPanel />
-            </div>
-        </div>
-        
-        {/* Shortcuts Row */}
-        <div className="flex-shrink-0 flex gap-2 overflow-hidden p-1">
-          <Link href="/trading/strategy" className="flex-1">
-            <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              <span>Chiến lược giao dịch</span>
-            </Button>
-          </Link>
-          <Link href="/assets" className="flex-1">
-            <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-              <BarChart className="h-5 w-5" />
-              <span>Quản lý tài sản</span>
-            </Button>
-          </Link>
-          <Link href="/technical" className="flex-1">
-            <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-              <LineChart className="h-5 w-5" />
-              <span>Phân tích kỹ thuật</span>
-            </Button>
-          </Link>
+        {/* Main Workspace Content */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-background">
+          <WorkspaceContent activeModule={activeModule} />
         </div>
       </div>
 
-      {/* Right Chat Panel */}
+      {/* Right: Yinsen Chat Panel */}
       <div
         className={cn(
-          "flex flex-col transition-all duration-300 ease-in-out h-full border-l border-border",
-          isChatExpanded ? "w-1/3 min-w-[380px]" : "w-16"
+          "flex flex-col transition-all duration-300 ease-in-out h-full border-l border-border bg-card",
+          isChatExpanded ? "w-96 min-w-[384px]" : "w-16"
         )}
       >
         <ChatWindow isExpanded={isChatExpanded} onToggle={handleChatToggle} />
