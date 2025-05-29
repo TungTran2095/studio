@@ -2,208 +2,223 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
-  Activity, 
-  Zap, 
   TrendingUp, 
-  TrendingDown,
-  Wifi,
+  TrendingDown, 
+  RefreshCw, 
+  Wifi, 
   WifiOff,
-  Pause,
+  Clock,
+  Database,
+  Activity,
+  DollarSign,
+  BarChart3,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Zap,
   Play,
-  RefreshCw
+  Pause
 } from 'lucide-react';
 
-// Định nghĩa interface local
-interface RealMarketData {
+interface EnhancedMarketData {
   symbol: string;
+  name: string;
   price: number;
   change24h: number;
+  changePercent24h: number;
   volume: number;
-  lastUpdate: Date | string;
+  marketCap: number;
+  lastUpdate: Date;
   status: 'connected' | 'disconnected' | 'error';
+  source: 'coinmarketcap' | 'binance' | 'cache';
+  confidence: number;
+}
+
+interface ConnectionStatus {
+  source: string;
+  connected: boolean;
+  latency?: number;
+  status: string;
+  lastTest: Date;
+}
+
+interface CollectionStats {
+  totalRecords: number;
+  recordsToday: number;
+  activeSources: number;
+  dataQuality: number;
+  lastUpdate: Date;
+  realTimeConnections: number;
 }
 
 export function RealTimeDataMonitor() {
+  const [marketData, setMarketData] = useState<EnhancedMarketData[]>([]);
+  const [connections, setConnections] = useState<ConnectionStatus[]>([]);
+  const [stats, setStats] = useState<CollectionStats | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [isMonitoring, setIsMonitoring] = useState(true);
-  const [realTimeData, setRealTimeData] = useState<RealMarketData[]>([]);
-  const [connectionStats, setConnectionStats] = useState({
-    activeConnections: 0,
-    totalMessages: 0,
-    messagesPerSecond: 0,
-    uptime: '0m'
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [connections, setConnections] = useState<{ source: string; connected: boolean; latency?: number }[]>([]);
 
-  useEffect(() => {
-    loadRealTimeData();
-    checkConnections();
-    
-    // Thiết lập interval để cập nhật dữ liệu định kỳ
-    let interval: NodeJS.Timeout;
-    if (isMonitoring) {
-      interval = setInterval(() => {
-        loadRealTimeData();
-        updateConnectionStats();
-      }, 30000); // Cập nhật mỗi 30 giây
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isMonitoring]);
-
-  const loadRealTimeData = async () => {
+  // Fetch enhanced real-time data
+  const fetchRealTimeData = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      console.log('🔄 [RealTimeDataMonitor] Loading real-time data via API...');
-      
-      // Gọi API endpoint thay vì gọi trực tiếp service
-      const response = await fetch('/api/market-data/collect?action=test_realtime');
+      console.log('🔄 [RealTime UI] Fetching real-time data...');
+      const response = await fetch('/api/market-data/enhanced?action=realtime_data');
       const result = await response.json();
       
-      if (result.success && result.data) {
-        console.log('📊 [RealTimeDataMonitor] API response success:', result.data.length, 'items');
-        console.log('💰 [RealTimeDataMonitor] First item (BTC):', result.data[0]);
-        setRealTimeData(result.data);
+      if (result.success) {
+        // Convert date strings back to Date objects
+        const processedData = result.data.map((item: any) => ({
+          ...item,
+          lastUpdate: new Date(item.lastUpdate)
+        }));
+        setMarketData(processedData);
+        setLastRefresh(new Date());
+        console.log(`✅ [RealTime UI] Loaded ${processedData.length} crypto symbols`);
       } else {
-        console.error('❌ [RealTimeDataMonitor] API response failed:', result);
-        setRealTimeData([]);
+        console.error('❌ [RealTime UI] Failed to fetch data:', result.error);
       }
     } catch (error) {
-      console.error('❌ [RealTimeDataMonitor] Error loading real-time data:', error);
-      setRealTimeData([]);
+      console.error('❌ [RealTime UI] Error fetching real-time data:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const checkConnections = async () => {
+  // Fetch connection status
+  const fetchConnections = async () => {
     try {
-      // Gọi API endpoint thay vì gọi trực tiếp service
-      const response = await fetch('/api/market-data/collect?action=test_coinmarketcap');
+      const response = await fetch('/api/market-data/enhanced?action=connections_check');
       const result = await response.json();
       
-      const connectionStatus = [
-        {
-          source: 'Binance API',
-          connected: true, // Giả định kết nối tốt
-          latency: 50 + Math.floor(Math.random() * 100)
-        },
-        {
-          source: 'CoinMarketCap API',
-          connected: result.success === true,
-          latency: response.ok ? 100 + Math.floor(Math.random() * 200) : undefined
-        },
-        {
-          source: 'Supabase Database',
-          connected: true, // Supabase thường ổn định
-          latency: 30 + Math.floor(Math.random() * 50)
-        }
-      ];
-      
-      setConnections(connectionStatus);
-      
-      // Cập nhật connection stats
-      const activeConnections = connectionStatus.filter(conn => conn.connected).length;
-      const averageLatency = connectionStatus
-        .filter(conn => conn.latency)
-        .reduce((sum, conn) => sum + (conn.latency || 0), 0) / connectionStatus.length;
-
-      setConnectionStats(prev => ({
-        ...prev,
-        activeConnections,
-        messagesPerSecond: activeConnections * 10 + Math.floor(Math.random() * 20) // Simulate message rate
-      }));
+      if (result.success) {
+        const processedConnections = result.data.map((item: any) => ({
+          ...item,
+          lastTest: new Date(item.lastTest)
+        }));
+        setConnections(processedConnections);
+      }
     } catch (error) {
-      console.error('Error checking connections:', error);
-      // Fallback connection status
-      setConnections([
-        { source: 'Binance API', connected: false },
-        { source: 'CoinMarketCap API', connected: false },
-        { source: 'Supabase Database', connected: false }
-      ]);
+      console.error('❌ [RealTime UI] Error fetching connections:', error);
     }
   };
 
-  const updateConnectionStats = () => {
-    setConnectionStats(prev => ({
-      ...prev,
-      totalMessages: prev.totalMessages + Math.floor(Math.random() * 50) + 20,
-      messagesPerSecond: Math.floor(Math.random() * 30) + 20,
-      uptime: calculateUptime()
-    }));
-  };
-
-  const calculateUptime = () => {
-    // Simulate uptime calculation
-    const now = new Date();
-    const start = new Date(now.getTime() - 3 * 60 * 60 * 1000); // 3 hours ago
-    const diff = now.getTime() - start.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m`;
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'connected': return <Wifi className="h-4 w-4 text-green-500" />;
-      case 'disconnected': return <WifiOff className="h-4 w-4 text-gray-500" />;
-      case 'error': return <WifiOff className="h-4 w-4 text-red-500" />;
-      default: return <WifiOff className="h-4 w-4 text-gray-500" />;
+  // Fetch collection stats
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/market-data/enhanced?action=collection_stats');
+      const result = await response.json();
+      
+      if (result.success) {
+        const processedStats = {
+          ...result.data,
+          lastUpdate: new Date(result.data.lastUpdate)
+        };
+        setStats(processedStats);
+      }
+    } catch (error) {
+      console.error('❌ [RealTime UI] Error fetching stats:', error);
     }
   };
 
-  const getChangeIcon = (change: number) => {
-    return change >= 0 ? 
-      <TrendingUp className="h-4 w-4 text-green-500" /> : 
-      <TrendingDown className="h-4 w-4 text-red-500" />;
+  // Refresh all data
+  const refreshAllData = async () => {
+    await Promise.all([
+      fetchRealTimeData(),
+      fetchConnections(),
+      fetchStats()
+    ]);
   };
+
+  // Force refresh data
+  const forceRefresh = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/market-data/enhanced', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'refresh_data' })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        const processedData = result.data.map((item: any) => ({
+          ...item,
+          lastUpdate: new Date(item.lastUpdate)
+        }));
+        setMarketData(processedData);
+        setLastRefresh(new Date());
+      }
+    } catch (error) {
+      console.error('❌ [RealTime UI] Force refresh failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Auto refresh effect
+  useEffect(() => {
+    refreshAllData();
+    
+    if (autoRefresh && isMonitoring) {
+      const interval = setInterval(() => {
+        fetchRealTimeData();
+      }, 30000); // Refresh every 30 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [autoRefresh, isMonitoring]);
 
   const formatPrice = (price: number) => {
-    return price.toFixed(price > 1 ? 2 : 6);
+    return price >= 1 
+      ? `$${price.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}`
+      : `$${price.toFixed(6)}`;
   };
 
-  const formatChange = (change: number) => {
-    const prefix = change >= 0 ? '+' : '';
-    return `${prefix}${change.toFixed(2)}%`;
+  const formatVolume = (volume: number) => {
+    if (volume >= 1e9) return `$${(volume / 1e9).toFixed(2)}B`;
+    if (volume >= 1e6) return `$${(volume / 1e6).toFixed(1)}M`;
+    if (volume >= 1e3) return `$${(volume / 1e3).toFixed(1)}K`;
+    return `$${volume.toFixed(2)}`;
   };
 
-  const getLastUpdateText = (lastUpdate: Date | string) => {
-    const now = new Date();
-    const updateDate = typeof lastUpdate === 'string' ? new Date(lastUpdate) : lastUpdate;
-    
-    // Kiểm tra nếu không phải Date hợp lệ
-    if (isNaN(updateDate.getTime())) {
-      return 'Không xác định';
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 90) return 'text-green-600';
+    if (confidence >= 70) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getSourceBadge = (source: string) => {
+    switch (source) {
+      case 'coinmarketcap':
+        return <Badge className="bg-blue-500">CMC</Badge>;
+      case 'binance':
+        return <Badge className="bg-yellow-500">Binance</Badge>;
+      case 'cache':
+        return <Badge variant="secondary">Cache</Badge>;
+      default:
+        return <Badge variant="outline">Unknown</Badge>;
     }
-    
-    const diff = now.getTime() - updateDate.getTime();
-    const seconds = Math.floor(diff / 1000);
-    if (seconds < 1) return 'Vừa xong';
-    if (seconds < 60) return `${seconds}s trước`;
-    const minutes = Math.floor(seconds / 60);
-    return `${minutes}m trước`;
   };
 
   const handleToggleMonitoring = () => {
     setIsMonitoring(!isMonitoring);
   };
 
-  const handleRefresh = () => {
-    loadRealTimeData();
-    checkConnections();
-  };
-
-  if (isLoading && realTimeData.length === 0) {
+  if (isLoading && marketData.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-          <p className="text-muted-foreground">Đang tải dữ liệu real-time từ CoinMarketCap...</p>
+          <p className="text-muted-foreground">Đang tải dữ liệu real-time...</p>
         </div>
       </div>
     );
@@ -211,21 +226,18 @@ export function RealTimeDataMonitor() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+      {/* Header với controls */}
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Giám sát dữ liệu Real-time</h2>
+          <h2 className="text-xl font-semibold">Dữ liệu thị trường Real-time</h2>
           <p className="text-muted-foreground">
-            Theo dõi dữ liệu thị trường trực tiếp từ CoinMarketCap và kết nối API
+            Real-time crypto data với multiple sources và fallback strategy
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Làm mới
-          </Button>
+        <div className="flex items-center gap-2">
           <Button
             variant={isMonitoring ? "destructive" : "default"}
+            size="sm"
             onClick={handleToggleMonitoring}
           >
             {isMonitoring ? (
@@ -240,135 +252,111 @@ export function RealTimeDataMonitor() {
               </>
             )}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAutoRefresh(!autoRefresh)}
+          >
+            <Activity className="h-4 w-4 mr-2" />
+            Auto {autoRefresh ? 'ON' : 'OFF'}
+          </Button>
+          <Button
+            onClick={forceRefresh}
+            disabled={isLoading}
+            size="sm"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Force Refresh
+          </Button>
         </div>
       </div>
 
-      {/* Connection Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Kết nối hoạt động</p>
-                <p className="text-2xl font-bold">{connectionStats.activeConnections}</p>
-              </div>
-              <Activity className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Tổng requests</p>
-                <p className="text-2xl font-bold">{connectionStats.totalMessages.toLocaleString()}</p>
-              </div>
-              <Zap className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Requests/phút</p>
-                <p className="text-2xl font-bold">{connectionStats.messagesPerSecond}</p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-orange-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Uptime</p>
-                <p className="text-2xl font-bold">{connectionStats.uptime}</p>
-              </div>
-              <Activity className="h-8 w-8 text-purple-500" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Connection Status */}
-      {connections.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wifi className="h-5 w-5" />
-              Trạng thái kết nối API
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {connections.map((conn, index) => (
-                <div key={index} className="flex items-center gap-3 p-3 border rounded-lg">
-                  {conn.connected ? 
-                    <Wifi className="h-5 w-5 text-green-500" /> : 
-                    <WifiOff className="h-5 w-5 text-red-500" />
-                  }
-                  <div className="flex-1">
-                    <p className="font-medium">{conn.source}</p>
-                    {conn.latency && (
-                      <p className="text-sm text-muted-foreground">{conn.latency}ms</p>
-                    )}
-                  </div>
-                  <Badge variant={conn.connected ? "secondary" : "destructive"}>
-                    {conn.connected ? 'Kết nối' : 'Mất kết nối'}
-                  </Badge>
+      {/* Stats Overview */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-blue-500" />
+                <div>
+                  <p className="text-sm font-medium">Total Records</p>
+                  <p className="text-2xl font-bold">{stats.totalRecords.toLocaleString()}</p>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-green-500" />
+                <div>
+                  <p className="text-sm font-medium">Today's Records</p>
+                  <p className="text-2xl font-bold">{stats.recordsToday.toLocaleString()}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <Wifi className="h-5 w-5 text-purple-500" />
+                <div>
+                  <p className="text-sm font-medium">Live Connections</p>
+                  <p className="text-2xl font-bold">{stats.realTimeConnections}/{stats.activeSources}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-orange-500" />
+                <div>
+                  <p className="text-sm font-medium">Data Quality</p>
+                  <p className="text-2xl font-bold">{stats.dataQuality.toFixed(1)}%</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* Real-time Data Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Dữ liệu Real-time từ CoinMarketCap
-          </CardTitle>
-          <CardDescription>
-            Giá và khối lượng giao dịch được cập nhật từ CoinMarketCap API
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {realTimeData.length === 0 ? (
-            <div className="text-center py-8">
-              <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">Chưa có dữ liệu real-time</h3>
-              <p className="text-muted-foreground mb-4">
-                Kiểm tra kết nối API hoặc nhấn làm mới để tải dữ liệu
-              </p>
-              <Button onClick={handleRefresh}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Làm mới
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {realTimeData.map((item) => (
-                <div key={item.symbol} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      {getStatusIcon(item.status)}
-                      <div>
-                        <h4 className="font-medium">{item.symbol}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Cập nhật: {getLastUpdateText(item.lastUpdate)}
-                        </p>
-                      </div>
+      <Tabs defaultValue="market-data" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="market-data">Market Data</TabsTrigger>
+          <TabsTrigger value="connections">Connections</TabsTrigger>
+          <TabsTrigger value="debug">Debug Info</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="market-data">
+          {/* Last refresh info */}
+          <Alert className="mb-4">
+            <Clock className="h-4 w-4" />
+            <AlertDescription>
+              Last updated: {lastRefresh.toLocaleTimeString('vi-VN')} 
+              {autoRefresh && isMonitoring && ' • Auto-refresh every 30s'}
+              {!isMonitoring && ' • Monitoring paused'}
+            </AlertDescription>
+          </Alert>
+
+          {/* Market Data Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {marketData.map((crypto) => (
+              <Card key={crypto.symbol} className="relative">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{crypto.name}</CardTitle>
+                      <CardDescription>{crypto.symbol}</CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={item.status === 'connected' ? 'secondary' : 'destructive'}>
-                        {item.status === 'connected' ? 'Hoạt động' : 'Mất kết nối'}
-                      </Badge>
+                      {getSourceBadge(crypto.source)}
+                      <div className={`text-sm font-medium ${getConfidenceColor(crypto.confidence)}`}>
+                        {crypto.confidence}%
+                      </div>
                       {isMonitoring && (
                         <Badge variant="outline" className="animate-pulse">
                           Live
@@ -376,46 +364,127 @@ export function RealTimeDataMonitor() {
                       )}
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Giá</p>
-                      <p className="text-lg font-bold">${formatPrice(item.price)}</p>
-                    </div>
-
-                    <div>
-                      <p className="text-sm text-muted-foreground">Thay đổi 24h</p>
-                      <div className="flex items-center gap-1">
-                        {getChangeIcon(item.change24h)}
-                        <span className={`font-medium ${item.change24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {formatChange(item.change24h)}
-                        </span>
+                </CardHeader>
+                
+                <CardContent>
+                  <div className="space-y-3">
+                    {/* Price */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-2xl font-bold">{formatPrice(crypto.price)}</span>
+                      <div className={`flex items-center gap-1 ${
+                        crypto.change24h >= 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {crypto.change24h >= 0 ? 
+                          <TrendingUp className="h-4 w-4" /> : 
+                          <TrendingDown className="h-4 w-4" />
+                        }
+                        <span className="font-medium">{crypto.change24h.toFixed(2)}%</span>
                       </div>
                     </div>
 
-                    <div>
-                      <p className="text-sm text-muted-foreground">Khối lượng 24h</p>
-                      <p className="font-medium">${item.volume.toLocaleString()}</p>
+                    {/* Volume & Market Cap */}
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Volume 24h</p>
+                        <p className="font-medium">{formatVolume(crypto.volume)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Market Cap</p>
+                        <p className="font-medium">{formatVolume(crypto.marketCap)}</p>
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Updated: {crypto.lastUpdate.toLocaleTimeString('vi-VN')}</span>
+                      <div className="flex items-center gap-1">
+                        {crypto.status === 'connected' ? 
+                          <Wifi className="h-3 w-3 text-green-500" /> :
+                          <WifiOff className="h-3 w-3 text-red-500" />
+                        }
+                        <span>{crypto.status}</span>
+                      </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
-                  {/* Show data source */}
-                  <div className="mt-3 pt-3 border-t">
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">Nguồn:</span> CoinMarketCap API
-                      <span className="ml-3 font-medium">Cập nhật:</span> {
-                        typeof item.lastUpdate === 'string' 
-                          ? new Date(item.lastUpdate).toLocaleTimeString('vi-VN')
-                          : item.lastUpdate.toLocaleTimeString('vi-VN')
+        <TabsContent value="connections">
+          <div className="space-y-4">
+            {connections.map((conn) => (
+              <Card key={conn.source}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {conn.connected ? 
+                        <CheckCircle className="h-5 w-5 text-green-500" /> :
+                        <XCircle className="h-5 w-5 text-red-500" />
                       }
-                    </p>
+                      <div>
+                        <h3 className="font-medium">{conn.source}</h3>
+                        <p className="text-sm text-muted-foreground">{conn.status}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {conn.latency && (
+                        <p className="text-sm font-medium">{conn.latency}ms</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Last test: {conn.lastTest.toLocaleTimeString('vi-VN')}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="debug">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Debug Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">Market Data Status</h4>
+                    <p className="text-sm">Symbols loaded: {marketData.length}</p>
+                    <p className="text-sm">Average confidence: {
+                      marketData.length > 0 
+                        ? (marketData.reduce((sum, item) => sum + item.confidence, 0) / marketData.length).toFixed(1)
+                        : 0
+                    }%</p>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-medium mb-2">Data Sources</h4>
+                    {['coinmarketcap', 'binance', 'cache'].map(source => {
+                      const count = marketData.filter(item => item.source === source).length;
+                      return (
+                        <p key={source} className="text-sm">
+                          {source}: {count} symbols
+                        </p>
+                      );
+                    })}
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-medium mb-2">Monitoring Status</h4>
+                    <p className="text-sm">Monitoring: {isMonitoring ? 'Active' : 'Paused'}</p>
+                    <p className="text-sm">Auto Refresh: {autoRefresh ? 'Enabled' : 'Disabled'}</p>
+                    <p className="text-sm">Last refresh: {lastRefresh.toLocaleString('vi-VN')}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 } 

@@ -1,0 +1,50 @@
+{
+  "model_id": "test-lstm-001",
+  "algorithm": "LSTM",
+  "parameters": {
+    "units": 50,
+    "layers": 2,
+    "dropout": 0.2,
+    "learning_rate": 0.001,
+    "epochs": 10,
+    "batch_size": 32,
+    "sequence_length": 60,
+    "train_split": 0.7,
+    "validation_split": 0.15,
+    "patience": 5
+  },
+  "training": {
+    "epochs_trained": 6,
+    "final_train_loss": 0.0237102210521698,
+    "final_val_loss": 0.021785780787467957,
+    "final_test_loss": 0.19142937660217285
+  },
+  "metrics": {
+    "train": {
+      "mse": 40262968.60860254,
+      "mae": 5078.552410484785,
+      "rmse": 6345.310757449358,
+      "r2": -0.14251240039715807
+    },
+    "validation": {
+      "mse": 36995029.30293171,
+      "mae": 5413.332208481574,
+      "rmse": 6082.3539277924065,
+      "r2": -3.413864977828058
+    },
+    "test": {
+      "mse": 325071396.50916535,
+      "mae": 16255.201862418166,
+      "rmse": 18029.73645146166,
+      "r2": -3.758772578708366
+    }
+  },
+  "data_info": {
+    "total_samples": 940,
+    "train_samples": 657,
+    "val_samples": 141,
+    "test_samples": 142,
+    "features": 3,
+    "sequence_length": 60
+  }
+}

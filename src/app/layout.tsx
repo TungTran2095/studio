@@ -1,4 +1,4 @@
-import type {Metadata} from 'next';
+import type {Metadata, Viewport} from 'next';
 import { Roboto } from 'next/font/google'; // Import Roboto
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
@@ -12,12 +12,16 @@ const roboto = Roboto({
   display: 'swap',
 });
 
-
 export const metadata: Metadata = {
-  title: 'YINSEN', // Updated title
-  description: 'An AI powered chatbot and asset viewer inspired by Firebase Studio', // Updated description
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1', // Thêm cấu hình viewport
+  title: 'Urus Studio - AI Trading Platform',
+  description: 'Platform giao dịch crypto tích hợp AI với thu thập dữ liệu real-time từ Binance API và CoinMarketCap',
 };
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+}
 
 export default function RootLayout({
   children,

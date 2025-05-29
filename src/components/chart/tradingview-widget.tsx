@@ -62,8 +62,22 @@ export const TradingViewWidget: React.FC = memo(() => {
         if (typeof window.TradingView !== 'undefined' && typeof window.TradingView.widget === 'function') {
            // Store the widget instance
            try {
-               widgetInstance.current = new window.TradingView.widget(widgetConfig);
-               scriptAdded.current = true; // Mark script as loaded and widget initialized
+               // Đảm bảo container element tồn tại trước khi khởi tạo widget
+               const targetContainer = document.getElementById('tradingview_chart_container');
+               if (targetContainer && container.current) {
+                   widgetInstance.current = new window.TradingView.widget(widgetConfig);
+                   scriptAdded.current = true; // Mark script as loaded and widget initialized
+               } else {
+                   console.warn("TradingView container not found, retrying...");
+                   // Retry after a short delay
+                   setTimeout(() => {
+                       const retryContainer = document.getElementById('tradingview_chart_container');
+                       if (retryContainer && container.current) {
+                           widgetInstance.current = new window.TradingView.widget(widgetConfig);
+                           scriptAdded.current = true;
+                       }
+                   }, 100);
+               }
            } catch (error) {
                 console.error("Error initializing TradingView widget:", error);
            }
@@ -101,33 +115,51 @@ export const TradingViewWidget: React.FC = memo(() => {
       // Remove widget instance if it exists
       if (widgetInstance.current) {
         try {
-            // Kiểm tra xem widget có hợp lệ và có phần tử cha (parentNode) không
+            // Thử xóa widget một cách an toàn
+            if (typeof widgetInstance.current.remove === 'function') {
+                widgetInstance.current.remove();
+            }
+            
+            // Backup cleanup: xóa trực tiếp container content
             const chartContainer = document.getElementById('tradingview_chart_container');
-            if (chartContainer && chartContainer.innerHTML) {
-                // Xóa nội dung của container thay vì gọi remove() để tránh lỗi parentNode
+            if (chartContainer) {
                 chartContainer.innerHTML = '';
             }
             
-            // Nếu widget có hàm remove, thử gọi nó một cách an toàn
-            if (typeof widgetInstance.current.remove === 'function') {
-                // Kiểm tra thêm điều kiện để đảm bảo an toàn
-                const iframe = document.querySelector('iframe._tv-chart');
-                if (iframe && iframe.parentNode) {
-                    widgetInstance.current.remove();
-                }
-            }
         } catch (error) {
-            console.error("Error removing TradingView widget:", error);
+            console.warn("TradingView widget cleanup warning:", error);
+            // Fallback: xóa toàn bộ nội dung container
+            try {
+                const chartContainer = document.getElementById('tradingview_chart_container');
+                if (chartContainer) {
+                    chartContainer.innerHTML = '';
+                }
+            } catch (fallbackError) {
+                console.error("TradingView fallback cleanup failed:", fallbackError);
+            }
         }
         widgetInstance.current = null;
       }
       
-      // Clean up the container div
+      // Clean up the container div safely
       if (container.current) {
-        while (container.current.firstChild) {
-          container.current.removeChild(container.current.firstChild);
+        try {
+          // Safer way to clean up children
+          const containerElement = container.current;
+          while (containerElement.firstChild) {
+            try {
+              containerElement.removeChild(containerElement.firstChild);
+            } catch (childError) {
+              // If removeChild fails, try innerHTML
+              containerElement.innerHTML = '';
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn("Container cleanup warning:", error);
         }
       }
+      
       // Reset script added status
       scriptAdded.current = false;
     };

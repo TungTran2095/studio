@@ -16,11 +16,11 @@ export const WORKSPACE_MODULES: WorkspaceModule[] = [
     path: '/workspace/market-data'
   },
   {
-    id: 'quant-research',
-    name: 'Nghiên cứu và phát triển mô hình Quant',
-    description: 'Phát triển và kiểm tra các mô hình định lượng',
+    id: 'quantitative-research',
+    name: 'Nghiên cứu Định lượng & Phát triển Mô hình',
+    description: 'Xây dựng mô hình, kiểm tra giả thuyết, backtesting và tối ưu hóa chiến lược giao dịch định lượng',
     icon: 'Brain',
-    path: '/workspace/quant-research'
+    path: '/workspace/quantitative-research'
   },
   {
     id: 'algorithm-optimization',

@@ -106,5 +106,14 @@ body {
     @apply hover:bg-gradient-to-r hover:from-red-600 hover:via-orange-600 hover:to-yellow-500;
   }
 
+  /* Tooltip z-index fix */
+  [data-radix-popper-content-wrapper] {
+    z-index: 9999 !important;
+  }
+  
+  .tooltip-content {
+    z-index: 9999 !important;
+  }
+
   /* Removed styling for react-resizable-panels handles */
 }

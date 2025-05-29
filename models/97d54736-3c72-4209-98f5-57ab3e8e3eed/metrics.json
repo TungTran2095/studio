@@ -1,0 +1,12 @@
+{
+  "train_rmse": 83.21238697378446,
+  "train_mae": 50.66939457865192,
+  "train_r2": 0.9996235309817378,
+  "test_rmse": 69.89116221605296,
+  "test_mae": 46.443177056539575,
+  "test_r2": 0.9985364843724726,
+  "feature_count": 25,
+  "training_samples": 34555,
+  "test_samples": 8636,
+  "lookback_window": 5
+}

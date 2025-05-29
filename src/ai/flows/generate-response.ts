@@ -28,6 +28,7 @@ import { TrendFollowingStrategy } from '@/lib/trading/strategies/trend-following
 import { SignalType } from '@/lib/trading/strategy';
 import { placeBuyOrder, placeSellOrder } from '@/actions/trade';
 import { placeBuyOrderTool, placeSellOrderTool } from '@/ai/tools/binance-tools';
+import { workspaceTools } from '@/ai/tools/workspace-tools';
 
 // Mock data cho candles trong trường hợp không có dữ liệu thực
 function generateMockCandles(symbol: string, length: number = 500): any[] {
@@ -397,6 +398,27 @@ Vui lòng kiểm tra lại thông tin hoặc thử lại sau.`
       } else {
         return {
           response: `Tôi nhận thấy bạn muốn ${tradeInfo.action === 'BUY' ? 'mua' : 'bán'} ${tradeInfo.quantity || ''} ${tradeInfo.symbol || 'BTC'}, nhưng để thực hiện giao dịch, bạn cần thiết lập API key và API secret của Binance. Vui lòng vào phần Cài đặt để thiết lập thông tin này.`
+        };
+      }
+    }
+
+    // Kiểm tra yêu cầu workspace (tương tác với chức năng thu thập dữ liệu)
+    const { isWorkspaceRequest, identifyWorkspaceAction, executeWorkspaceAction } = await import('@/ai/tools/workspace-tools');
+    if (isWorkspaceRequest(input.message)) {
+      console.log('[generateResponseFlow] Phát hiện yêu cầu workspace');
+      
+      try {
+        const workspaceRequest = identifyWorkspaceAction(input.message);
+        if (workspaceRequest.action !== 'none') {
+          const workspaceResponse = await executeWorkspaceAction(workspaceRequest.action, workspaceRequest.params);
+          return {
+            response: `🤖 **Yinsen đã thực hiện yêu cầu workspace của bạn:**\n\n${workspaceResponse}\n\n💡 *Tôi có thể giúp bạn quản lý thu thập dữ liệu, jobs, tin tức và dữ liệu real-time. Hãy hỏi tôi về bất kỳ chức năng workspace nào!*`
+          };
+        }
+      } catch (error: any) {
+        console.error('[generateResponseFlow] Workspace execution error:', error);
+        return {
+          response: `🤖 Tôi đã nhận được yêu cầu workspace của bạn nhưng gặp lỗi khi thực hiện. Vui lòng thử lại sau hoặc kiểm tra workspace manually.\n\nLỗi: ${error?.message || 'Unknown error'}`
         };
       }
     }

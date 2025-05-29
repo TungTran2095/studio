@@ -12,6 +12,8 @@ export interface BinanceKlineData {
   volume: string;
   quoteAssetVolume: string;
   trades: number;
+  takerBuyBaseAssetVolume: string;
+  takerBuyQuoteAssetVolume: string;
 }
 
 export class BinanceDataCollector {
@@ -20,9 +22,24 @@ export class BinanceDataCollector {
   /**
    * Lấy dữ liệu OHLCV từ Binance API
    */
-  async fetchKlineData(symbol: string, interval: string = '1m', limit: number = 100): Promise<BinanceKlineData[]> {
+  async fetchKlineData(
+    symbol: string, 
+    interval: string = '1m', 
+    limit: number = 100,
+    startTime?: Date,
+    endTime?: Date
+  ): Promise<BinanceKlineData[]> {
     try {
-      const url = `${this.baseUrl}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      let url = `${this.baseUrl}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      
+      // Add time filters if provided
+      if (startTime) {
+        url += `&startTime=${startTime.getTime()}`;
+      }
+      if (endTime) {
+        url += `&endTime=${endTime.getTime()}`;
+      }
+      
       console.log(`🔍 [BinanceCollector] Fetching data from: ${url}`);
 
       const response = await fetch(url);
@@ -45,10 +62,15 @@ export class BinanceDataCollector {
         close: item[4],
         volume: item[5],
         quoteAssetVolume: item[7],
-        trades: item[8]
+        trades: item[8],
+        takerBuyBaseAssetVolume: item[9],
+        takerBuyQuoteAssetVolume: item[10]
       }));
 
       console.log(`✅ [BinanceCollector] Successfully fetched ${klineData.length} records for ${symbol}`);
+      if (startTime || endTime) {
+        console.log(`📅 [BinanceCollector] Time range: ${startTime?.toISOString()} to ${endTime?.toISOString()}`);
+      }
       return klineData;
 
     } catch (error) {
@@ -60,32 +82,55 @@ export class BinanceDataCollector {
   /**
    * Lưu dữ liệu vào Supabase
    */
-  async saveToSupabase(data: BinanceKlineData[]): Promise<boolean> {
+  async saveToSupabase(data: BinanceKlineData[], targetOptions?: {
+    targetDatabase?: string;
+    targetTable?: string;
+  }): Promise<boolean> {
     if (!supabase) {
       console.error('❌ [BinanceCollector] Supabase client not initialized');
       return false;
     }
 
     try {
-      // Transform data to match Supabase table structure
-      const supabaseData = data.map(item => ({
-        symbol: item.symbol,
-        open_time: new Date(item.openTime).toISOString(),
-        close_time: new Date(item.closeTime).toISOString(),
-        open: parseFloat(item.open),
-        high: parseFloat(item.high),
-        low: parseFloat(item.low),
-        close: parseFloat(item.close),
-        volume: parseFloat(item.volume),
-        quote_asset_volume: parseFloat(item.quoteAssetVolume),
-        number_of_trades: item.trades,
-        inserted_at: new Date().toISOString()
-      }));
-
       // Determine table name based on symbol and interval
-      const tableName = `OHLCV_${data[0].symbol}_${data[0].interval}`.replace('USDT', '_USDT');
+      const tableName = targetOptions?.targetTable || `OHLCV_${data[0].symbol}_${data[0].interval}`.replace('USDT', '_USDT');
+      
+      // Check if table is specific to a symbol (contains symbol in name)
+      const isSymbolSpecificTable = /OHLCV_[A-Z]+_USDT_\d+[mhd]/.test(tableName);
+      
+      console.log(`🔍 [BinanceCollector] Processing ${data.length} records for table: ${tableName}`);
+      console.log(`📊 [BinanceCollector] Table type: ${isSymbolSpecificTable ? 'Symbol-specific' : 'Generic'}`);
+      
+      // Transform data to match Supabase table structure
+      const supabaseData = data.map(item => {
+        const baseData = {
+          open_time: new Date(item.openTime).toISOString(),
+          close_time: new Date(item.closeTime).toISOString(),
+          open: parseFloat(item.open),
+          high: parseFloat(item.high),
+          low: parseFloat(item.low),
+          close: parseFloat(item.close),
+          volume: parseFloat(item.volume),
+          quote_asset_volume: parseFloat(item.quoteAssetVolume),
+          number_of_trades: item.trades,
+          taker_buy_base_asset_volume: parseFloat(item.takerBuyBaseAssetVolume),
+          taker_buy_quote_asset_volume: parseFloat(item.takerBuyQuoteAssetVolume),
+          inserted_at: new Date().toISOString()
+        };
+
+        // Only add symbol column if table is NOT symbol-specific
+        if (!isSymbolSpecificTable) {
+          return {
+            symbol: item.symbol,
+            ...baseData
+          };
+        }
+
+        return baseData;
+      });
       
       console.log(`💾 [BinanceCollector] Saving ${supabaseData.length} records to table: ${tableName}`);
+      console.log(`📊 [BinanceCollector] Sample record structure:`, JSON.stringify(supabaseData[0], null, 2));
 
       const { data: insertedData, error } = await supabase
         .from(tableName)
@@ -96,10 +141,13 @@ export class BinanceDataCollector {
 
       if (error) {
         console.error('❌ [BinanceCollector] Supabase insert error:', error);
+        console.error('❌ [BinanceCollector] Failed table name:', tableName);
+        console.error('❌ [BinanceCollector] Sample data causing error:', JSON.stringify(supabaseData[0], null, 2));
         return false;
       }
 
       console.log(`✅ [BinanceCollector] Successfully saved ${supabaseData.length} records to ${tableName}`);
+      console.log(`📊 [BinanceCollector] Insert completed successfully`);
       return true;
 
     } catch (error) {
@@ -111,16 +159,32 @@ export class BinanceDataCollector {
   /**
    * Chạy job thu thập dữ liệu complete
    */
-  async runDataCollection(symbol: string, interval: string = '1m', limit: number = 100): Promise<{
+  async runDataCollection(
+    symbol: string, 
+    interval: string = '1m', 
+    limit: number = 100,
+    startTime?: Date,
+    endTime?: Date,
+    targetOptions?: {
+      targetDatabase?: string;
+      targetTable?: string;
+    }
+  ): Promise<{
     success: boolean;
     recordsCollected: number;
     error?: string;
   }> {
     try {
       console.log(`🚀 [BinanceCollector] Starting data collection for ${symbol} (${interval})`);
+      if (startTime || endTime) {
+        console.log(`📅 [BinanceCollector] Collection period: ${startTime?.toISOString()} to ${endTime?.toISOString()}`);
+      }
+      if (targetOptions?.targetDatabase && targetOptions?.targetTable) {
+        console.log(`🎯 [BinanceCollector] Target: ${targetOptions.targetDatabase}/${targetOptions.targetTable}`);
+      }
 
       // 1. Fetch data from Binance
-      const klineData = await this.fetchKlineData(symbol, interval, limit);
+      const klineData = await this.fetchKlineData(symbol, interval, limit, startTime, endTime);
 
       if (klineData.length === 0) {
         return {
@@ -130,8 +194,8 @@ export class BinanceDataCollector {
         };
       }
 
-      // 2. Save to Supabase
-      const saveSuccess = await this.saveToSupabase(klineData);
+      // 2. Save to Supabase with target options
+      const saveSuccess = await this.saveToSupabase(klineData, targetOptions);
 
       if (!saveSuccess) {
         return {

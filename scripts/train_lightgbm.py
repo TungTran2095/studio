@@ -1,180 +1,260 @@
+#!/usr/bin/env python3
+"""
+LightGBM Training Script - Compatible with model_trainer.py interface
+"""
 
 import os
-import argparse
-import json
 import sys
+import json
+import argparse
 import traceback
+import pickle
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-from supabase import create_client, Client
-from dotenv import load_dotenv
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-# Load environment variables from .env file
-load_dotenv()
-
-# --- Argument Parsing for LightGBM ---
-parser = argparse.ArgumentParser(description='Train LightGBM model for time series forecasting.')
-# Model Parameters (Example LightGBM params)
-parser.add_argument('--num_leaves', type=int, default=31, help='Maximum number of leaves in one tree.')
-parser.add_argument('--learning_rate', type=float, required=True, help='Boosting learning rate.')
-parser.add_argument('--feature_fraction', type=float, default=0.9, help='Fraction of features to be considered for each tree.')
-parser.add_argument('--bagging_fraction', type=float, default=0.8, help='Fraction of data to be used for bagging.')
-parser.add_argument('--bagging_freq', type=int, default=5, help='Frequency for bagging.')
-parser.add_argument('--boosting_type', type=str, default='gbdt', choices=['gbdt', 'dart', 'goss'], help='Boosting type.')
-parser.add_argument('--num_iterations', type=int, required=True, help='Number of boosting iterations (trees).')
-# Data Parameters
-parser.add_argument('--train_test_split_ratio', type=float, required=True, help='Ratio for training data split.')
-parser.add_argument('--target_column', type=str, default='close', help='Column name to predict.')
-parser.add_argument('--feature_columns', nargs='+', default=['open', 'high', 'low', 'close', 'volume'], help='List of base feature columns.')
-parser.add_argument('--lags', type=int, default=5, help='Number of lag features to create.')
-parser.add_argument('--forecast_horizon', type=int, default=1, help='Number of steps ahead to predict.')
-
-args = parser.parse_args()
-
-# --- Helper Functions ---
-def create_lag_features(df, lags, cols):
-    """Creates lag features for specified columns."""
-    df_lagged = df.copy()
-    for col in cols:
-        for lag in range(1, lags + 1):
-            df_lagged[f'{col}_lag_{lag}'] = df_lagged[col].shift(lag)
-    return df_lagged
-
-def print_json_output(success, message=None, rmse=None, mae=None):
-    output = {"success": success}
-    if message:
-        output["message"] = message
-    if rmse is not None:
-        if "results" not in output: output["results"] = {}
-        output["results"]["rmse"] = rmse
-    if mae is not None:
-        if "results" not in output: output["results"] = {}
-        output["results"]["mae"] = mae
-    print(json.dumps(output))
+def log(message, level="INFO"):
+    """Log with timestamp"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] [{level}] {message}")
     sys.stdout.flush()
 
-# --- Main Training Logic ---
-try:
-    # --- 1. Connect to Supabase ---
-    supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
-    supabase_key = os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-    if not supabase_url or not supabase_key:
-        raise ValueError("Missing Supabase URL or Key.")
-    print("[Python Script - LightGBM] Connecting to Supabase...", file=sys.stderr)
-    supabase: Client = create_client(supabase_url, supabase_key)
-    print("[Python Script - LightGBM] Supabase client created.", file=sys.stderr)
-
-    # --- 2. Fetch Data ---
-    print(f"[Python Script - LightGBM] Fetching data...", file=sys.stderr)
-    response = supabase.table("OHLCV_BTC_USDT_1m").select("*").order("open_time", desc=False).execute()
-    print(f"[Python Script - LightGBM] Fetched {len(response.data)} records.", file=sys.stderr)
-    if not response.data:
-        raise ValueError("No data fetched.")
-
-    df = pd.DataFrame(response.data)
-    df['open_time'] = pd.to_datetime(df['open_time'])
-    df = df.sort_values('open_time').set_index('open_time')
-
-    # --- 3. Feature Engineering ---
-    base_cols = args.feature_columns
-    if not all(col in df.columns for col in base_cols):
-        missing_cols = [col for col in base_cols if col not in df.columns]
-        raise ValueError(f"Missing base columns: {', '.join(missing_cols)}")
-
-    print(f"[Python Script - LightGBM] Creating {args.lags} lag features for {base_cols}...", file=sys.stderr)
-    df_processed = create_lag_features(df[base_cols], args.lags, base_cols)
-
-    # Create target variable (shifted future value)
-    df_processed['target'] = df_processed[args.target_column].shift(-args.forecast_horizon)
-
-    # Drop rows with NaN values created by shifting/lagging
-    df_processed = df_processed.dropna()
-
-    if df_processed.empty:
-        raise ValueError("Not enough data after creating lag features and target.")
-
-    print(f"[Python Script - LightGBM] Processed data shape: {df_processed.shape}", file=sys.stderr)
-    # Define features (X) and target (y)
-    feature_names = [col for col in df_processed.columns if col != 'target']
-    X = df_processed[feature_names]
-    y = df_processed['target']
-
-    # --- 4. Split Data ---
-    print(f"[Python Script - LightGBM] Splitting data (Train ratio: {args.train_test_split_ratio})...", file=sys.stderr)
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, train_size=args.train_test_split_ratio, shuffle=False) # No shuffle for time series
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, shuffle=False)
-    print(f"[Python Script - LightGBM] Split sizes: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}", file=sys.stderr)
-
-    if len(X_train) == 0 or len(X_val) == 0 or len(X_test) == 0:
-        raise ValueError("Data split resulted in empty sets.")
-
-    # --- 5. Prepare LightGBM Datasets ---
-    print("[Python Script - LightGBM] Creating LightGBM datasets...", file=sys.stderr)
-    lgb_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
-    lgb_val = lgb.Dataset(X_val, y_val, reference=lgb_train, feature_name=feature_names)
-
-    # --- 6. Define LightGBM Parameters ---
-    params = {
-        'objective': 'regression_l1', # MAE loss, good for financial data
-        'metric': ['mae', 'rmse'], # Evaluate using MAE and RMSE
-        'boosting_type': args.boosting_type,
-        'num_leaves': args.num_leaves,
-        'learning_rate': args.learning_rate,
-        'feature_fraction': args.feature_fraction,
-        'bagging_fraction': args.bagging_fraction,
-        'bagging_freq': args.bagging_freq,
-        'verbose': -1, # Suppress verbose output during training
-        'n_jobs': -1, # Use all available cores
-        'seed': 42,
-        'force_col_wise': True, # Often faster for large number of features
-    }
-    print("[Python Script - LightGBM] LightGBM Parameters:", params, file=sys.stderr)
-
-    # --- 7. Train Model ---
-    print(f"[Python Script - LightGBM] Starting training ({args.num_iterations} iterations)...", file=sys.stderr)
-    evals_result = {} # To store evaluation results
-    gbm = lgb.train(
-        params,
-        lgb_train,
-        num_boost_round=args.num_iterations,
-        valid_sets=[lgb_train, lgb_val],
-        callbacks=[
-            lgb.early_stopping(stopping_rounds=20, verbose=True), # Increased verbosity for callback
-            lgb.log_evaluation(period=10), # Log every 10 rounds
-            lgb.record_evaluation(evals_result) # Store metrics
-        ]
-    )
-    print("[Python Script - LightGBM] Training finished.", file=sys.stderr)
-
-    # --- 8. Evaluate Model ---
-    print("[Python Script - LightGBM] Evaluating model on test set...", file=sys.stderr)
-    y_pred_test = gbm.predict(X_test, num_iteration=gbm.best_iteration)
-
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred_test))
-    mae = mean_absolute_error(y_test, y_pred_test)
-    print(f"[Python Script - LightGBM] Evaluation Results - RMSE: {rmse:.4f}, MAE: {mae:.4f}", file=sys.stderr)
-
-    # Get validation metrics from the best iteration
+def load_json_data(file_path):
+    """Load data from JSON file"""
     try:
-        best_iter_index = gbm.best_iteration - 1 if gbm.best_iteration > 0 else 0
-        val_rmse = evals_result['valid_1']['rmse'][best_iter_index]
-        val_mae = evals_result['valid_1']['mae'][best_iter_index]
-        final_val_loss_message = f"Best Iteration: {gbm.best_iteration}, Val RMSE: {val_rmse:.4f}, Val MAE: {val_mae:.4f}"
-    except (IndexError, KeyError) as e:
-         print(f"[Python Script - LightGBM] Warning: Could not retrieve validation metrics from evals_result. Error: {e}", file=sys.stderr)
-         final_val_loss_message = f"Training Completed. Best Iteration: {gbm.best_iteration} (Validation metrics retrieval failed)"
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        return pd.DataFrame(data)
+    except Exception as e:
+        log(f"❌ Failed to load data from {file_path}: {e}", "ERROR")
+        raise
 
+def prepare_features(df, config):
+    """Prepare features for LightGBM training"""
+    # Default feature columns
+    feature_cols = ['open_price', 'high_price', 'low_price', 'close_price', 'volume']
+    target_col = 'close_price'
+    
+    # Use config if available
+    if config:
+        feature_cols = config.get('feature_columns', feature_cols)
+        target_col = config.get('target_column', target_col)
+    
+    # Ensure columns exist
+    available_cols = [col for col in feature_cols if col in df.columns]
+    if not available_cols:
+        log(f"❌ No valid feature columns found. Available: {list(df.columns)}", "ERROR")
+        raise ValueError("No valid feature columns")
+    
+    # Check target column
+    if target_col not in df.columns:
+        log(f"⚠️ Target column '{target_col}' not found, using 'close_price'", "WARNING")
+        target_col = 'close_price'
+    
+    log(f"📊 Using features: {available_cols}")
+    log(f"🎯 Target column: {target_col}")
+    
+    # Create features and target
+    X = df[available_cols].ffill().fillna(0)
+    y = df[target_col].ffill().fillna(0)
+    
+    return X, y, available_cols, target_col
 
-    # --- 9. Output Results ---
-    final_message = f"LightGBM Training completed. {final_val_loss_message}"
-    # Output test set metrics
-    print_json_output(success=True, message=final_message, rmse=rmse, mae=mae)
+def main():
+    parser = argparse.ArgumentParser(description='LightGBM Training Script')
+    parser.add_argument('--train_data', required=True, help='Path to training data JSON file')
+    parser.add_argument('--test_data', required=True, help='Path to test data JSON file')
+    parser.add_argument('--config', required=True, help='Path to training config JSON file')
+    parser.add_argument('--model_id', required=True, help='Model ID')
+    parser.add_argument('--output_dir', required=True, help='Output directory for saving model')
+    
+    args = parser.parse_args()
+    
+    try:
+        log("🚀 Starting LightGBM training process")
+        
+        # Load configuration
+        log("📋 Loading configuration...")
+        try:
+            with open(args.config, 'r') as f:
+                config = json.load(f)
+        except Exception as e:
+            log(f"⚠️ Failed to load config, using defaults: {e}", "WARNING")
+            config = {}
+        
+        # Get LightGBM parameters from config
+        lgb_params = {
+            'objective': 'regression',
+            'metric': ['rmse', 'mae'],
+            'boosting_type': config.get('boosting_type', 'gbdt'),
+            'num_leaves': config.get('num_leaves', 31),
+            'learning_rate': config.get('learning_rate', 0.1),
+            'feature_fraction': config.get('feature_fraction', 0.9),
+            'bagging_fraction': config.get('bagging_fraction', 0.8),
+            'bagging_freq': config.get('bagging_freq', 5),
+            'verbose': -1,
+            'random_state': config.get('random_state', 42)
+        }
+        
+        num_boost_round = config.get('n_estimators', 100)
+        early_stopping_rounds = config.get('early_stopping_rounds', 50)
+        
+        log(f"⚙️ LightGBM parameters: {lgb_params}")
+        log(f"🔄 Boost rounds: {num_boost_round}, Early stopping: {early_stopping_rounds}")
+        
+        # Load training data
+        log("📥 Loading training data...")
+        train_df = load_json_data(args.train_data)
+        log(f"📊 Training data shape: {train_df.shape}")
+        
+        # Load test data
+        log("📥 Loading test data...")
+        test_df = load_json_data(args.test_data)
+        log(f"📊 Test data shape: {test_df.shape}")
+        
+        # Prepare features
+        log("🔧 Preparing features...")
+        X_train, y_train, feature_cols, target_col = prepare_features(train_df, config)
+        X_test, y_test, _, _ = prepare_features(test_df, config)
+        
+        log(f"✅ Feature preparation completed")
+        log(f"📊 Training set: {X_train.shape}, Test set: {X_test.shape}")
+        
+        # Create LightGBM datasets
+        log("🏗️ Creating LightGBM datasets...")
+        train_dataset = lgb.Dataset(X_train, label=y_train, feature_name=feature_cols)
+        test_dataset = lgb.Dataset(X_test, label=y_test, reference=train_dataset, feature_name=feature_cols)
+        
+        # Train model
+        log("🚀 Starting LightGBM training...")
+        start_time = datetime.now()
+        
+        evals_result = {}
+        model = lgb.train(
+            params=lgb_params,
+            train_set=train_dataset,
+            num_boost_round=num_boost_round,
+            valid_sets=[train_dataset, test_dataset],
+            valid_names=['train', 'test'],
+            callbacks=[
+                lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False),
+                lgb.log_evaluation(period=0),  # No verbose output
+                lgb.record_evaluation(evals_result)
+            ]
+        )
+        
+        training_time = (datetime.now() - start_time).total_seconds()
+        log(f"✅ LightGBM training completed in {training_time:.2f}s")
+        
+        # Make predictions
+        log("🔮 Generating predictions...")
+        train_pred = model.predict(X_train, num_iteration=model.best_iteration)
+        test_pred = model.predict(X_test, num_iteration=model.best_iteration)
+        
+        # Calculate metrics
+        log("📊 Calculating metrics...")
+        
+        # Training metrics
+        train_rmse = np.sqrt(mean_squared_error(y_train, train_pred))
+        train_mae = mean_absolute_error(y_train, train_pred)
+        train_r2 = r2_score(y_train, train_pred)
+        
+        # Test metrics
+        test_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
+        test_mae = mean_absolute_error(y_test, test_pred)
+        test_r2 = r2_score(y_test, test_pred)
+        
+        log(f"📊 Training - RMSE: {train_rmse:.6f}, MAE: {train_mae:.6f}, R²: {train_r2:.6f}")
+        log(f"📊 Test - RMSE: {test_rmse:.6f}, MAE: {test_mae:.6f}, R²: {test_r2:.6f}")
+        
+        # Save model
+        log("💾 Saving model...")
+        os.makedirs(args.output_dir, exist_ok=True)
+        
+        model_path = os.path.join(args.output_dir, f"lightgbm_model_{args.model_id}.pkl")
+        with open(model_path, 'wb') as f:
+            pickle.dump(model, f)
+        
+        # Save predictions
+        predictions_path = os.path.join(args.output_dir, "predictions.csv")
+        pred_df = pd.DataFrame({
+            'train_actual': y_train,
+            'train_predicted': train_pred,
+            'test_actual': y_test,
+            'test_predicted': test_pred
+        })
+        pred_df.to_csv(predictions_path, index=False)
+        
+        # Save model info
+        model_info = {
+            'model_id': args.model_id,
+            'algorithm': 'lightgbm',
+            'training_time_seconds': training_time,
+            'best_iteration': int(model.best_iteration),
+            'num_features': len(feature_cols),
+            'feature_columns': feature_cols,
+            'target_column': target_col,
+            'parameters': lgb_params,
+            'metrics': {
+                'train': {
+                    'rmse': float(train_rmse),
+                    'mae': float(train_mae),
+                    'r2': float(train_r2)
+                },
+                'test': {
+                    'rmse': float(test_rmse),
+                    'mae': float(test_mae),
+                    'r2': float(test_r2)
+                }
+            },
+            'files': {
+                'model': model_path,
+                'predictions': predictions_path
+            }
+        }
+        
+        info_path = os.path.join(args.output_dir, "model_info.json")
+        with open(info_path, 'w') as f:
+            json.dump(model_info, f, indent=2)
+        
+        log(f"💾 Model saved to {model_path}")
+        log(f"📄 Model info saved to {info_path}")
+        log(f"📊 Predictions saved to {predictions_path}")
+        
+        # Output final result
+        result = {
+            'success': True,
+            'message': 'LightGBM model trained successfully',
+            'results': {
+                'rmse': float(test_rmse),
+                'mae': float(test_mae),
+                'r2': float(test_r2),
+                'model_path': model_path,
+                'training_time_seconds': training_time,
+                'lightgbm_info': {
+                    'best_iteration': int(model.best_iteration),
+                    'num_features': len(feature_cols),
+                    'feature_importance': dict(zip(feature_cols, model.feature_importance().tolist()))
+                }
+            }
+        }
+        
+        log("[COMPLETE] 🏁 LightGBM training completed successfully")
+        print(json.dumps(result))
+        
+    except Exception as e:
+        log(f"❌ Training failed: {str(e)}", "ERROR")
+        
+        result = {
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }
+        
+        print(json.dumps(result))
+        sys.exit(1)
 
-except Exception as e:
-    print(f"[Python Script ERROR - LightGBM] An error occurred: {str(e)}", file=sys.stderr)
-    traceback.print_exc(file=sys.stderr)
-    print_json_output(success=False, message=f"LightGBM Training failed: {str(e)}")
-    sys.exit(1)
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,49 @@
+{
+  "model_id": "9941a147-b86c-4fb9-b02e-76bd22106eeb",
+  "algorithm": "decision_tree",
+  "training_time_seconds": 0.049965,
+  "num_features": 5,
+  "feature_columns": [
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume"
+  ],
+  "target_column": "close_price",
+  "parameters": {
+    "max_depth": 10,
+    "min_samples_split": 2,
+    "min_samples_leaf": 1,
+    "criterion": "squared_error",
+    "splitter": "best",
+    "max_features": null,
+    "random_state": 42
+  },
+  "metrics": {
+    "train": {
+      "rmse": 4.793502741869358,
+      "mae": 3.633668187968486,
+      "r2": 0.9999991478199628
+    },
+    "test": {
+      "rmse": 89.85448584458729,
+      "mae": 41.5493053893705,
+      "r2": 0.9463862067435794
+    }
+  },
+  "training_samples": 8000,
+  "test_samples": 2000,
+  "feature_importance": {
+    "open_price": 3.0018380879783684e-06,
+    "high_price": 4.488511855058405e-05,
+    "low_price": 6.875795471770204e-06,
+    "close_price": 0.9999450550678806,
+    "volume": 1.8218000915196042e-07
+  },
+  "tree_info": {
+    "max_depth": 10,
+    "n_leaves": 942,
+    "n_node_samples": 8000
+  }
+}

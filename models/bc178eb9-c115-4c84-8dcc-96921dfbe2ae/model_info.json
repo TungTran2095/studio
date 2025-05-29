@@ -1,0 +1,38 @@
+{
+  "model_type": "Linear Regression",
+  "parameters": {
+    "fit_intercept": true,
+    "copy_X": true,
+    "n_jobs": null,
+    "positive": false,
+    "lookback_window": 10
+  },
+  "features": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "target_column": "close",
+  "training_info": {
+    "train_samples": 24876,
+    "val_samples": 6220,
+    "test_samples": 7775,
+    "feature_count": 50,
+    "training_time_seconds": 0.05799460411071777,
+    "total_time_seconds": 0.6049940586090088
+  },
+  "metrics": {
+    "validation": {
+      "rmse": 0.006656167381102667,
+      "mae": 0.004107266419435493,
+      "r2": 0.9942693831483101
+    },
+    "test": {
+      "rmse": 0.004593439012206446,
+      "mae": 0.0027747766079723444,
+      "r2": 0.9976914632981368
+    }
+  }
+}

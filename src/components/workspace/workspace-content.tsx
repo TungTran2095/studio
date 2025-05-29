@@ -6,6 +6,11 @@ import { AssetSummary } from "@/components/assets/asset-summary";
 import { TradingViewWidget } from "@/components/chart/tradingview-widget";
 import { TradingPanel } from "@/components/trading/trading-panel";
 import { MarketDataModule } from "./modules/market-data-module";
+import { RealTimeDataMonitor } from './modules/real-time-data-monitor';
+import { DataCollectionJobsManager } from './modules/data-collection-jobs-manager';
+import { DataSourceManager } from './modules/data-source-manager';
+import { DataQualityDashboard } from './modules/data-quality-dashboard';
+import { ResearchDevelopmentContent } from "@/components/research/research-development-content";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -145,12 +150,30 @@ function ModulePlaceholder({ moduleId }: { moduleId: ModuleId }) {
 }
 
 export function WorkspaceContent({ activeModule }: WorkspaceContentProps) {
-  switch (activeModule) {
-    case 'dashboard':
-      return <DashboardModule />;
-    case 'market-data':
-      return <MarketDataModule />;
-    default:
-      return <ModulePlaceholder moduleId={activeModule} />;
-  }
+  const renderModule = () => {
+    switch (activeModule) {
+      case 'dashboard':
+        return <DashboardModule />;
+      case 'market-data':
+        return <MarketDataModule />;
+      case 'quantitative-research':
+        return <ResearchDevelopmentContent />;
+      case 'data-collection':
+        return <DataCollectionJobsManager />;
+      case 'real-time-monitor':
+        return <RealTimeDataMonitor />;
+      case 'data-sources':
+        return <DataSourceManager />;
+      case 'data-quality':
+        return <DataQualityDashboard />;
+      default:
+        return <ModulePlaceholder moduleId={activeModule} />;
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      {renderModule()}
+    </div>
+  );
 } 

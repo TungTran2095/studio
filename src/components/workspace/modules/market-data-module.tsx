@@ -19,12 +19,15 @@ import {
   TrendingUp,
   Activity,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Square,
+  BarChart3
 } from 'lucide-react';
 import { DataSourceManager } from './data-source-manager';
 import { DataCollectionJobsManager } from './data-collection-jobs-manager';
 import { DataQualityDashboard } from './data-quality-dashboard';
 import { RealTimeDataMonitor } from './real-time-data-monitor';
+import { MarketNewsMonitor } from './market-news-monitor';
 import { realDataService, CollectionStats } from '@/lib/market-data/real-data-service';
 import { ApiSetupNotice } from '@/components/ui/api-setup-notice';
 
@@ -224,12 +227,13 @@ export function MarketDataModule({}: MarketDataModuleProps) {
       {/* Main Content Tabs */}
       <div className="flex-1 overflow-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">Tổng quan</TabsTrigger>
             <TabsTrigger value="sources">Nguồn dữ liệu</TabsTrigger>
             <TabsTrigger value="jobs">Jobs thu thập</TabsTrigger>
             <TabsTrigger value="quality">Chất lượng</TabsTrigger>
             <TabsTrigger value="realtime">Real-time</TabsTrigger>
+            <TabsTrigger value="news">Tin tức</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-hidden mt-4">
@@ -251,6 +255,10 @@ export function MarketDataModule({}: MarketDataModuleProps) {
 
             <TabsContent value="realtime" className="h-full">
               <RealTimeDataMonitor />
+            </TabsContent>
+
+            <TabsContent value="news" className="h-full">
+              <MarketNewsMonitor />
             </TabsContent>
           </div>
         </Tabs>

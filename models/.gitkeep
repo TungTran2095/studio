@@ -1,0 +1,6 @@
+# This directory stores trained AI/ML models
+# Structure: models/model_{model_id}/
+# Each model folder contains:
+# - model files (.pkl, .h5, .pt, etc.)
+# - model_info.json with metadata
+# - training artifacts and logs 

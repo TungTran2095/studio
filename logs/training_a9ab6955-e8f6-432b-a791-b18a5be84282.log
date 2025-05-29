@@ -1,0 +1,58 @@
+[2025-05-29T03:26:42.212Z] [START] 🚀 Starting Linear Regression training process
+[2025-05-29T03:26:42.212Z] [INFO] 📊 Model ID: a9ab6955-e8f6-432b-a791-b18a5be84282
+[2025-05-29T03:26:42.213Z] [INFO] 🔧 Algorithm: Linear Regression
+[2025-05-29T03:26:42.213Z] [INFO] 📈 Dataset: 40000 train, 10000 test samples
+[2025-05-29T03:26:42.615Z] ✅ Using Python: python
+[2025-05-29T03:26:42.615Z] 🚀 Starting training script execution...
+[2025-05-29T03:26:45.116Z] [STDOUT] [2025-05-29 10:26:45] [START] 🚀 Starting Linear Regression training process
+[2025-05-29 10:26:45] [INFO] 📋 Loading configuration...
+[2025-05-29T03:26:45.117Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Loading config from C:\Users\Tung Tran\OneDrive - OrionMatrix\Urus\studio\temp\config_a9ab6955-e8f6-432b-a791-b18a5be84282.json
+[2025-05-29 10:26:45] [INFO] 📊 Loading training data...
+[2025-05-29 10:26:45] [INFO] Loading training data from C:\Users\Tung Tran\OneDrive - OrionMatrix\Urus\studio\temp\train_a9ab6955-e8f6-432b-a791-b18a5be84282.json
+[2025-05-29T03:26:45.324Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Loaded 40000 training records in 0.21s
+[2025-05-29 10:26:45] [INFO] Loading test data from C:\Users\Tung Tran\OneDrive - OrionMatrix\Urus\studio\temp\test_a9ab6955-e8f6-432b-a791-b18a5be84282.json
+[2025-05-29T03:26:45.373Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Loaded 10000 test records in 0.05s
+[2025-05-29 10:26:45] [INFO] ✅ Using data from API files
+[2025-05-29T03:26:45.543Z] [STDOUT] [2025-05-29 10:26:45] [INFO] 📈 Data combined in 0.17s
+[2025-05-29 10:26:45] [INFO] 📊 Using API train/test split: 40000/10000
+[2025-05-29T03:26:45.544Z] [STDOUT] [2025-05-29 10:26:45] [INFO] 🔧 Using features: ['open', 'high', 'low', 'close', 'volume']
+[2025-05-29 10:26:45] [INFO] 🎯 Target column: close
+[2025-05-29T03:26:45.546Z] [STDOUT] [2025-05-29 10:26:45] [INFO] 📊 Raw data shape: (50000, 5)
+[2025-05-29 10:26:45] [INFO] ⚙️  Scaling data...
+[2025-05-29T03:26:45.547Z] [STDOUT] [2025-05-29 10:26:45] [INFO] ✅ Data scaled in 0.00s. Shape: (50000, 5)
+[2025-05-29T03:26:45.548Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Creating features with lookback window of 10
+[2025-05-29T03:26:45.557Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 10.0%
+[2025-05-29T03:26:45.568Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 20.0%
+[2025-05-29T03:26:45.577Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 30.0%
+[2025-05-29T03:26:45.587Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 40.0%
+[2025-05-29T03:26:45.598Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 50.0%
+[2025-05-29T03:26:45.607Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 60.0%
+[2025-05-29T03:26:45.617Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 70.0%
+[2025-05-29T03:26:45.626Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 80.0%
+[2025-05-29T03:26:45.637Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 90.0%
+[2025-05-29T03:26:45.652Z] [STDOUT] [2025-05-29 10:26:45] [INFO] Feature creation progress: 100.0%
+[2025-05-29 10:26:45] [INFO] Feature creation completed in 0.10s
+[2025-05-29T03:26:45.696Z] [STDOUT] [2025-05-29 10:26:45] [INFO] 🔧 Final features: X shape=(49990, 50), y shape=(49990,)
+[2025-05-29 10:26:45] [INFO] ⚙️  Total preprocessing time: 0.15s
+[2025-05-29 10:26:45] [INFO] ✂️  Splitting data...
+[2025-05-29T03:26:45.703Z] [STDOUT] [2025-05-29 10:26:45] [INFO] ✅ Data split completed in 0.01s
+[2025-05-29 10:26:45] [INFO] 📊 Split sizes: Train=31993, Val=7999, Test=9998
+[2025-05-29 10:26:45] [INFO] 🏗️  Building Linear Regression model...
+[2025-05-29T03:26:45.704Z] [STDOUT] [2025-05-29 10:26:45] [INFO] 🎯 Starting model training...
+[2025-05-29T03:26:45.826Z] [STDOUT] [2025-05-29 10:26:45] [INFO] ✅ Model training completed in 0.1050s
+[2025-05-29 10:26:45] [INFO] 📊 Model coefficients shape: (50,)
+[2025-05-29 10:26:45] [INFO] 📊 Model intercept: -0.001547
+[2025-05-29 10:26:45] [INFO] 📈 Evaluating model...
+[2025-05-29 10:26:45] [INFO] 🔍 Computing validation predictions...
+[2025-05-29 10:26:45] [INFO] 🔍 Computing test predictions...
+[2025-05-29 10:26:45] [INFO] ✅ Model evaluation completed in 0.01s
+[2025-05-29 10:26:45] [INFO] 📊 Validation Metrics - RMSE: 0.004555, MAE: 0.002735, R²: 0.997720
+[2025-05-29 10:26:45] [INFO] 📊 Test Metrics - RMSE: 0.004261, MAE: 0.002793, R²: 0.999221
+[2025-05-29 10:26:45] [INFO] 💾 Saving model...
+[2025-05-29 10:26:45] [INFO] 💾 Saving model to C:\Users\Tung Tran\OneDrive - OrionMatrix\Urus\studio\models\a9ab6955-e8f6-432b-a791-b18a5be84282\linear_regression_model.pkl
+[2025-05-29 10:26:45] [INFO] ✅ Model saved in 0.00s
+[2025-05-29 10:26:45] [INFO] 📄 Model info saved to C:\Users\Tung Tran\OneDrive - OrionMatrix\Urus\studio\models\a9ab6955-e8f6-432b-a791-b18a5be84282\model_info.json
+[2025-05-29 10:26:45] [COMPLETE] 🏁 Total training time: 0.70s
+{"success": true, "message": "Linear Regression model trained successfully", "results": {"rmse": 0.004260890413331172, "mae": 0.002793397880257813, "r2": 0.9992212151433262, "model_path": "C:\\Users\\Tung Tran\\OneDrive - OrionMatrix\\Urus\\studio\\models\\a9ab6955-e8f6-432b-a791-b18a5be84282\\linear_regression_model.pkl", "training_time_seconds": 0.7029862403869629}}
+[2025-05-29T03:26:46.192Z] 🏁 Training process finished with code: 0
+[2025-05-29T03:26:46.387Z] ✅ Model a9ab6955-e8f6-432b-a791-b18a5be84282 training completed

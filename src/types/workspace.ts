@@ -18,7 +18,11 @@ export interface WorkspaceTab {
 export type ModuleId = 
   | 'dashboard'
   | 'market-data'
-  | 'quant-research'
+  | 'data-collection'
+  | 'quantitative-research'
+  | 'real-time-monitor'
+  | 'data-sources'
+  | 'data-quality'
   | 'algorithm-optimization'
   | 'risk-management'
   | 'market-news'
