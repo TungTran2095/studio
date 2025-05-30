@@ -260,10 +260,10 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
 
   return (
     <Card className={cn(
-      "flex flex-col h-full w-full overflow-hidden border-l shadow-md transition-all duration-200 ease-in-out",
-      isExpanded ? "border bg-card" : "border-0 bg-card/95 backdrop-blur-sm"
+      "flex flex-col h-full w-full overflow-hidden border-l shadow-lg transition-all duration-200 ease-in-out",
+      isExpanded ? "border border-border/20 bg-card/50 backdrop-blur-md" : "border-0 bg-card/30 backdrop-blur-sm"
     )}>
-      <CardHeader className="p-3 border-b flex-shrink-0 flex flex-row items-center justify-between bg-card">
+      <CardHeader className="p-3 border-b border-border/20 flex-shrink-0 flex flex-row items-center justify-between bg-card/50 backdrop-blur-sm">
         <CardTitle className={cn(
           "text-sm font-medium flex items-center gap-1.5 transition-all",
           isExpanded ? "opacity-100" : "opacity-0 w-0"
@@ -277,8 +277,8 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
           size="icon" 
           onClick={onToggle} 
           className={cn(
-            "h-7 w-7 flex-shrink-0 rounded-full",
-            !isExpanded && "bg-primary/10 hover:bg-primary/20 text-primary"
+            "h-7 w-7 flex-shrink-0 rounded-full transition-all duration-200",
+            !isExpanded && "bg-primary/10 hover:bg-primary/20 text-primary backdrop-blur-sm"
           )}
         >
            {isExpanded ? <ChevronRight className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
@@ -287,7 +287,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       </CardHeader>
 
       <CardContent className={cn(
-        "flex-1 p-0 overflow-hidden flex flex-col",
+        "flex-1 p-0 overflow-hidden flex flex-col bg-card/30 backdrop-blur-sm",
         !isExpanded && "opacity-0 p-0 h-0"
       )}>
         <ScrollArea 
@@ -302,7 +302,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
             {/* Tin nhắn chào mừng */}
             {messages.length === 0 && !isLoadingHistory && (
               <div className="p-4 text-center flex flex-col items-center justify-center h-full gap-3">
-                <Avatar className="h-12 w-12 border bg-primary/10">
+                <Avatar className="h-12 w-12 border border-border/20 bg-primary/10 backdrop-blur-sm">
                   <AvatarFallback className="bg-primary/20">
                     <Bot className="h-6 w-6 text-primary" />
                   </AvatarFallback>
@@ -385,7 +385,7 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
       </CardContent>
 
       <CardFooter className={cn(
-        "p-2 border-t mt-auto flex-shrink-0 bg-card",
+        "p-2 border-t border-border/20 mt-auto flex-shrink-0 bg-card/50 backdrop-blur-sm",
         !isExpanded && "opacity-0 p-0 h-0"
       )}>
         <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />

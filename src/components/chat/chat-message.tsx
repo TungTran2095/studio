@@ -109,13 +109,16 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
 
   return (
     <div className={cn(
-      "border-b border-border/20 last:border-0",
-      isUser ? "bg-card" : "bg-muted/30"
+      "border-b border-border/20 last:border-0 transition-all duration-200",
+      isUser ? "bg-card/30 backdrop-blur-sm" : "bg-muted/20 backdrop-blur-sm"
     )}>
       <div className="px-4 py-5 flex gap-4">
         {/* Avatar */}
         <div className="flex-shrink-0 pt-1">
-          <Avatar className={cn("h-8 w-8 border", isUser ? "bg-background" : "bg-primary/10")}>
+          <Avatar className={cn(
+            "h-8 w-8 border border-border/20 transition-all duration-200",
+            isUser ? "bg-background/50 backdrop-blur-sm" : "bg-primary/10 backdrop-blur-sm"
+          )}>
             <AvatarFallback className={isUser ? "bg-primary/10" : "bg-primary/20"}>
               {isUser ? <User className="h-4 w-4 text-primary" /> : <Bot className="h-4 w-4 text-primary" />}
             </AvatarFallback>
@@ -136,7 +139,8 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, content }) => {
               "text-sm leading-relaxed text-foreground/90 break-words whitespace-pre-line",
               "prose prose-sm max-w-none overflow-visible",
               "prose-headings:font-semibold prose-headings:text-foreground prose-h1:text-lg",
-              "prose-p:my-1.5 prose-strong:font-semibold prose-strong:text-foreground"
+              "prose-p:my-1.5 prose-strong:font-semibold prose-strong:text-foreground",
+              "transition-all duration-200"
             )}
             dangerouslySetInnerHTML={processContent()}
           />

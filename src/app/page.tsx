@@ -11,10 +11,10 @@ import { cn } from '@/lib/utils';
 export default function Home() {
   // Workspace state
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   
   // Chat state
-  const [isChatExpanded, setIsChatExpanded] = useState(true);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
 
   const handleModuleChange = (moduleId: ModuleId) => {
     setActiveModule(moduleId);
@@ -29,7 +29,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-background via-background/95 to-background/90 overflow-hidden backdrop-blur-xl">
       {/* Left: Workspace Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar Navigation */}
@@ -41,7 +41,7 @@ export default function Home() {
         />
 
         {/* Main Workspace Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-background">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-background/50 backdrop-blur-sm">
           <WorkspaceContent activeModule={activeModule} />
         </div>
       </div>
@@ -49,7 +49,7 @@ export default function Home() {
       {/* Right: Yinsen Chat Panel */}
       <div
         className={cn(
-          "flex flex-col transition-all duration-300 ease-in-out h-full border-l border-border bg-card",
+          "flex flex-col transition-all duration-300 ease-in-out h-full border-l border-border/20 bg-card/50 backdrop-blur-md",
           isChatExpanded ? "w-96 min-w-[384px]" : "w-16"
         )}
       >
