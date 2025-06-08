@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
+import { spawn } from 'child_process';
+import path from 'path';
 import { 
   CorrelationTest, 
   TTest, 
@@ -93,36 +95,89 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create test' }, { status: 500 });
     }
 
-    // If run_immediately is true, execute the test
-    if (run_immediately) {
+    // If run_immediately is true, execute the test using Python script
+    if (run_immediately && test) {
       try {
-        const result = await executeHypothesisTest(test.id, test_type, variables, test_config);
-        
-        // Update test with results
-        const { error: updateError } = await supabase
-          .from('hypothesis_tests')
-          .update({
-            results: result,
-            status: 'completed',
-            completed_at: new Date().toISOString()
-          })
-          .eq('id', test.id);
+        const pythonScript = path.join(process.cwd(), 'scripts', 'run_hypothesis_test.py');
+        const pythonProcess = spawn('python', [
+          pythonScript,
+          '--test_id', test.id,
+          '--test_type', test_type,
+          '--variables', JSON.stringify(variables),
+          '--config', JSON.stringify(test_config)
+        ]);
 
-        if (updateError) {
-          console.error('Error updating test results:', updateError);
-        }
+        let output = '';
+        let error = '';
+
+        pythonProcess.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+          error += data.toString();
+        });
+
+        pythonProcess.on('close', async (code) => {
+          if (code === 0 && supabase) {
+            try {
+              const result = JSON.parse(output);
+              
+              // Update test with results
+              const { error: updateError } = await supabase
+                .from('hypothesis_tests')
+                .update({
+                  results: result,
+                  status: 'completed',
+                  completed_at: new Date().toISOString()
+                })
+                .eq('id', test.id);
+
+              if (updateError) {
+                console.error('Error updating test results:', updateError);
+              }
+            } catch (parseError) {
+              console.error('Error parsing Python script output:', parseError);
+              if (supabase) {
+                await supabase
+                  .from('hypothesis_tests')
+                  .update({ 
+                    status: 'failed',
+                    error: 'Failed to parse test results'
+                  })
+                  .eq('id', test.id);
+              }
+            }
+          } else {
+            console.error('Python script error:', error);
+            if (supabase) {
+              await supabase
+                .from('hypothesis_tests')
+                .update({ 
+                  status: 'failed',
+                  error: error || 'Python script execution failed'
+                })
+                .eq('id', test.id);
+            }
+          }
+        });
 
         return NextResponse.json({ 
-          test: { ...test, results: result, status: 'completed' }
+          test: { ...test, status: 'running' }
         }, { status: 201 });
       } catch (testError) {
         console.error('Error executing test:', testError);
         
         // Update test status to failed
-        await supabase
-          .from('hypothesis_tests')
-          .update({ status: 'failed' })
-          .eq('id', test.id);
+        if (supabase) {
+          await supabase
+            .from('hypothesis_tests')
+            .update({ 
+              status: 'failed',
+              error: testError instanceof Error ? testError.message : 'Unknown error'
+            })
+            .eq('id', test.id);
+        }
 
         return NextResponse.json({
           error: 'Test created but execution failed',

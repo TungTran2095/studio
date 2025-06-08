@@ -171,11 +171,11 @@ import {
   getTechnicalAnalysis, 
   runBacktestStrategy,
   optimizePortfolio,
-  generateTradingStrategy
+  generateTradingStrategy,
+  type BacktestResult
 } from '@/ai/tools/market-intelligence';
 import type { 
   TechnicalAnalysisResult, 
-  BacktestResult, 
   OptimizedPortfolio 
 } from '@/types/indicators';
 
@@ -397,6 +397,34 @@ export interface BacktestResponse {
   error?: string;
 }
 
+export interface BacktestResult {
+  symbol: string;
+  timeframe: string;
+  strategy: string;
+  startDate: string;
+  endDate: string;
+  initialCapital: number;
+  finalCapital: number;
+  profitLoss: number;
+  profitLossPercentage: number;
+  maxDrawdown: number;
+  maxDrawdownPercentage: number;
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  winRate: number;
+  averageWin: number;
+  averageLoss: number;
+  sharpeRatio: number;
+  trades: Array<{
+    timestamp: number;
+    type: 'BUY' | 'SELL';
+    price: number;
+    quantity: number;
+    value: number;
+  }>;
+}
+
 export async function runBacktest(
   symbol: string,
   timeframe: string = '1h',
@@ -428,9 +456,9 @@ export async function runBacktest(
       apiSecret,
       normalizedSymbol,
       timeframe,
+      strategy,
       startDate,
       endDate,
-      strategy,
       initialCapital,
       isTestnet
     );

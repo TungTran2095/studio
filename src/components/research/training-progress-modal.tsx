@@ -238,8 +238,8 @@ export function TrainingProgressModal({ model, isOpen, onClose }: TrainingProgre
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-6xl max-h-[90vh] animate-in zoom-in-95 duration-300 fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
+        <DialogHeader className="w-full">
           <DialogTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />
             Training Progress - {model.name}

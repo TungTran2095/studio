@@ -15,8 +15,10 @@ async function ensureExperimentsTableExists() {
       .select('count')
       .limit(1);
 
-    if (testError && testError.code === '42P01') {
-      // Table doesn't exist, create it
+    if (testError) {
+      console.log('Table check error:', testError);
+      
+      // Table doesn't exist or permission error
       const createTableSQL = `
         CREATE TABLE IF NOT EXISTS research_experiments (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -40,14 +42,33 @@ async function ensureExperimentsTableExists() {
         CREATE INDEX IF NOT EXISTS idx_research_experiments_type ON research_experiments(type);
 
         ALTER TABLE research_experiments ENABLE ROW LEVEL SECURITY;
-        CREATE POLICY IF NOT EXISTS "Allow all operations on research_experiments" 
-        ON research_experiments FOR ALL USING (true);
+        
+        -- Drop existing policies if any
+        DROP POLICY IF EXISTS "Allow all operations on research_experiments" ON research_experiments;
+        
+        -- Create new policy with proper permissions
+        CREATE POLICY "Allow all operations on research_experiments" 
+        ON research_experiments 
+        FOR ALL 
+        USING (true)
+        WITH CHECK (true);
       `;
 
       const { error: createError } = await supabase.rpc('exec_sql', { sql: createTableSQL });
       
       if (createError) {
         console.error('Failed to create experiments table:', createError);
+        return false;
+      }
+
+      // Verify table was created
+      const { error: verifyError } = await supabase
+        .from('research_experiments')
+        .select('count')
+        .limit(1);
+
+      if (verifyError) {
+        console.error('Failed to verify table creation:', verifyError);
         return false;
       }
     }
@@ -147,6 +168,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate experiment type
+    const validTypes = ['backtest', 'hypothesis_test', 'optimization', 'monte_carlo'];
+    if (!validTypes.includes(type)) {
+      return NextResponse.json(
+        { error: `Invalid experiment type. Must be one of: ${validTypes.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     const experimentData = {
       project_id,
       name: name.trim(),
@@ -159,6 +189,8 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString()
     };
 
+    console.log('Creating experiment with data:', experimentData);
+
     const { data: experiment, error } = await supabase
       .from('research_experiments')
       .insert([experimentData])
@@ -167,7 +199,29 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating experiment:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      
+      // Check for specific error types
+      if (error.code === '23505') { // Unique violation
+        return NextResponse.json({ 
+          error: 'An experiment with this name already exists' 
+        }, { status: 400 });
+      }
+      
+      if (error.code === '23503') { // Foreign key violation
+        return NextResponse.json({ 
+          error: 'Invalid project_id. Project does not exist' 
+        }, { status: 400 });
+      }
+
+      return NextResponse.json({ 
+        error: error.message || 'Failed to create experiment' 
+      }, { status: 500 });
+    }
+
+    if (!experiment) {
+      return NextResponse.json({ 
+        error: 'Failed to create experiment - no data returned' 
+      }, { status: 500 });
     }
 
     return NextResponse.json({ 
@@ -177,7 +231,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 

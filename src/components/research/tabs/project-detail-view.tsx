@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1008,8 +1008,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
 
       {/* Model Logs Modal */}
       {showLogs && selectedModel && (
-        <Card className="fixed inset-4 z-50 bg-background border shadow-lg overflow-auto">
-          <CardHeader className="sticky top-0 bg-background border-b">
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+          <CardHeader className="sticky top-0 bg-background border-b w-full">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
@@ -1284,7 +1284,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
 
       {/* Create Model Form */}
       {showCreateModel && (
-        <Card className="fixed inset-4 z-50 bg-background border shadow-lg overflow-auto">
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto">
           <CardHeader className="sticky top-0 bg-background border-b">
             <div className="flex items-center justify-between">
               <div>
@@ -1502,8 +1502,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
 
       {/* Data Selector Modal */}
       {showDataSelector && modelToTrain && (
-        <Card className="fixed inset-4 z-50 bg-background border shadow-lg overflow-auto">
-          <CardHeader className="sticky top-0 bg-background border-b">
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+          <CardHeader className="sticky top-0 bg-background border-b w-full">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
@@ -1884,9 +1884,132 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
 
 function ExperimentsTab({ projectId }: any) {
   const [experiments, setExperiments] = useState<any[]>([]);
+  const [showExperimentTypeModal, setShowExperimentTypeModal] = useState(false);
+  const [selectedExperimentType, setSelectedExperimentType] = useState<'backtest' | 'hypothesis_test' | null>(null);
+  const [showBacktestConfig, setShowBacktestConfig] = useState(false);
+  const [showHypothesisConfig, setShowHypothesisConfig] = useState(false);
   const [loading, setLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
+  const [creatingExperiment, setCreatingExperiment] = useState(false);
+  const [selectedExperiment, setSelectedExperiment] = useState<any>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [backtestConfig, setBacktestConfig] = useState({
+    name: '',
+    description: '',
+    startDate: '',
+    endDate: '',
+    initialCapital: 10000,
+    positionSize: 10,
+    stopLoss: 2,
+    takeProfit: 4
+  });
+
+  const [hypothesisConfig, setHypothesisConfig] = useState({
+    name: '',
+    description: '',
+    hypothesis: '',
+    significanceLevel: '0.05',
+    testType: 't-test'
+  });
+
+  const handleBacktestConfigChange = (field: string, value: string | number) => {
+    setBacktestConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleHypothesisConfigChange = (field: string, value: string) => {
+    setHypothesisConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const createBacktestExperiment = async () => {
+    try {
+      setCreatingExperiment(true);
+      console.log('📝 Creating backtest experiment:', backtestConfig);
+      
+      const response = await fetch('/api/research/experiments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          name: backtestConfig.name,
+          type: 'backtest',
+          description: backtestConfig.description,
+          config: {
+            startDate: backtestConfig.startDate,
+            endDate: backtestConfig.endDate,
+            initialCapital: backtestConfig.initialCapital,
+            positionSize: backtestConfig.positionSize,
+            stopLoss: backtestConfig.stopLoss,
+            takeProfit: backtestConfig.takeProfit
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        console.log('✅ Backtest experiment created:', data);
+        await fetchExperiments();
+        setShowBacktestConfig(false);
+        alert('✅ Đã tạo thí nghiệm backtest thành công!');
+      } else {
+        console.error('❌ Failed to create backtest experiment:', data.error);
+        alert(`❌ Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`);
+      }
+    } catch (error) {
+      console.error('❌ Error creating backtest experiment:', error);
+      alert('❌ Lỗi kết nối khi tạo thí nghiệm');
+    } finally {
+      setCreatingExperiment(false);
+    }
+  };
+
+  const createHypothesisExperiment = async () => {
+    try {
+      setCreatingExperiment(true);
+      console.log('📝 Creating hypothesis test experiment:', hypothesisConfig);
+      
+      const response = await fetch('/api/research/experiments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          name: hypothesisConfig.name,
+          type: 'hypothesis_test',
+          description: hypothesisConfig.description,
+          config: {
+            hypothesis: hypothesisConfig.hypothesis,
+            significanceLevel: parseFloat(hypothesisConfig.significanceLevel),
+            testType: hypothesisConfig.testType
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        console.log('✅ Hypothesis test experiment created:', data);
+        await fetchExperiments();
+        setShowHypothesisConfig(false);
+        alert('✅ Đã tạo thí nghiệm kiểm tra giả thuyết thành công!');
+      } else {
+        console.error('❌ Failed to create hypothesis test experiment:', data.error);
+        alert(`❌ Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`);
+      }
+    } catch (error) {
+      console.error('❌ Error creating hypothesis test experiment:', error);
+      alert('❌ Lỗi kết nối khi tạo thí nghiệm');
+    } finally {
+      setCreatingExperiment(false);
+    }
+  };
 
   useEffect(() => {
     fetchExperiments();
@@ -1949,6 +2072,137 @@ function ExperimentsTab({ projectId }: any) {
       alert('❌ Lỗi kết nối khi setup database');
     } finally {
       setSettingUp(false);
+    }
+  };
+
+  const viewExperimentDetails = async (experiment: any) => {
+    try {
+      console.log('🔍 [View Details] Clicked on experiment:', experiment);
+      setIsLoadingDetails(true);
+      setSelectedExperiment(experiment); // Set ngay lập tức để hiển thị modal
+      setShowDetails(true);
+      
+      // Fetch thêm thông tin chi tiết từ API
+      const response = await fetch(`/api/research/experiments?id=${experiment.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [View Details] Fetched experiment details:', data);
+        if (data.experiment) {
+          setSelectedExperiment(data.experiment);
+        }
+      } else {
+        console.error('❌ [View Details] Failed to fetch details:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [View Details] Error:', error);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
+  const startExperiment = async (experimentId: string) => {
+    try {
+      console.log('🚀 Starting experiment:', experimentId);
+      
+      const response = await fetch(`/api/research/experiments?id=${experimentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'running',
+          started_at: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        await fetchExperiments();
+        alert('✅ Đã bắt đầu thí nghiệm!');
+      } else {
+        const error = await response.json();
+        alert(`❌ Lỗi khi bắt đầu thí nghiệm: ${error.error || 'Không xác định'}`);
+      }
+    } catch (error) {
+      console.error('Error starting experiment:', error);
+      alert('❌ Lỗi kết nối khi bắt đầu thí nghiệm');
+    }
+  };
+
+  const createMA20Backtest = async () => {
+    try {
+      setCreatingExperiment(true);
+      console.log('📝 Creating MA20 backtest experiment for project:', projectId);
+      
+      const response = await fetch('/api/research/experiments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          name: 'Backtest Chiến lược MA20',
+          type: 'backtest',
+          description: 'Chiến lược: Mua khi giá đóng cửa vượt MA20, bán khi giá giảm dưới MA20',
+          config: {
+            strategy: {
+              name: 'MA20 Crossover',
+              type: 'moving_average',
+              parameters: {
+                ma_period: 20,
+                ma_type: 'simple',
+                signal_type: 'crossover'
+              }
+            },
+            trading: {
+              symbol: 'BTCUSDT',
+              timeframe: '1h',
+              start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 ngày trước
+              end_date: new Date().toISOString(),
+              initial_capital: 10000,
+              position_size: 0.1, // 10% vốn mỗi lần
+              stop_loss: 0.02, // 2%
+              take_profit: 0.04 // 4%
+            },
+            risk_management: {
+              max_positions: 1,
+              max_drawdown: 0.1, // 10%
+              trailing_stop: true,
+              trailing_stop_distance: 0.01 // 1%
+            }
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        console.log('✅ MA20 backtest created:', data);
+        await fetchExperiments();
+        alert('✅ Đã tạo thí nghiệm backtest MA20 thành công!');
+      } else {
+        console.error('❌ Failed to create MA20 backtest:', data.error);
+        if (data.setup_required) {
+          setSetupRequired(true);
+          alert('⚠️ Cần setup database trước khi tạo thí nghiệm. Đang chuyển đến trang setup...');
+        } else {
+          alert(`❌ Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error creating MA20 backtest:', error);
+      alert('❌ Lỗi kết nối khi tạo thí nghiệm');
+    } finally {
+      setCreatingExperiment(false);
+    }
+  };
+
+  const handleCreateExperiment = () => {
+    setShowExperimentTypeModal(true);
+  };
+
+  const handleSelectExperimentType = (type: 'backtest' | 'hypothesis_test') => {
+    setSelectedExperimentType(type);
+    setShowExperimentTypeModal(false);
+    if (type === 'backtest') {
+      setShowBacktestConfig(true);
+    } else {
+      setShowHypothesisConfig(true);
     }
   };
 
@@ -2017,25 +2271,655 @@ function ExperimentsTab({ projectId }: any) {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Danh sách Thí nghiệm ({experiments.length})</h3>
+          <p className="text-muted-foreground">
+            Quản lý và theo dõi các thí nghiệm trong project
+          </p>
+        </div>
+        <div className="flex gap-2 relative">
+          <Button variant="outline" onClick={fetchExperiments}>
+            <Activity className="h-4 w-4 mr-2" />
+            Làm mới
+          </Button>
+          <Button onClick={handleCreateExperiment} disabled={creatingExperiment}>
+            {creatingExperiment ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Đang tạo...
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                Tạo thí nghiệm mới
+              </>
+            )}
+          </Button>
+
+          {/* Experiment Type Selection Modal */}
+          {showExperimentTypeModal && (
+            <Card className="absolute z-50 bg-background border shadow-lg overflow-auto animate-in zoom-in-95 duration-300 max-w-sm max-h-[90vh] top-0 right-0 transform translate-x-[-50%] translate-y-[-50%] fixed left-[50%] top-[50%]">
+              <CardHeader>
+                <CardTitle>Chọn loại thí nghiệm</CardTitle>
+                <CardDescription>
+                  Chọn loại thí nghiệm bạn muốn tạo
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card 
+                    className="cursor-pointer hover:border-blue-500 transition-colors"
+                    onClick={() => handleSelectExperimentType('backtest')}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <LineChart className="h-5 w-5" />
+                        Backtest Strategy
+                      </CardTitle>
+                      <CardDescription>
+                        Test chiến lược trading trên dữ liệu lịch sử
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="text-sm space-y-2">
+                        <li>• Test strategy trên dữ liệu quá khứ</li>
+                        <li>• Đánh giá hiệu suất và rủi ro</li>
+                        <li>• Tối ưu hóa tham số</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card 
+                    className="cursor-pointer hover:border-blue-500 transition-colors"
+                    onClick={() => handleSelectExperimentType('hypothesis_test')}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TestTube className="h-5 w-5" />
+                        Kiểm tra giả thuyết
+                      </CardTitle>
+                      <CardDescription>
+                        Kiểm định các giả thuyết thống kê
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="text-sm space-y-2">
+                        <li>• Kiểm định giả thuyết thống kê</li>
+                        <li>• Phân tích mối quan hệ</li>
+                        <li>• Đánh giá ý nghĩa thống kê</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowExperimentTypeModal(false)}
+                  className="w-full"
+                >
+                  Hủy
+                </Button>
+              </CardFooter>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Backtest Configuration Modal */}
+      {showBacktestConfig && (
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+          <CardHeader>
+            <CardTitle>Cấu hình Backtest</CardTitle>
+            <CardDescription>
+              Thiết lập các tham số cho thí nghiệm backtest
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tên thí nghiệm</Label>
+                <Input 
+                  placeholder="Nhập tên thí nghiệm" 
+                  value={backtestConfig.name}
+                  onChange={(e) => handleBacktestConfigChange('name', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mô tả</Label>
+                <Input 
+                  placeholder="Nhập mô tả" 
+                  value={backtestConfig.description}
+                  onChange={(e) => handleBacktestConfigChange('description', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Ngày bắt đầu</Label>
+                <Input 
+                  type="date" 
+                  value={backtestConfig.startDate}
+                  onChange={(e) => handleBacktestConfigChange('startDate', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Ngày kết thúc</Label>
+                <Input 
+                  type="date" 
+                  value={backtestConfig.endDate}
+                  onChange={(e) => handleBacktestConfigChange('endDate', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Vốn ban đầu</Label>
+                <Input 
+                  type="number" 
+                  placeholder="VD: 10000" 
+                  value={backtestConfig.initialCapital}
+                  onChange={(e) => handleBacktestConfigChange('initialCapital', parseFloat(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Kích thước vị thế (%)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="VD: 10" 
+                  value={backtestConfig.positionSize}
+                  onChange={(e) => handleBacktestConfigChange('positionSize', parseFloat(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Stop Loss (%)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="VD: 2" 
+                  value={backtestConfig.stopLoss}
+                  onChange={(e) => handleBacktestConfigChange('stopLoss', parseFloat(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Take Profit (%)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="VD: 4" 
+                  value={backtestConfig.takeProfit}
+                  onChange={(e) => handleBacktestConfigChange('takeProfit', parseFloat(e.target.value))}
+                />
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowBacktestConfig(false)}
+              className="flex-1"
+            >
+              Hủy
+            </Button>
+            <Button 
+              onClick={createBacktestExperiment}
+              disabled={creatingExperiment}
+              className="flex-1"
+            >
+              {creatingExperiment ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Đang tạo...
+                </>
+              ) : (
+                'Tạo thí nghiệm'
+              )}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
+      {/* Hypothesis Test Configuration Modal */}
+      {showHypothesisConfig && (
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+          <CardHeader>
+            <CardTitle>Cấu hình Kiểm tra giả thuyết</CardTitle>
+            <CardDescription>
+              Thiết lập các tham số cho thí nghiệm kiểm tra giả thuyết
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tên thí nghiệm</Label>
+                <Input 
+                  placeholder="Nhập tên thí nghiệm" 
+                  value={hypothesisConfig.name}
+                  onChange={(e) => handleHypothesisConfigChange('name', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mô tả</Label>
+                <Input 
+                  placeholder="Nhập mô tả" 
+                  value={hypothesisConfig.description}
+                  onChange={(e) => handleHypothesisConfigChange('description', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Giả thuyết</Label>
+                <Textarea 
+                  placeholder="Nhập giả thuyết cần kiểm tra" 
+                  value={hypothesisConfig.hypothesis}
+                  onChange={(e) => handleHypothesisConfigChange('hypothesis', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mức ý nghĩa</Label>
+                <Select 
+                  value={hypothesisConfig.significanceLevel}
+                  onValueChange={(value) => handleHypothesisConfigChange('significanceLevel', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn mức ý nghĩa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0.01">0.01 (1%)</SelectItem>
+                    <SelectItem value="0.05">0.05 (5%)</SelectItem>
+                    <SelectItem value="0.1">0.1 (10%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Loại kiểm định</Label>
+                <Select 
+                  value={hypothesisConfig.testType}
+                  onValueChange={(value) => handleHypothesisConfigChange('testType', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn loại kiểm định" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="t-test">T-test</SelectItem>
+                    <SelectItem value="z-test">Z-test</SelectItem>
+                    <SelectItem value="chi-square">Chi-square</SelectItem>
+                    <SelectItem value="anova">ANOVA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowHypothesisConfig(false)}
+              className="flex-1"
+            >
+              Hủy
+            </Button>
+            <Button 
+              onClick={createHypothesisExperiment}
+              disabled={creatingExperiment}
+              className="flex-1"
+            >
+              {creatingExperiment ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Đang tạo...
+                </>
+              ) : (
+                'Tạo thí nghiệm'
+              )}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
+      {experiments.length === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Thí nghiệm Trading & Research</CardTitle>
+            <CardDescription>Test strategies, phân tích rủi ro và tối ưu hóa portfolio</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <TestTube className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-medium mb-2">Chưa có thí nghiệm nào</h3>
+              <p className="text-muted-foreground mb-4">
+                Bắt đầu với một template có sẵn hoặc tự tạo experiment
+              </p>
+              <div className="flex flex-col gap-2 max-w-sm mx-auto">
+                <Button 
+                  onClick={createMA20Backtest}
+                  disabled={creatingExperiment}
+                  className="w-full"
+                >
+                  {creatingExperiment ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Đang tạo...
+                    </>
+                  ) : (
+                    <>
+                      <LineChart className="h-4 w-4 mr-2" />
+                      Tạo Backtest MA20
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  onClick={handleCreateExperiment}
+                  disabled={creatingExperiment}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {creatingExperiment ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Đang tạo...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Tạo thí nghiệm tùy chỉnh
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {experiments.map((experiment) => (
+            <Card key={experiment.id}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                      <TestTube className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{experiment.name}</CardTitle>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant={
+                          experiment.status === 'completed' ? 'default' :
+                          experiment.status === 'running' ? 'secondary' :
+                          experiment.status === 'failed' ? 'destructive' : 'outline'
+                        }>
+                          {experiment.status === 'completed' ? '✅ Hoàn thành' :
+                           experiment.status === 'running' ? '🔄 Đang chạy' :
+                           experiment.status === 'failed' ? '❌ Lỗi' : 
+                           experiment.status === 'pending' ? '⏳ Chờ' : experiment.status}
+                        </Badge>
+                        <Badge variant="outline" className="capitalize">
+                          {experiment.type}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Progress:</span>
+                    <span>{experiment.progress}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Created:</span>
+                    <span>{new Date(experiment.created_at).toLocaleDateString('vi-VN')}</span>
+                  </div>
+                  {experiment.description && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs text-muted-foreground">{experiment.description}</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex gap-2 mt-4">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => {
+                      console.log('🔍 [Button Click] View details clicked for experiment:', experiment);
+                      viewExperimentDetails(experiment);
+                    }}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    Chi tiết
+                  </Button>
+                  {experiment.status === 'pending' && (
+                    <Button 
+                      size="sm" 
+                      variant="default"
+                      className="flex-1"
+                      onClick={() => startExperiment(experiment.id)}
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Bắt đầu
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Quick Stats */}
       <Card>
         <CardHeader>
-          <CardTitle>Thí nghiệm Trading & Research</CardTitle>
-          <CardDescription>Test strategies, phân tích rủi ro và tối ưu hóa portfolio</CardDescription>
+          <CardTitle>Thống kê Thí nghiệm</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8">
-            <TestTube className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">Chưa có thí nghiệm nào</h3>
-            <p className="text-muted-foreground mb-4">
-              Bắt đầu với một template có sẵn hoặc tự tạo experiment
-            </p>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Tạo thí nghiệm đầu tiên
-            </Button>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{experiments.length}</div>
+              <div className="text-sm text-muted-foreground">Tổng thí nghiệm</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {experiments.filter(e => e.status === 'completed').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Hoàn thành</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {experiments.filter(e => e.status === 'running').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Đang chạy</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-600">
+                {experiments.filter(e => e.status === 'pending').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Chờ</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-600">
+                {experiments.filter(e => e.status === 'failed').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Lỗi</div>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Experiment Details Modal */}
+      {showDetails && selectedExperiment && (
+        <Card className="fixed inset-4 z-50 bg-background border shadow-lg overflow-auto">
+          <CardHeader className="sticky top-0 bg-background border-b">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <TestTube className="h-5 w-5" />
+                  Chi tiết thí nghiệm: {selectedExperiment.name}
+                  {isLoadingDetails && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Xem và quản lý chi tiết thí nghiệm
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => viewExperimentDetails(selectedExperiment)}
+                  disabled={isLoadingDetails}
+                >
+                  <Activity className="h-4 w-4 mr-2" />
+                  {isLoadingDetails ? 'Đang tải...' : 'Refresh'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    console.log('🔍 [Modal] Closing details modal');
+                    setShowDetails(false);
+                    setSelectedExperiment(null);
+                  }}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Basic Info */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Thông tin cơ bản</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Trạng thái</Label>
+                    <div className="mt-1">
+                      <Badge variant={
+                        selectedExperiment.status === 'completed' ? 'default' :
+                        selectedExperiment.status === 'running' ? 'secondary' :
+                        selectedExperiment.status === 'failed' ? 'destructive' : 'outline'
+                      }>
+                        {selectedExperiment.status === 'completed' ? '✅ Hoàn thành' :
+                         selectedExperiment.status === 'running' ? '🔄 Đang chạy' :
+                         selectedExperiment.status === 'failed' ? '❌ Lỗi' : 
+                         selectedExperiment.status === 'pending' ? '⏳ Chờ' : selectedExperiment.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Loại thí nghiệm</Label>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="capitalize">
+                        {selectedExperiment.type}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Ngày tạo</Label>
+                    <div className="mt-1 text-sm">
+                      {new Date(selectedExperiment.created_at).toLocaleString('vi-VN')}
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Tiến độ</Label>
+                    <div className="mt-1">
+                      <Progress value={selectedExperiment.progress || 0} className="h-2" />
+                      <span className="text-sm text-muted-foreground mt-1 block">
+                        {selectedExperiment.progress || 0}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {selectedExperiment.description && (
+                  <div>
+                    <Label>Mô tả</Label>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {selectedExperiment.description}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Configuration */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Cấu hình</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-muted p-4 rounded-lg">
+                  <pre className="text-sm overflow-auto">
+                    {JSON.stringify(selectedExperiment.config || {}, null, 2)}
+                  </pre>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Results */}
+            {selectedExperiment.results && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Kết quả</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="bg-muted p-4 rounded-lg">
+                    <pre className="text-sm overflow-auto">
+                      {JSON.stringify(selectedExperiment.results, null, 2)}
+                    </pre>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Error Log */}
+            {selectedExperiment.error && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base text-red-500">Lỗi</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-700/30">
+                    <pre className="text-sm text-red-600 dark:text-red-400 overflow-auto">
+                      {selectedExperiment.error}
+                    </pre>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-4 border-t">
+              {selectedExperiment.status === 'pending' && (
+                <Button 
+                  onClick={() => startExperiment(selectedExperiment.id)}
+                  className="flex-1"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Bắt đầu thí nghiệm
+                </Button>
+              )}
+              {selectedExperiment.status === 'running' && (
+                <Button 
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => {/* TODO: Stop experiment */}}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Dừng thí nghiệm
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {/* TODO: Export results */}}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Xuất kết quả
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

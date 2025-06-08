@@ -92,38 +92,47 @@ interface TechnicalAnalysisResult {
 }
 
 // Định nghĩa cấu trúc cho kết quả backtesting
-interface BacktestResult {
-  symbol: string;
-  timeframe: string;
-  startDate: string;
-  endDate: string;
-  initialCapital: number;
-  finalCapital: number;
-  profitLoss: number;
-  profitLossPercentage: number;
-  maxDrawdown: number;
-  maxDrawdownPercentage: number;
-  winRate: number;
-  totalTrades: number;
-  winningTrades: number;
-  losingTrades: number;
-  averageWin: number;
-  averageLoss: number;
-  sharpeRatio: number;
-  trades: Array<{
-    type: 'buy' | 'sell';
-    entryDate: string;
-    entryPrice: number;
-    exitDate: string;
-    exitPrice: number;
+export interface BacktestResult {
+  // Tab 1: Summary
+  summary: {
+    symbol: string;
+    timeframe: string;
+    strategy: string;
+    startDate: string;
+    endDate: string;
+    initialCapital: number;
+    finalCapital: number;
     profitLoss: number;
     profitLossPercentage: number;
+    maxDrawdown: number;
+    maxDrawdownPercentage: number;
+    totalTrades: number;
+    winningTrades: number;
+    losingTrades: number;
+    winRate: number;
+    averageWin: number;
+    averageLoss: number;
+    sharpeRatio: number;
+  };
+
+  // Tab 2: Equity Chart
+  equityChart: Array<{
+    timestamp: number;
+    value: number;
+    drawdown: number;
+  }>;
+
+  // Tab 3: Trade List
+  trades: Array<{
+    timestamp: number;
+    type: 'BUY' | 'SELL';
+    price: number;
+    quantity: number;
+    value: number;
+    profitLoss?: number;
+    profitLossPercentage?: number;
     reason: string;
   }>;
-  chart: {
-    equityCurve: Array<{date: string, value: number}>;
-    drawdownCurve: Array<{date: string, value: number}>;
-  };
 }
 
 // Định nghĩa cấu trúc dữ liệu cho danh mục đầu tư
@@ -144,6 +153,156 @@ interface OptimizedPortfolio {
   recommendation: string;
   allocationSummary: string;
 }
+
+interface Signal {
+  timestamp: number;
+  type: 'buy' | 'sell';
+  price: number;
+  reason: string;
+}
+
+interface OHLCV {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface Trade {
+  type: 'buy' | 'sell';
+  entryPrice: number;
+  entryTime: number;
+  quantity: number;
+  reason: string;
+}
+
+interface EquityPoint {
+  timestamp: number;
+  value: number;
+}
+
+// Định nghĩa getSignals trước khi sử dụng
+const getSignals = {
+  sma_crossover: (data: OHLCV[]): Signal[] => {
+    const closes = data.map(d => d.close);
+    const sma20 = calculateSMA(closes, 20);
+    const sma50 = calculateSMA(closes, 50);
+    const signals: Signal[] = [];
+
+    for (let i = 1; i < data.length; i++) {
+      if (isNaN(sma20[i]) || isNaN(sma50[i])) continue;
+
+      const prevDiff = sma20[i - 1] - sma50[i - 1];
+      const currDiff = sma20[i] - sma50[i];
+
+      if (prevDiff < 0 && currDiff > 0) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'buy',
+          price: data[i].close,
+          reason: 'SMA Crossover (Bullish)'
+        });
+      } else if (prevDiff > 0 && currDiff < 0) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'sell',
+          price: data[i].close,
+          reason: 'SMA Crossover (Bearish)'
+        });
+      }
+    }
+    return signals;
+  },
+
+  macd: (data: OHLCV[]): Signal[] => {
+    const closes = data.map(d => d.close);
+    const { macd, signal } = calculateMACD(closes);
+    const signals: Signal[] = [];
+
+    for (let i = 1; i < data.length; i++) {
+      if (isNaN(macd[i]) || isNaN(signal[i])) continue;
+
+      const prevDiff = macd[i - 1] - signal[i - 1];
+      const currDiff = macd[i] - signal[i];
+
+      if (prevDiff < 0 && currDiff > 0) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'buy',
+          price: data[i].close,
+          reason: 'MACD Crossover (Bullish)'
+        });
+      } else if (prevDiff > 0 && currDiff < 0) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'sell',
+          price: data[i].close,
+          reason: 'MACD Crossover (Bearish)'
+        });
+      }
+    }
+    return signals;
+  },
+
+  bollinger_bands: (data: OHLCV[]): Signal[] => {
+    const closes = data.map(d => d.close);
+    const { upper, middle, lower } = calculateBollingerBands(closes);
+    const signals: Signal[] = [];
+
+    for (let i = 0; i < data.length; i++) {
+      if (isNaN(upper[i]) || isNaN(middle[i]) || isNaN(lower[i])) continue;
+
+      if (data[i].close < lower[i]) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'buy',
+          price: data[i].close,
+          reason: 'Price below lower Bollinger Band'
+        });
+      } else if (data[i].close > upper[i]) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'sell',
+          price: data[i].close,
+          reason: 'Price above upper Bollinger Band'
+        });
+      }
+    }
+    return signals;
+  },
+
+  rsi: (data: OHLCV[]): Signal[] => {
+    const closes = data.map(d => d.close);
+    const rsi = calculateRSI(closes);
+    const signals: Signal[] = [];
+
+    for (let i = 0; i < data.length; i++) {
+      if (isNaN(rsi[i])) continue;
+
+      if (rsi[i] < 30) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'buy',
+          price: data[i].close,
+          reason: 'RSI Oversold'
+        });
+      } else if (rsi[i] > 70) {
+        signals.push({
+          timestamp: data[i].timestamp,
+          type: 'sell',
+          price: data[i].close,
+          reason: 'RSI Overbought'
+        });
+      }
+    }
+    return signals;
+  }
+};
+
+// Định nghĩa kiểu cho strategy
+type StrategyType = 'sma_crossover' | 'ma_crossover' | 'macd' | 'bollinger_bands' | 'rsi';
 
 /**
  * Lấy phân tích thị trường hiện tại
@@ -453,57 +612,64 @@ export async function generateTradingStrategy(
 /**
  * Tính toán Simple Moving Average (SMA)
  */
-function calculateSMA(prices: number[], period: number): number {
-  if (prices.length < period) return 0;
-  const sum = prices.slice(-period).reduce((total, price) => total + price, 0);
-  return sum / period;
+function calculateSMA(data: number[], period: number): number[] {
+  const sma: number[] = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      sma.push(NaN);
+      continue;
+    }
+    const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+    sma.push(sum / period);
+  }
+  return sma;
 }
 
 /**
  * Tính toán Exponential Moving Average (EMA)
  */
-function calculateEMA(prices: number[], period: number): number {
-  if (prices.length < period) return 0;
-  
+function calculateEMA(data: number[], period: number): number[] {
   const k = 2 / (period + 1);
-  // Bắt đầu với SMA
-  let ema = calculateSMA(prices.slice(0, period), period);
-  
-  // Tính EMA cho phần còn lại
-  for (let i = period; i < prices.length; i++) {
-    ema = (prices[i] * k) + (ema * (1 - k));
+  const ema: number[] = [];
+  ema[0] = data[0];
+  for (let i = 1; i < data.length; i++) {
+    ema[i] = data[i] * k + ema[i - 1] * (1 - k);
   }
-  
   return ema;
 }
 
 /**
  * Tính toán Relative Strength Index (RSI)
  */
-function calculateRSI(prices: number[], period: number = 14): number {
-  if (prices.length <= period) return 50; // Giá trị mặc định
-  
-  let gains = 0;
-  let losses = 0;
-  
-  // Tính toán các thay đổi giá
-  for (let i = prices.length - period; i < prices.length; i++) {
-    const change = prices[i] - prices[i - 1];
-    if (change >= 0) {
-      gains += change;
+function calculateRSI(data: number[], period: number = 14): number[] {
+  const rsi: number[] = [];
+  const changes: number[] = [];
+
+  // Tính thay đổi giá
+  for (let i = 1; i < data.length; i++) {
+    changes.push(data[i] - data[i - 1]);
+  }
+
+  // Tính RSI
+  for (let i = 0; i < data.length; i++) {
+    if (i < period) {
+      rsi.push(NaN);
+      continue;
+    }
+
+    const slice = changes.slice(i - period, i);
+    const gains = slice.filter(v => v > 0).reduce((a, b) => a + b, 0);
+    const losses = Math.abs(slice.filter(v => v < 0).reduce((a, b) => a + b, 0));
+
+    if (losses === 0) {
+      rsi.push(100);
     } else {
-      losses -= change; // Chuyển đổi thành giá trị dương
+      const rs = gains / losses;
+      rsi.push(100 - (100 / (1 + rs)));
     }
   }
-  
-  // Tính trung bình
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
-  
-  // Tính RS và RSI
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - (100 / (1 + rs));
+
+  return rsi;
 }
 
 /**
@@ -523,69 +689,39 @@ function calculateStandardDeviation(prices: number[], period: number): number {
 /**
  * Tính toán Bollinger Bands
  */
-function calculateBollingerBands(prices: number[], period: number = 20, multiplier: number = 2): BollingerBands {
-  const middle = calculateSMA(prices, period);
-  const stdDev = calculateStandardDeviation(prices, period);
-  
-  const upper = middle + (stdDev * multiplier);
-  const lower = middle - (stdDev * multiplier);
-  const bandwidth = (upper - lower) / middle;
-  
-  // Xác định nếu bands đang co lại (squeezing)
-  // So sánh với bandwidth trung bình của 10 giá trị trước đó
-  let isSqueezing = false;
-  if (prices.length >= period + 10) {
-    const previousBandwidths = [];
-    for (let i = 0; i < 10; i++) {
-      const prevPrices = prices.slice(0, prices.length - i - 1);
-      const prevMiddle = calculateSMA(prevPrices, period);
-      const prevStdDev = calculateStandardDeviation(prevPrices, period);
-      const prevUpper = prevMiddle + (prevStdDev * multiplier);
-      const prevLower = prevMiddle - (prevStdDev * multiplier);
-      previousBandwidths.push((prevUpper - prevLower) / prevMiddle);
+function calculateBollingerBands(data: number[], period: number = 20, stdDev: number = 2): { upper: number[], middle: number[], lower: number[] } {
+  const sma = calculateSMA(data, period);
+  const upper: number[] = [];
+  const lower: number[] = [];
+
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(NaN);
+      lower.push(NaN);
+      continue;
     }
-    const avgPrevBandwidth = previousBandwidths.reduce((a, b) => a + b, 0) / 10;
-    isSqueezing = bandwidth < avgPrevBandwidth * 0.85; // Bandwidth giảm 15% so với trung bình
+    const slice = data.slice(i - period + 1, i + 1);
+    const mean = sma[i];
+    const squaredDiffs = slice.map(v => Math.pow(v - mean, 2));
+    const variance = squaredDiffs.reduce((a, b) => a + b, 0) / period;
+    const std = Math.sqrt(variance);
+    upper.push(mean + stdDev * std);
+    lower.push(mean - stdDev * std);
   }
-  
-  return {
-    upper,
-    middle,
-    lower,
-    bandwidth,
-    isSqueezing
-  };
+
+  return { upper, middle: sma, lower };
 }
 
 /**
  * Tính toán MACD (Moving Average Convergence Divergence)
  */
-function calculateMACD(prices: number[], fastPeriod: number = 12, slowPeriod: number = 26, signalPeriod: number = 9): MACD {
-  const fastEMA = calculateEMA(prices, fastPeriod);
-  const slowEMA = calculateEMA(prices, slowPeriod);
-  const macdLine = fastEMA - slowEMA;
-  
-  // Tính Signal Line (EMA của MACD Line)
-  // Trong trường hợp thực tế, cần thêm code để tính toán EMA của chuỗi giá trị MACD
-  // Tại đây chúng ta giả định một giá trị đơn giản hóa
-  const signalLine = macdLine * 0.9; // Giả lập, trong thực tế cần tính EMA đúng
-  
-  const histogram = macdLine - signalLine;
-  
-  // Xác định xu hướng
-  let trend: 'bullish' | 'bearish' | 'neutral' = 'neutral';
-  if (macdLine > signalLine && macdLine > 0) {
-    trend = 'bullish';
-  } else if (macdLine < signalLine && macdLine < 0) {
-    trend = 'bearish';
-  }
-  
-  return {
-    macd: macdLine,
-    signal: signalLine,
-    histogram,
-    trend
-  };
+function calculateMACD(data: number[]): { macd: number[], signal: number[], histogram: number[] } {
+  const ema12 = calculateEMA(data, 12);
+  const ema26 = calculateEMA(data, 26);
+  const macd = ema12.map((v, i) => v - ema26[i]);
+  const signal = calculateEMA(macd, 9);
+  const histogram = macd.map((v, i) => v - signal[i]);
+  return { macd, signal, histogram };
 }
 
 /**
@@ -732,12 +868,26 @@ export async function getTechnicalAnalysis(
     const lastPrice = closes[closes.length - 1];
     
     // Tính toán các chỉ báo
-    const rsi = calculateRSI(closes);
-    const macd = calculateMACD(closes);
-    const bollingerBands = calculateBollingerBands(closes);
-    const ema20 = calculateEMA(closes, 20);
-    const ema50 = calculateEMA(closes, 50);
-    const ema200 = calculateEMA(closes, 200);
+    const rsiArr = calculateRSI(closes);
+    const lastRsi = rsiArr[rsiArr.length - 1];
+    
+    const macdObj = calculateMACD(closes);
+    const lastMacd = macdObj.macd[macdObj.macd.length - 1];
+    const lastSignal = macdObj.signal[macdObj.signal.length - 1];
+    const lastHistogram = macdObj.histogram[macdObj.histogram.length - 1];
+    
+    const bollingerBandsObj = calculateBollingerBands(closes);
+    const lastUpper = bollingerBandsObj.upper[bollingerBandsObj.upper.length - 1];
+    const lastMiddle = bollingerBandsObj.middle[bollingerBandsObj.middle.length - 1];
+    const lastLower = bollingerBandsObj.lower[bollingerBandsObj.lower.length - 1];
+    
+    const ema20Arr = calculateEMA(closes, 20);
+    const ema50Arr = calculateEMA(closes, 50);
+    const ema200Arr = calculateEMA(closes, 200);
+    
+    const lastEma20 = ema20Arr[ema20Arr.length - 1];
+    const lastEma50 = ema50Arr[ema50Arr.length - 1];
+    const lastEma200 = ema200Arr[ema200Arr.length - 1];
     
     // Phát hiện mẫu hình giá
     const patterns = detectCandlestickPatterns(candles);
@@ -746,38 +896,39 @@ export async function getTechnicalAnalysis(
     const signals = [];
     
     // Tín hiệu RSI
-    if (rsi < 30) {
+    if (lastRsi < 30) {
       signals.push({
         indicator: 'RSI',
         action: 'buy' as 'buy' | 'sell' | 'hold',
         strength: 70,
-        reason: `RSI ở mức quá bán (${rsi.toFixed(2)})`
+        reason: `RSI ở mức quá bán (${lastRsi.toFixed(2)})`
       });
-    } else if (rsi > 70) {
+    } else if (lastRsi > 70) {
       signals.push({
         indicator: 'RSI',
         action: 'sell' as 'buy' | 'sell' | 'hold',
         strength: 70,
-        reason: `RSI ở mức quá mua (${rsi.toFixed(2)})`
+        reason: `RSI ở mức quá mua (${lastRsi.toFixed(2)})`
       });
     } else {
       signals.push({
         indicator: 'RSI',
         action: 'hold' as 'buy' | 'sell' | 'hold',
         strength: 50,
-        reason: `RSI ở mức trung tính (${rsi.toFixed(2)})`
+        reason: `RSI ở mức trung tính (${lastRsi.toFixed(2)})`
       });
     }
     
     // Tín hiệu MACD
-    if (macd.trend === 'bullish') {
+    const macdTrend = lastMacd > lastSignal ? 'bullish' : lastMacd < lastSignal ? 'bearish' : 'neutral';
+    if (macdTrend === 'bullish') {
       signals.push({
         indicator: 'MACD',
         action: 'buy' as 'buy' | 'sell' | 'hold',
         strength: 60,
         reason: 'MACD hiện tại cho tín hiệu tăng giá'
       });
-    } else if (macd.trend === 'bearish') {
+    } else if (macdTrend === 'bearish') {
       signals.push({
         indicator: 'MACD',
         action: 'sell' as 'buy' | 'sell' | 'hold',
@@ -794,63 +945,49 @@ export async function getTechnicalAnalysis(
     }
     
     // Tín hiệu Bollinger Bands
-    if (lastPrice > bollingerBands.upper) {
+    if (lastPrice > lastUpper) {
       signals.push({
         indicator: 'Bollinger Bands',
         action: 'sell' as 'buy' | 'sell' | 'hold',
         strength: 65,
         reason: 'Giá vượt dải trên Bollinger, có thể quá mua'
       });
-    } else if (lastPrice < bollingerBands.lower) {
+    } else if (lastPrice < lastLower) {
       signals.push({
         indicator: 'Bollinger Bands',
         action: 'buy' as 'buy' | 'sell' | 'hold',
         strength: 65,
         reason: 'Giá dưới dải dưới Bollinger, có thể quá bán'
       });
-    } else if (bollingerBands.isSqueezing) {
-      signals.push({
-        indicator: 'Bollinger Bands',
-        action: 'hold' as 'buy' | 'sell' | 'hold',
-        strength: 55,
-        reason: 'Bollinger Bands đang co lại, chuẩn bị bùng nổ giá'
-      });
+    } else {
+      const bandwidth = (lastUpper - lastLower) / lastMiddle;
+      const isSqueezing = bandwidth < 0.1; // Điều chỉnh ngưỡng tùy theo nhu cầu
+      
+      if (isSqueezing) {
+        signals.push({
+          indicator: 'Bollinger Bands',
+          action: 'hold' as 'buy' | 'sell' | 'hold',
+          strength: 55,
+          reason: 'Bollinger Bands đang co lại, chuẩn bị bùng nổ giá'
+        });
+      }
     }
     
     // Tín hiệu EMA
-    if (lastPrice > ema50 && ema50 > ema200) {
+    if (lastPrice > lastEma50 && lastEma50 > lastEma200) {
       signals.push({
         indicator: 'Moving Averages',
         action: 'buy' as 'buy' | 'sell' | 'hold',
         strength: 75,
         reason: 'Giá trên EMA50 và EMA50 trên EMA200 (xu hướng tăng)'
       });
-    } else if (lastPrice < ema50 && ema50 < ema200) {
+    } else if (lastPrice < lastEma50 && lastEma50 < lastEma200) {
       signals.push({
         indicator: 'Moving Averages',
         action: 'sell' as 'buy' | 'sell' | 'hold',
         strength: 75,
         reason: 'Giá dưới EMA50 và EMA50 dưới EMA200 (xu hướng giảm)'
       });
-    }
-    
-    // Tín hiệu từ mẫu hình
-    for (const pattern of patterns) {
-      if (['Hammer', 'Bullish Engulfing'].includes(pattern.pattern)) {
-        signals.push({
-          indicator: `Pattern: ${pattern.pattern}`,
-          action: 'buy' as 'buy' | 'sell' | 'hold',
-          strength: pattern.reliability,
-          reason: `Phát hiện mẫu hình tăng giá: ${pattern.pattern}`
-        });
-      } else if (['Shooting Star', 'Bearish Engulfing'].includes(pattern.pattern)) {
-        signals.push({
-          indicator: `Pattern: ${pattern.pattern}`,
-          action: 'sell' as 'buy' | 'sell' | 'hold',
-          strength: pattern.reliability,
-          reason: `Phát hiện mẫu hình giảm giá: ${pattern.pattern}`
-        });
-      }
     }
     
     // Tính toán tổng hợp
@@ -903,12 +1040,23 @@ export async function getTechnicalAnalysis(
       timestamp: new Date().toISOString(),
       price: lastPrice,
       indicators: {
-        rsi,
-        macd,
-        bollingerBands,
-        ema20,
-        ema50,
-        ema200
+        rsi: lastRsi,
+        macd: {
+          macd: lastMacd,
+          signal: lastSignal,
+          histogram: lastHistogram,
+          trend: macdTrend
+        },
+        bollingerBands: {
+          upper: lastUpper,
+          middle: lastMiddle,
+          lower: lastLower,
+          bandwidth: (lastUpper - lastLower) / lastMiddle,
+          isSqueezing: (lastUpper - lastLower) / lastMiddle < 0.1
+        },
+        ema20: lastEma20,
+        ema50: lastEma50,
+        ema200: lastEma200
       },
       patterns,
       signals,
@@ -932,305 +1080,437 @@ export async function runBacktestStrategy(
   apiKey: string,
   apiSecret: string,
   symbol: string,
-  timeframe: string = '1h',
+  timeframe: string,
+  strategy: StrategyType,
   startDate: string,
-  endDate: string = new Date().toISOString(),
-  strategy: 'sma_crossover' | 'macd' | 'bollinger_bands' | 'rsi' = 'sma_crossover',
-  initialCapital: number = 10000,
+  endDate: string,
+  initialCapital: number,
   isTestnet: boolean = false
 ): Promise<BacktestResult> {
-  console.log(`[runBacktestStrategy] Chạy backtest cho ${symbol} với chiến lược ${strategy}`);
-  
-  // Khởi tạo client Binance
-  const binance = new Binance().options({
-    APIKEY: apiKey,
-    APISECRET: apiSecret,
-    useServerTime: true,
-    test: isTestnet,
-    recvWindow: 60000,
-    verbose: false,
-    urls: {
-      base: isTestnet ? 'https://testnet.binance.vision/api/' : 'https://api.binance.com/api/'
-    }
-  });
-  
   try {
-    // Chuyển đổi chuỗi ngày thành timestamp
-    const startTimestamp = new Date(startDate).getTime();
-    const endTimestamp = new Date(endDate).getTime();
+    console.log(`[runBacktestStrategy] Bắt đầu backtest cho ${symbol}`, {
+      symbol,
+      timeframe,
+      strategy,
+      startDate,
+      endDate,
+      initialCapital,
+      isTestnet
+    });
+
+    // Kiểm tra tham số đầu vào
+    if (!symbol || !timeframe || !strategy || !startDate || !endDate) {
+      throw new Error('Thiếu tham số bắt buộc');
+    }
+
+    if (isNaN(initialCapital) || initialCapital <= 0) {
+      throw new Error('Vốn ban đầu phải là số dương');
+    }
+
+    // Lấy dữ liệu lịch sử
+    const historicalData = await getHistoricalData(apiKey, apiSecret, symbol, timeframe, startDate, endDate, isTestnet);
     
-    // Lấy dữ liệu nến từ Binance
-    const klineData = await binance.candlesticks(symbol, timeframe, undefined, {
-      startTime: startTimestamp,
-      endTime: endTimestamp,
-      limit: 1000
+    // Chuyển đổi dữ liệu sang định dạng OHLCV
+    const ohlcvData: OHLCV[] = historicalData.map((candle: Candle) => ({
+      timestamp: candle.timestamp,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume
+    }));
+
+    // Lấy tín hiệu từ chiến lược
+    console.log(`[runBacktestStrategy] Đang lấy tín hiệu cho chiến lược ${strategy}`);
+    let signals: Signal[] = [];
+    
+    switch (strategy) {
+      case 'sma_crossover':
+      case 'ma_crossover': // Thêm hỗ trợ cho ma_crossover
+        signals = getSignals.sma_crossover(ohlcvData);
+        break;
+      case 'macd':
+        signals = getSignals.macd(ohlcvData);
+        break;
+      case 'bollinger_bands':
+        signals = getSignals.bollinger_bands(ohlcvData);
+        break;
+      case 'rsi':
+        signals = getSignals.rsi(ohlcvData);
+        break;
+      default:
+        throw new Error(`Chiến lược ${strategy} không được hỗ trợ. Các chiến lược được hỗ trợ: sma_crossover, macd, bollinger_bands, rsi`);
+    }
+    
+    if (!signals || signals.length === 0) {
+      throw new Error(`Không tìm thấy tín hiệu cho chiến lược ${strategy}`);
+    }
+    
+    console.log(`[runBacktestStrategy] Đã nhận ${signals.length} tín hiệu`);
+    
+    // Khởi tạo biến theo dõi
+    let currentPosition = 0;
+    let capital = initialCapital;
+    const trades: Trade[] = [];
+    const equityCurve: EquityPoint[] = [{
+      timestamp: ohlcvData[0].timestamp,
+      value: initialCapital
+    }];
+    
+    // Chạy backtest
+    for (let i = 0; i < ohlcvData.length; i++) {
+      const candle = ohlcvData[i];
+      const signal = signals.find(s => s.timestamp === candle.timestamp);
+      
+      if (!signal) continue; // Bỏ qua nếu không có tín hiệu cho nến này
+      
+      if (signal.type === 'buy' && currentPosition <= 0) {
+        // Mở vị thế mua
+        const quantity = capital / candle.close;
+        currentPosition = quantity;
+        trades.push({
+          type: 'buy',
+          entryPrice: candle.close,
+          entryTime: candle.timestamp,
+          quantity: quantity,
+          reason: signal.reason
+        });
+      } else if (signal.type === 'sell' && currentPosition >= 0) {
+        // Mở vị thế bán
+        const quantity = capital / candle.close;
+        currentPosition = -quantity;
+        trades.push({
+          type: 'sell',
+          entryPrice: candle.close,
+          entryTime: candle.timestamp,
+          quantity: quantity,
+          reason: signal.reason
+        });
+      }
+      
+      // Cập nhật vốn
+      capital = initialCapital + (currentPosition * candle.close);
+      
+      // Cập nhật đường equity
+      equityCurve.push({
+        timestamp: candle.timestamp,
+        value: capital
+      });
+    }
+    
+    // Tính toán các chỉ số hiệu suất
+    const finalCapital = capital;
+    const totalReturn = ((finalCapital - initialCapital) / initialCapital) * 100;
+    
+    // Tính max drawdown
+    let maxDrawdown = 0;
+    let peak = initialCapital;
+    const drawdowns: number[] = [];
+    
+    for (const point of equityCurve) {
+      if (point.value > peak) {
+        peak = point.value;
+      }
+      const drawdown = (peak - point.value) / peak;
+      drawdowns.push(drawdown);
+      maxDrawdown = Math.max(maxDrawdown, drawdown);
+    }
+    
+    // Tính toán lợi nhuận trung bình cho các giao dịch thắng/thua
+    const winningTrades = trades.filter(t => {
+      const lastPrice = ohlcvData[ohlcvData.length - 1].close;
+      return (t.type === 'buy' && lastPrice > t.entryPrice) || 
+             (t.type === 'sell' && lastPrice < t.entryPrice);
     });
     
-    // Chuyển đổi dữ liệu
-    const candles: Candle[] = klineData.map((kline: any) => ({
-      timestamp: parseInt(kline[0]),
-      open: parseFloat(kline[1]),
-      high: parseFloat(kline[2]),
-      low: parseFloat(kline[3]),
-      close: parseFloat(kline[4]),
-      volume: parseFloat(kline[5])
-    }));
+    const losingTrades = trades.filter(t => {
+      const lastPrice = ohlcvData[ohlcvData.length - 1].close;
+      return (t.type === 'buy' && lastPrice < t.entryPrice) || 
+             (t.type === 'sell' && lastPrice > t.entryPrice);
+    });
     
-    // Nếu không có đủ dữ liệu
-    if (candles.length < 50) {
-      throw new Error('Không đủ dữ liệu cho backtest, cần ít nhất 50 nến');
-    }
-    
-    // Lấy mảng giá đóng cửa
-    const closes = candles.map(candle => candle.close);
-    
-    // Khởi tạo các biến cho backtest
-    let balance = initialCapital;
-    let position = 0; // Số lượng coin đang nắm giữ
-    let inPosition = false;
-    const trades = [];
-    const equityCurve = [];
-    const drawdownCurve = [];
-    
-    let highWaterMark = initialCapital;
-    let maxDrawdown = 0;
-    let entryPrice = 0;
-    let entryDate = '';
-    
-    // Khai báo các hàm xử lý tín hiệu giao dịch cho các chiến lược khác nhau
-    const getSignals = {
-      // Chiến lược SMA crossover
-      sma_crossover: (index: number) => {
-        if (index < 50) return 'hold';
-        
-        const shortSMA = calculateSMA(closes.slice(0, index + 1), 20);
-        const longSMA = calculateSMA(closes.slice(0, index + 1), 50);
-        
-        const prevShortSMA = calculateSMA(closes.slice(0, index), 20);
-        const prevLongSMA = calculateSMA(closes.slice(0, index), 50);
-        
-        // Tín hiệu mua: SMA ngắn hạn cắt lên trên SMA dài hạn
-        if (prevShortSMA <= prevLongSMA && shortSMA > longSMA) {
-          return 'buy';
-        }
-        
-        // Tín hiệu bán: SMA ngắn hạn cắt xuống dưới SMA dài hạn
-        if (prevShortSMA >= prevLongSMA && shortSMA < longSMA) {
-          return 'sell';
-        }
-        
-        return 'hold';
-      },
-      
-      // Chiến lược MACD
-      macd: (index: number) => {
-        if (index < 50) return 'hold';
-        
-        const macdCurrent = calculateMACD(closes.slice(0, index + 1));
-        const macdPrev = calculateMACD(closes.slice(0, index));
-        
-        // Tín hiệu mua: MACD cắt lên trên đường tín hiệu
-        if (macdPrev.macd < macdPrev.signal && macdCurrent.macd > macdCurrent.signal) {
-          return 'buy';
-        }
-        
-        // Tín hiệu bán: MACD cắt xuống dưới đường tín hiệu
-        if (macdPrev.macd > macdPrev.signal && macdCurrent.macd < macdCurrent.signal) {
-          return 'sell';
-        }
-        
-        return 'hold';
-      },
-      
-      // Chiến lược Bollinger Bands
-      bollinger_bands: (index: number) => {
-        if (index < 20) return 'hold';
-        
-        const bbCurrent = calculateBollingerBands(closes.slice(0, index + 1));
-        const price = closes[index];
-        const prevPrice = closes[index - 1];
-        
-        // Tín hiệu mua: Giá từ dưới dải dưới đi lên
-        if (prevPrice <= bbCurrent.lower && price > bbCurrent.lower) {
-          return 'buy';
-        }
-        
-        // Tín hiệu bán: Giá từ trên dải trên đi xuống
-        if (prevPrice >= bbCurrent.upper && price < bbCurrent.upper) {
-          return 'sell';
-        }
-        
-        return 'hold';
-      },
-      
-      // Chiến lược RSI
-      rsi: (index: number) => {
-        if (index < 14) return 'hold';
-        
-        const rsiCurrent = calculateRSI(closes.slice(0, index + 1));
-        const rsiPrev = calculateRSI(closes.slice(0, index));
-        
-        // Tín hiệu mua: RSI tăng từ dưới 30
-        if (rsiPrev < 30 && rsiCurrent >= 30) {
-          return 'buy';
-        }
-        
-        // Tín hiệu bán: RSI giảm từ trên 70
-        if (rsiPrev > 70 && rsiCurrent <= 70) {
-          return 'sell';
-        }
-        
-        return 'hold';
-      }
-    };
-    
-    // Lặp qua từng nến để thực hiện backtest
-    for (let i = 0; i < candles.length; i++) {
-      const candle = candles[i];
-      const date = new Date(candle.timestamp);
-      
-      // Cập nhật equity curve
-      let currentEquity = balance;
-      if (inPosition) {
-        currentEquity = balance + (position * candle.close);
-      }
-      
-      equityCurve.push({
-        date: date.toISOString(),
-        value: currentEquity
-      });
-      
-      // Cập nhật drawdown
-      if (currentEquity > highWaterMark) {
-        highWaterMark = currentEquity;
-      }
-      
-      const currentDrawdown = (highWaterMark - currentEquity) / highWaterMark;
-      drawdownCurve.push({
-        date: date.toISOString(),
-        value: currentDrawdown
-      });
-      
-      if (currentDrawdown > maxDrawdown) {
-        maxDrawdown = currentDrawdown;
-      }
-      
-      // Lấy tín hiệu giao dịch dựa trên chiến lược
-      const signal = getSignals[strategy](i);
-      
-      // Xử lý tín hiệu
-      if (signal === 'buy' && !inPosition) {
-        // Thực hiện mua
-        entryPrice = candle.close;
-        position = balance / entryPrice;
-        balance = 0;
-        inPosition = true;
-        entryDate = date.toISOString();
-      } else if (signal === 'sell' && inPosition) {
-        // Thực hiện bán
-        balance = position * candle.close;
-        
-        // Ghi nhận giao dịch
-        const exitPrice = candle.close;
-        const profitLoss = position * (exitPrice - entryPrice);
-        const profitLossPercentage = (exitPrice / entryPrice - 1) * 100;
-        
-        trades.push({
-          type: 'buy' as 'buy' | 'sell',
-          entryDate,
-          entryPrice,
-          exitDate: date.toISOString(),
-          exitPrice,
-          profitLoss,
-          profitLossPercentage,
-          reason: `${strategy} tín hiệu bán`
-        });
-        
-        position = 0;
-        inPosition = false;
-      }
-    }
-    
-    // Bán nốt nếu vẫn còn vị thế mở
-    if (inPosition) {
-      const lastCandle = candles[candles.length - 1];
-      balance = position * lastCandle.close;
-      
-      // Ghi nhận giao dịch cuối cùng
-      const exitPrice = lastCandle.close;
-      const profitLoss = position * (exitPrice - entryPrice);
-      const profitLossPercentage = (exitPrice / entryPrice - 1) * 100;
-      
-      trades.push({
-        type: 'buy' as 'buy' | 'sell',
-        entryDate,
-        entryPrice,
-        exitDate: new Date(lastCandle.timestamp).toISOString(),
-        exitPrice,
-        profitLoss,
-        profitLossPercentage,
-        reason: 'Đóng vị thế cuối kỳ'
-      });
-    }
-    
-    // Tính toán thống kê
-    const finalCapital = balance;
-    const profitLoss = finalCapital - initialCapital;
-    const profitLossPercentage = (profitLoss / initialCapital) * 100;
-    
-    const winningTrades = trades.filter(t => t.profitLoss > 0);
-    const losingTrades = trades.filter(t => t.profitLoss <= 0);
-    
-    const winRate = winningTrades.length / trades.length;
-    
-    const averageWin = winningTrades.length > 0
-      ? winningTrades.reduce((sum, t) => sum + t.profitLoss, 0) / winningTrades.length
+    const averageWin = winningTrades.length > 0 
+      ? winningTrades.reduce((sum, t) => {
+          const lastPrice = ohlcvData[ohlcvData.length - 1].close;
+          return sum + Math.abs(lastPrice - t.entryPrice);
+        }, 0) / winningTrades.length
       : 0;
       
     const averageLoss = losingTrades.length > 0
-      ? losingTrades.reduce((sum, t) => sum + t.profitLoss, 0) / losingTrades.length
+      ? losingTrades.reduce((sum, t) => {
+          const lastPrice = ohlcvData[ohlcvData.length - 1].close;
+          return sum + Math.abs(lastPrice - t.entryPrice);
+        }, 0) / losingTrades.length
       : 0;
     
-    // Tính Sharpe Ratio (đơn giản)
-    let returns = [];
-    for (let i = 1; i < equityCurve.length; i++) {
-      returns.push((equityCurve[i].value / equityCurve[i-1].value) - 1);
-    }
-    
-    const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-    const stdDevReturns = Math.sqrt(
-      returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length
+    // Tính Sharpe ratio
+    const returns = equityCurve.slice(1).map((point, i) => 
+      (point.value - equityCurve[i].value) / equityCurve[i].value
     );
+    const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const stdDev = Math.sqrt(
+      returns.reduce((a, b) => a + Math.pow(b - avgReturn, 2), 0) / returns.length
+    );
+    const sharpeRatio = avgReturn / stdDev;
     
-    const sharpeRatio = meanReturn / stdDevReturns * Math.sqrt(252); // Điều chỉnh theo số ngày giao dịch trong năm
+    // Tính win rate
+    const winRate = (winningTrades.length / trades.length) * 100;
     
     return {
+      summary: {
+        symbol,
+        timeframe,
+        strategy,
+        startDate,
+        endDate,
+        initialCapital,
+        finalCapital,
+        profitLoss: finalCapital - initialCapital,
+        profitLossPercentage: totalReturn || 0,
+        maxDrawdown: maxDrawdown || 0,
+        maxDrawdownPercentage: (maxDrawdown || 0) * 100,
+        totalTrades: trades.length || 0,
+        winningTrades: winningTrades.length || 0,
+        losingTrades: losingTrades.length || 0,
+        winRate: winRate || 0,
+        averageWin: averageWin || 0,
+        averageLoss: averageLoss || 0,
+        sharpeRatio: sharpeRatio || 0
+      },
+      equityChart: equityCurve.map((point, i) => ({
+        timestamp: point.timestamp,
+        value: point.value || 0,
+        drawdown: drawdowns[i] || 0
+      })),
+      trades: trades.map(trade => {
+        const lastPrice = ohlcvData[ohlcvData.length - 1].close;
+        const profitLoss = trade.type === 'buy' 
+          ? (lastPrice - trade.entryPrice) || 0
+          : (trade.entryPrice - lastPrice) || 0;
+        const profitLossPercentage = ((profitLoss / trade.entryPrice) * 100) || 0;
+        
+        return {
+          timestamp: trade.entryTime,
+          type: trade.type === 'buy' ? 'BUY' : 'SELL',
+          price: trade.entryPrice || 0,
+          quantity: trade.quantity || 0,
+          value: trade.type === 'buy' ? (trade.entryPrice || 0) : -(trade.entryPrice || 0),
+          profitLoss: profitLoss || 0,
+          profitLossPercentage: profitLossPercentage || 0,
+          reason: trade.reason || 'Không có lý do'
+        };
+      })
+    };
+    
+  } catch (error: any) {
+    console.error(`[runBacktestStrategy] Lỗi khi chạy backtest cho ${symbol}:`, error);
+    throw new Error(`Lỗi khi chạy backtest: ${error.message}`);
+  }
+}
+
+async function getHistoricalData(
+  apiKey: string,
+  apiSecret: string,
+  symbol: string,
+  timeframe: string,
+  startDate: string,
+  endDate: string,
+  isTestnet: boolean
+): Promise<Candle[]> {
+  try {
+    console.log(`[getHistoricalData] Bắt đầu lấy dữ liệu lịch sử cho ${symbol}`);
+    console.log(`[getHistoricalData] Tham số đầu vào:`, {
       symbol,
       timeframe,
       startDate,
       endDate,
-      initialCapital,
-      finalCapital,
-      profitLoss,
-      profitLossPercentage,
-      maxDrawdown,
-      maxDrawdownPercentage: maxDrawdown * 100,
-      winRate,
-      totalTrades: trades.length,
-      winningTrades: winningTrades.length,
-      losingTrades: losingTrades.length,
-      averageWin,
-      averageLoss,
-      sharpeRatio,
-      trades,
-      chart: {
-        equityCurve,
-        drawdownCurve
+      isTestnet
+    });
+    
+    // Khởi tạo Binance client
+    const binance = new Binance().options({
+      APIKEY: apiKey,
+      APISECRET: apiSecret,
+      useServerTime: true,
+      test: isTestnet,
+      recvWindow: 60000,
+      verbose: true,
+      urls: {
+        base: isTestnet ? 'https://testnet.binance.vision/api/' : 'https://api.binance.com/api/'
       }
-    };
+    });
+
+    console.log(`[getHistoricalData] Đã khởi tạo Binance client`);
+    
+    // Đồng bộ hóa thời gian
+    TimeSync.adjustOffset(-5000);
+    console.log(`[getHistoricalData] Đã đồng bộ thời gian`);
+    
+    // Chuyển đổi ngày tháng sang timestamp
+    let startTime: number;
+    let endTime: number;
+    
+    try {
+      // Kiểm tra định dạng ngày tháng
+      if (!startDate || !endDate) {
+        throw new Error('Ngày bắt đầu và kết thúc không được để trống');
+      }
+
+      // Thử parse ngày tháng
+      const startDateObj = new Date(startDate);
+      const endDateObj = new Date(endDate);
+
+      if (isNaN(startDateObj.getTime())) {
+        throw new Error(`Ngày bắt đầu không hợp lệ: ${startDate}`);
+      }
+
+      if (isNaN(endDateObj.getTime())) {
+        throw new Error(`Ngày kết thúc không hợp lệ: ${endDate}`);
+      }
+
+      // Kiểm tra thời gian không được ở tương lai
+      const now = new Date();
+      if (startDateObj > now) {
+        console.log(`[getHistoricalData] Cảnh báo: Thời gian bắt đầu (${startDate}) nằm trong tương lai. Tự động điều chỉnh về 30 ngày trước.`);
+        startDateObj.setTime(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+      }
+      if (endDateObj > now) {
+        console.log(`[getHistoricalData] Cảnh báo: Thời gian kết thúc (${endDate}) nằm trong tương lai. Tự động điều chỉnh về thời gian hiện tại.`);
+        endDateObj.setTime(now.getTime());
+      }
+
+      // Kiểm tra khoảng thời gian hợp lệ
+      const maxTimeRange = 365 * 24 * 60 * 60 * 1000; // 1 năm
+      if (endDateObj.getTime() - startDateObj.getTime() > maxTimeRange) {
+        console.log(`[getHistoricalData] Cảnh báo: Khoảng thời gian yêu cầu quá lớn (> 1 năm). Tự động giới hạn về 1 năm.`);
+        startDateObj.setTime(endDateObj.getTime() - maxTimeRange);
+      }
+
+      startTime = startDateObj.getTime();
+      endTime = endDateObj.getTime();
+      
+      // Kiểm tra tính hợp lệ của timestamp
+      if (isNaN(startTime) || isNaN(endTime)) {
+        throw new Error(`Timestamp không hợp lệ: startTime=${startTime}, endTime=${endTime}`);
+      }
+      
+      if (startTime >= endTime) {
+        throw new Error(`Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc`);
+      }
+      
+      console.log(`[getHistoricalData] Timestamp:`, {
+        startTime,
+        endTime,
+        startDate: startDateObj.toLocaleString(),
+        endDate: endDateObj.toLocaleString()
+      });
+    } catch (error: any) {
+      console.error(`[getHistoricalData] Lỗi khi xử lý timestamp:`, error);
+      throw new Error(`Lỗi khi xử lý timestamp: ${error.message}`);
+    }
+    
+    // Gọi API lấy dữ liệu nến
+    console.log('[getHistoricalData] Đang gọi API candles...');
+    try {
+      const allCandles = [];
+      let currentStartTime = startTime;
+      
+      // Tính toán khoảng thời gian cho mỗi lần gọi API dựa trên timeframe
+      const timeframeMs = {
+        '1m': 60 * 1000,
+        '3m': 3 * 60 * 1000,
+        '5m': 5 * 60 * 1000,
+        '15m': 15 * 60 * 1000,
+        '30m': 30 * 60 * 1000,
+        '1h': 60 * 60 * 1000,
+        '2h': 2 * 60 * 60 * 1000,
+        '4h': 4 * 60 * 60 * 1000,
+        '6h': 6 * 60 * 60 * 1000,
+        '8h': 8 * 60 * 60 * 1000,
+        '12h': 12 * 60 * 60 * 1000,
+        '1d': 24 * 60 * 60 * 1000,
+        '3d': 3 * 24 * 60 * 60 * 1000,
+        '1w': 7 * 24 * 60 * 60 * 1000,
+        '1M': 30 * 24 * 60 * 60 * 1000
+      };
+
+      const intervalMs = timeframeMs[timeframe as keyof typeof timeframeMs] || 60 * 1000;
+      const maxCandlesPerRequest = 1000; // Giới hạn của Binance API
+      const maxTimeRange = intervalMs * maxCandlesPerRequest;
+      
+      while (currentStartTime < endTime) {
+        // Tính toán thời gian kết thúc cho request hiện tại
+        const currentEndTime = Math.min(currentStartTime + maxTimeRange, endTime);
+        
+        console.log(`[getHistoricalData] Lấy dữ liệu từ ${new Date(currentStartTime).toLocaleString()} đến ${new Date(currentEndTime).toLocaleString()}`);
+        
+        // Sử dụng cách gọi API mới
+        let historicalData;
+        try {
+          // Sử dụng cách gọi API trực tiếp với Promise
+          historicalData = await binance.candles({
+            symbol: symbol,
+            interval: timeframe,
+            startTime: currentStartTime,
+            endTime: currentEndTime,
+            limit: maxCandlesPerRequest
+          });
+        } catch (error) {
+          console.error(`[getHistoricalData] Lỗi khi gọi API:`, error);
+          throw error;
+        }
+        
+        if (!historicalData || !Array.isArray(historicalData) || historicalData.length === 0) {
+          console.log(`[getHistoricalData] Không có dữ liệu cho khoảng thời gian này`);
+          break;
+        }
+        
+        console.log(`[getHistoricalData] Nhận được ${historicalData.length} nến`);
+        allCandles.push(...historicalData);
+        
+        // Cập nhật thời gian bắt đầu cho lần lấy tiếp theo
+        const lastCandle = historicalData[historicalData.length - 1];
+        currentStartTime = lastCandle.closeTime + 1;
+        
+        // Thêm delay để tránh rate limit
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      if (allCandles.length === 0) {
+        throw new Error(`Không có dữ liệu lịch sử cho ${symbol}`);
+      }
+      
+      console.log(`[getHistoricalData] Tổng cộng đã nhận ${allCandles.length} nến`);
+      
+      // Chuyển đổi dữ liệu nến thành định dạng OHLCV
+      const candles = allCandles.map(candle => {
+        try {
+          return {
+            timestamp: parseInt(candle[0]),
+            open: parseFloat(candle[1]),
+            high: parseFloat(candle[2]),
+            low: parseFloat(candle[3]),
+            close: parseFloat(candle[4]),
+            volume: parseFloat(candle[5])
+          };
+        } catch (error) {
+          console.error('[getHistoricalData] Lỗi khi chuyển đổi dữ liệu nến:', error);
+          console.error('[getHistoricalData] Dữ liệu nến gốc:', candle);
+          throw new Error(`Lỗi khi xử lý dữ liệu nến cho ${symbol}`);
+        }
+      });
+      
+      return candles;
+    } catch (error: any) {
+      console.error(`[getHistoricalData] Lỗi khi lấy dữ liệu lịch sử cho ${symbol}:`, error);
+      console.error(`[getHistoricalData] Stack trace:`, error.stack);
+      throw new Error(`Lỗi khi lấy dữ liệu lịch sử cho ${symbol}: ${error.message || 'Không xác định'}`);
+    }
+    
   } catch (error: any) {
-    console.error(`[runBacktestStrategy] Lỗi khi chạy backtest cho ${symbol}:`, error);
-    throw new Error(`Lỗi khi chạy backtesting: ${error.message}`);
+    console.error(`[getHistoricalData] Lỗi khi lấy dữ liệu lịch sử cho ${symbol}:`, error);
+    console.error(`[getHistoricalData] Stack trace:`, error.stack);
+    throw new Error(`Lỗi khi lấy dữ liệu lịch sử cho ${symbol}: ${error.message || 'Không xác định'}`);
   }
 }
 
@@ -1248,20 +1528,20 @@ export async function optimizePortfolio(
 ): Promise<OptimizedPortfolio> {
   console.log(`[optimizePortfolio] Đang tối ưu hóa danh mục đầu tư với ${symbols.length} tài sản`);
   
-  // Khởi tạo client Binance
-  const binance = new Binance().options({
-    APIKEY: apiKey,
-    APISECRET: apiSecret,
-    useServerTime: true,
-    test: isTestnet,
-    recvWindow: 60000,
-    verbose: false,
-    urls: {
-      base: isTestnet ? 'https://testnet.binance.vision/api/' : 'https://api.binance.com/api/'
-    }
-  });
-  
   try {
+    // Khởi tạo client Binance
+    const binance = new Binance().options({
+      APIKEY: apiKey,
+      APISECRET: apiSecret,
+      useServerTime: true,
+      test: isTestnet,
+      recvWindow: 60000,
+      verbose: false,
+      urls: {
+        base: isTestnet ? 'https://testnet.binance.vision/api/' : 'https://api.binance.com/api/'
+      }
+    });
+    
     // Đồng bộ hóa thời gian
     TimeSync.adjustOffset(-5000);
     
@@ -1356,7 +1636,7 @@ export async function optimizePortfolio(
     
     // Xác định trọng số danh mục theo mức chấp nhận rủi ro
     // (Đây là version đơn giản hóa của mean-variance optimization)
-    let portfolioWeights: Record<string, number> = {};
+    const portfolioWeights: Record<string, number> = {};
     
     if (riskTolerance === 'low') {
       // Ưu tiên tài sản ít biến động và tương quan thấp
@@ -1523,4 +1803,223 @@ export async function optimizePortfolio(
     console.error(`[optimizePortfolio] Lỗi khi tối ưu hóa danh mục đầu tư:`, error);
     throw new Error(`Lỗi khi tối ưu hóa danh mục đầu tư: ${error.message}`);
   }
-} 
+}
+
+interface PortfolioAnalysisResult {
+  symbols: string[];
+  timeframe: string;
+  timestamp: string;
+  correlations: Record<string, Record<string, number>>;
+  volatilities: Record<string, number>;
+  expectedReturns: Record<string, number>;
+  sharpeRatios: Record<string, number>;
+  optimalWeights: Record<string, number>;
+  summary: {
+    portfolioVolatility: number;
+    portfolioReturn: number;
+    portfolioSharpeRatio: number;
+  };
+}
+
+function calculateCorrelation(returns1: number[], returns2: number[]): number {
+  const n = returns1.length;
+  if (n !== returns2.length) {
+    throw new Error('Hai mảng lợi nhuận phải có cùng độ dài');
+  }
+
+  const mean1 = returns1.reduce((a, b) => a + b, 0) / n;
+  const mean2 = returns2.reduce((a, b) => a + b, 0) / n;
+
+  let numerator = 0;
+  let denominator1 = 0;
+  let denominator2 = 0;
+
+  for (let i = 0; i < n; i++) {
+    const diff1 = returns1[i] - mean1;
+    const diff2 = returns2[i] - mean2;
+    numerator += diff1 * diff2;
+    denominator1 += diff1 * diff1;
+    denominator2 += diff2 * diff2;
+  }
+
+  return numerator / Math.sqrt(denominator1 * denominator2);
+}
+
+function calculateVolatility(returns: number[]): number {
+  const n = returns.length;
+  const mean = returns.reduce((a, b) => a + b, 0) / n;
+  const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+  return Math.sqrt(variance * 252); // Chuyển đổi sang biến động hàng năm
+}
+
+function calculateOptimalWeights(
+  expectedReturns: Record<string, number>,
+  volatilities: Record<string, number>,
+  correlations: Record<string, Record<string, number>>
+): Record<string, number> {
+  const symbols = Object.keys(expectedReturns);
+  const n = symbols.length;
+
+  // Khởi tạo ma trận hiệp phương sai
+  const covarianceMatrix: number[][] = Array(n).fill(0).map(() => Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const symbol1 = symbols[i];
+      const symbol2 = symbols[j];
+      covarianceMatrix[i][j] = correlations[symbol1][symbol2] * volatilities[symbol1] * volatilities[symbol2];
+    }
+  }
+
+  // Tính toán tỷ lệ tối ưu sử dụng phương pháp Markowitz
+  const weights: Record<string, number> = {};
+  let totalWeight = 0;
+
+  for (let i = 0; i < n; i++) {
+    const symbol = symbols[i];
+    const weight = expectedReturns[symbol] / volatilities[symbol];
+    weights[symbol] = weight;
+    totalWeight += weight;
+  }
+
+  // Chuẩn hóa tỷ lệ
+  for (const symbol of symbols) {
+    weights[symbol] /= totalWeight;
+  }
+
+  return weights;
+}
+
+function calculatePortfolioVolatility(
+  weights: Record<string, number>,
+  volatilities: Record<string, number>,
+  correlations: Record<string, Record<string, number>>
+): number {
+  const symbols = Object.keys(weights);
+  let variance = 0;
+
+  for (const symbol1 of symbols) {
+    for (const symbol2 of symbols) {
+      variance += weights[symbol1] * weights[symbol2] * 
+                 correlations[symbol1][symbol2] * 
+                 volatilities[symbol1] * 
+                 volatilities[symbol2];
+    }
+  }
+
+  return Math.sqrt(variance);
+}
+
+function calculatePortfolioReturn(
+  weights: Record<string, number>,
+  expectedReturns: Record<string, number>
+): number {
+  return Object.keys(weights).reduce((sum, symbol) => 
+    sum + weights[symbol] * expectedReturns[symbol], 0
+  );
+}
+
+function calculatePortfolioSharpeRatio(
+  weights: Record<string, number>,
+  expectedReturns: Record<string, number>,
+  volatilities: Record<string, number>,
+  correlations: Record<string, Record<string, number>>
+): number {
+  const portfolioReturn = calculatePortfolioReturn(weights, expectedReturns);
+  const portfolioVolatility = calculatePortfolioVolatility(weights, volatilities, correlations);
+  return portfolioReturn / portfolioVolatility;
+}
+
+export async function getPortfolioAnalysis(
+  apiKey: string,
+  apiSecret: string,
+  symbols: string[],
+  timeframe: string = '1d',
+  isTestnet: boolean = false
+): Promise<PortfolioAnalysisResult> {
+  try {
+    // Lấy dữ liệu lịch sử cho tất cả các cặp
+    const historicalData: Record<string, Candle[]> = {};
+    for (const symbol of symbols) {
+      const endDate = new Date().toISOString();
+      const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(); // 1 năm
+      historicalData[symbol] = await getHistoricalData(apiKey, apiSecret, symbol, timeframe, startDate, endDate, isTestnet);
+    }
+
+    // Tính toán lợi nhuận hàng ngày
+    const dailyReturns: Record<string, number[]> = {};
+    for (const symbol of symbols) {
+      const candles = historicalData[symbol];
+      const returns: number[] = [];
+      for (let i = 1; i < candles.length; i++) {
+        const return_ = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
+        returns.push(return_);
+      }
+      dailyReturns[symbol] = returns;
+    }
+
+    // Tính toán tương quan
+    const correlations: Record<string, Record<string, number>> = {};
+    for (const symbol1 of symbols) {
+      correlations[symbol1] = {};
+      for (const symbol2 of symbols) {
+        if (symbol1 === symbol2) {
+          correlations[symbol1][symbol2] = 1;
+          continue;
+        }
+        const returns1 = dailyReturns[symbol1];
+        const returns2 = dailyReturns[symbol2];
+        const correlation = calculateCorrelation(returns1, returns2);
+        correlations[symbol1][symbol2] = correlation;
+      }
+    }
+
+    // Tính toán biến động
+    const volatilities: Record<string, number> = {};
+    for (const symbol of symbols) {
+      const returns = dailyReturns[symbol];
+      const volatility = calculateVolatility(returns);
+      volatilities[symbol] = volatility;
+    }
+
+    // Tính toán lợi nhuận kỳ vọng
+    const expectedReturns: Record<string, number> = {};
+    for (const symbol of symbols) {
+      const returns = dailyReturns[symbol];
+      const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+      expectedReturns[symbol] = avgReturn * 252; // Chuyển đổi sang lợi nhuận hàng năm
+    }
+
+    // Tính toán tỷ lệ Sharpe
+    const sharpeRatios: Record<string, number> = {};
+    for (const symbol of symbols) {
+      const returns = dailyReturns[symbol];
+      const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const volatility = volatilities[symbol];
+      const sharpeRatio = avgReturn / volatility * Math.sqrt(252);
+      sharpeRatios[symbol] = sharpeRatio;
+    }
+
+    // Tính toán tỷ lệ tối ưu
+    const weights = calculateOptimalWeights(expectedReturns, volatilities, correlations);
+
+    return {
+      symbols,
+      timeframe,
+      timestamp: new Date().toISOString(),
+      correlations,
+      volatilities,
+      expectedReturns,
+      sharpeRatios,
+      optimalWeights: weights,
+      summary: {
+        portfolioVolatility: calculatePortfolioVolatility(weights, volatilities, correlations),
+        portfolioReturn: calculatePortfolioReturn(weights, expectedReturns),
+        portfolioSharpeRatio: calculatePortfolioSharpeRatio(weights, expectedReturns, volatilities, correlations)
+      }
+    };
+
+  } catch (error: any) {
+    console.error('[getPortfolioAnalysis] Lỗi khi phân tích danh mục:', error);
+    throw new Error(`Lỗi khi phân tích danh mục: ${error.message}`);
+  }
+}

@@ -38,6 +38,14 @@ export function HypothesisTestingTab() {
     name: '',
     test_type: 'correlation',
     description: '',
+    hypothesis: '',
+    null_hypothesis: '',
+    alternative_hypothesis: '',
+    variables: [],
+    test_config: {
+      confidenceLevel: 0.95,
+      alternative: 'two-sided'
+    },
     run_immediately: false
   });
 
@@ -60,10 +68,30 @@ export function HypothesisTestingTab() {
   const createTest = async () => {
     try {
       setLoading(true);
+      
+      // Validate required fields
+      if (!testConfig.name || !testConfig.test_type) {
+        throw new Error('Vui lòng điền đầy đủ tên và loại test');
+      }
+
       const response = await fetch('/api/research/hypothesis-tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testConfig)
+        body: JSON.stringify({
+          ...testConfig,
+          variables: [
+            {
+              name: 'returns',
+              type: 'dependent',
+              description: 'Lợi nhuận giá'
+            },
+            {
+              name: 'volume',
+              type: 'independent',
+              description: 'Khối lượng giao dịch'
+            }
+          ]
+        })
       });
 
       if (response.ok) {
@@ -72,10 +100,12 @@ export function HypothesisTestingTab() {
         await fetchTests();
         setActiveTab('results');
       } else {
-        console.error('Failed to create test');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create test');
       }
     } catch (error) {
       console.error('Error creating test:', error);
+      alert(error instanceof Error ? error.message : 'Lỗi khi tạo test');
     } finally {
       setLoading(false);
     }
@@ -129,7 +159,7 @@ export function HypothesisTestingTab() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="create">Tạo Test</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
@@ -166,7 +196,7 @@ export function HypothesisTestingTab() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="correlation">Correlation Test</SelectItem>
-                      <SelectItem value="ttest">T-Test</SelectItem>
+                      <SelectItem value="t_test">T-Test</SelectItem>
                       <SelectItem value="anova">ANOVA</SelectItem>
                       <SelectItem value="chi_square">Chi-Square</SelectItem>
                     </SelectContent>
@@ -184,6 +214,36 @@ export function HypothesisTestingTab() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="hypothesis">Giả thuyết</Label>
+                <Input
+                  id="hypothesis"
+                  placeholder="VD: Có mối tương quan giữa volume và price movement"
+                  value={testConfig.hypothesis}
+                  onChange={(e) => setTestConfig(prev => ({ ...prev, hypothesis: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="null-hypothesis">Giả thuyết không</Label>
+                <Input
+                  id="null-hypothesis"
+                  placeholder="VD: Không có mối tương quan giữa volume và price movement"
+                  value={testConfig.null_hypothesis}
+                  onChange={(e) => setTestConfig(prev => ({ ...prev, null_hypothesis: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="alternative-hypothesis">Giả thuyết đối</Label>
+                <Input
+                  id="alternative-hypothesis"
+                  placeholder="VD: Có mối tương quan dương giữa volume và price movement"
+                  value={testConfig.alternative_hypothesis}
+                  onChange={(e) => setTestConfig(prev => ({ ...prev, alternative_hypothesis: e.target.value }))}
+                />
+              </div>
+
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
@@ -194,7 +254,11 @@ export function HypothesisTestingTab() {
                 <Label htmlFor="run-immediately">Chạy ngay sau khi tạo</Label>
               </div>
 
-              <Button onClick={createTest} disabled={loading || !testConfig.name}>
+              <Button
+                onClick={createTest}
+                disabled={loading}
+                className="w-full"
+              >
                 {loading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -258,55 +322,52 @@ export function HypothesisTestingTab() {
         </TabsContent>
 
         <TabsContent value="results" className="space-y-4">
-          <div className="space-y-4">
-            {tests.length > 0 ? tests.map((test) => (
-              <Card key={test.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{test.name}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant={
-                          test.status === 'completed' ? 'default' :
-                          test.status === 'running' ? 'secondary' : 'outline'
-                        }
-                      >
-                        {test.status === 'completed' ? 'Hoàn thành' :
-                         test.status === 'running' ? 'Đang chạy' : 
-                         test.status === 'failed' ? 'Lỗi' : test.status}
+          {tests.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {tests.map((test) => (
+                <Card key={test.id}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>{test.name}</span>
+                      <Badge variant={test.status === 'completed' ? 'default' : 'secondary'}>
+                        {test.status}
                       </Badge>
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <CardDescription>
-                    Test type: {test.test_type} • Created: {new Date(test.created_at).toLocaleDateString('vi-VN')}
-                  </CardDescription>
-                </CardHeader>
-                {test.results && (
+                    </CardTitle>
+                    <CardDescription>
+                      Test type: {test.test_type} • Created: {new Date(test.created_at).toLocaleDateString('vi-VN')}
+                    </CardDescription>
+                  </CardHeader>
                   <CardContent>
-                    <div className="bg-muted p-3 rounded text-sm font-mono">
-                      <pre>{JSON.stringify(test.results, null, 2)}</pre>
-                    </div>
+                    {test.results && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">p-value:</span>
+                          <span className="text-sm">{test.results.pValue.toFixed(4)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Kết quả:</span>
+                          <span className="text-sm">{test.results.isSignificant ? 'Có ý nghĩa thống kê' : 'Không có ý nghĩa thống kê'}</span>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
-                )}
-              </Card>
-            )) : (
-              <Card>
-                <CardContent className="text-center py-8">
-                  <TestTube className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-medium mb-2">Chưa có test nào</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Tạo hypothesis test đầu tiên để kiểm tra giả thuyết thống kê
-                  </p>
-                  <Button onClick={() => setActiveTab('create')}>
-                    Tạo Test Mới
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="text-center py-8">
+                <TestTube className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-medium mb-2">Chưa có test nào</h3>
+                <p className="text-muted-foreground mb-4">
+                  Tạo hypothesis test đầu tiên để kiểm tra giả thuyết thống kê
+                </p>
+                <Button onClick={() => setActiveTab('create')}>
+                  Tạo Test Mới
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -102,16 +102,28 @@ export interface ProcessingStep {
 }
 
 export interface MarketData {
-  symbol: string;
-  price: number;
-  change24h: number;
-  volume24h: number;
-  timestamp: Date;
+  candles: Candle[];
+  metadata: {
+    symbol: string;
+    timeframe: string;
+    startTime: number;
+    endTime: number;
+  };
 }
 
 export interface OHLCVData {
   symbol: string;
   timestamp: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface Candle {
+  symbol: string;
+  timestamp: number;
   open: number;
   high: number;
   low: number;

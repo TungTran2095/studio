@@ -59,42 +59,13 @@ export async function POST(request: NextRequest) {
       FOR EACH ROW EXECUTE FUNCTION update_research_experiments_updated_at();
     `;
 
-    // Thực thi SQL
-    const { error } = await supabase.rpc('exec_sql', { sql: setupSQL });
-
-    if (error) {
-      console.error('❌ Failed to setup experiments table:', error);
-      
-      // Fallback: Thử tạo table bằng cách khác
-      try {
-        const { error: createError } = await supabase
-          .from('research_experiments')
-          .select('count')
-          .limit(1);
-
-        if (createError && createError.code === '42P01') {
-          // Table không tồn tại, cung cấp SQL manual
-          return NextResponse.json({
-            success: false,
-            error: 'Cannot create table automatically. Please run SQL manually.',
-            manual_sql: setupSQL,
-            instructions: [
-              '1. Mở Supabase Dashboard',
-              '2. Vào SQL Editor',
-              '3. Copy và paste SQL code dưới đây',
-              '4. Chạy SQL',
-              '5. Thử lại chức năng experiments'
-            ]
-          }, { status: 400 });
-        }
-      } catch (fallbackError) {
-        console.error('❌ Fallback check failed:', fallbackError);
-      }
-
-      return NextResponse.json({
-        success: false,
-        error: error.message,
-        manual_sql: setupSQL
+    const { error: createError } = await supabase.rpc('exec_sql', { sql: setupSQL });
+    
+    if (createError) {
+      console.error('Failed to create experiments table:', createError);
+      return NextResponse.json({ 
+        error: 'Failed to create experiments table',
+        details: createError.message
       }, { status: 500 });
     }
 
@@ -166,10 +137,10 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Setup error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Setup failed: ' + (error instanceof Error ? error.message : 'Unknown error')
+    console.error('API Error:', error);
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 } 
