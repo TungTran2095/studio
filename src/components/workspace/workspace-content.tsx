@@ -28,6 +28,7 @@ import {
   TrendingUp,
   Activity
 } from 'lucide-react';
+import ThemeToggle from '@/components/ThemeToggle'; // Import ThemeToggle
 
 interface WorkspaceContentProps {
   activeModule: ModuleId;
@@ -50,9 +51,12 @@ function DashboardModule() {
     <div className="flex flex-col gap-4 p-4 min-h-full">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard Chung</h1>
-          <p className="text-muted-foreground">Tổng quan thị trường và tài sản</p>
+        <div className="flex items-center gap-4"> {/* Flex container for title and toggle */}
+          <div>
+            <h1 className="text-2xl font-bold">Dashboard Chung</h1>
+            <p className="text-muted-foreground">Tổng quan thị trường và tài sản</p>
+          </div>
+          <ThemeToggle /> {/* Add ThemeToggle here */}
         </div>
         <Badge variant="secondary" className="flex items-center gap-1">
           <Activity className="h-3 w-3" />

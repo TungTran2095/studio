@@ -14,44 +14,32 @@ export const TradingViewWidget: React.FC = memo(() => {
   const scriptAdded = useRef(false); // Ref to track if script has been added
   const widgetInstance = useRef<any>(null); // Ref to store the widget instance
 
-  // Function to update widget theme - Force dark mode
-  const updateTheme = () => {
-    const currentTheme = "dark"; // Always set to dark
-    if (widgetInstance.current && typeof widgetInstance.current.changeTheme === 'function') {
-        // Ensure the changeTheme function exists before calling
-        try {
-            widgetInstance.current.changeTheme(currentTheme);
-        } catch (error) {
-            console.error("Error changing TradingView widget theme:", error);
-        }
-    }
-    return currentTheme;
-  };
-
   useEffect(() => {
     // Ensure container exists and script hasn't been added yet
     if (!container.current || scriptAdded.current) return;
 
-    const currentTheme = "dark"; // Set initial theme directly to dark
+    // Determine the current theme from the document element class
+    // Default to light if no class or neither dark nor light is present (or just for safety)
+    const initialTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 
     // Configuration for the Advanced Real-Time Chart Widget
     const widgetConfig = {
-      "autosize": true, // Use autosize instead of fixed width/height
-      "symbol": "BINANCE:BTCUSDT", // Primary symbol
-      "interval": "D", // Default interval (Daily)
+      "autosize": true,
+      "symbol": "BINANCE:BTCUSDT",
+      "interval": "D",
       "timezone": "Etc/UTC",
-      "theme": currentTheme, // Set initial theme to dark
-      "style": "1", // 1 = Candlesticks
+      "theme": initialTheme, // Use the determined initial theme
+      "style": "1",
       "locale": "en",
-      "enable_publishing": false, // Disable publishing button
-      "allow_symbol_change": true, // Allow user to change symbol
-      "withdateranges": true, // Show date ranges
-      "hide_side_toolbar": false, // Show drawing toolbar
-      "hide_top_toolbar": false, // Show top toolbar (interval, chart type etc.)
+      "enable_publishing": false,
+      "allow_symbol_change": true,
+      "withdateranges": true,
+      "hide_side_toolbar": false,
+      "hide_top_toolbar": false,
       "studies": [
-        "IchimokuCloud@tv-basicstudies" // Keep Ichimoku Cloud
+        "IchimokuCloud@tv-basicstudies"
       ],
-      "container_id": "tradingview_chart_container", // Important for advanced widget
+      "container_id": "tradingview_chart_container",
     };
 
     const script = document.createElement("script");
@@ -60,16 +48,13 @@ export const TradingViewWidget: React.FC = memo(() => {
     script.async = true;
     script.onload = () => {
         if (typeof window.TradingView !== 'undefined' && typeof window.TradingView.widget === 'function') {
-           // Store the widget instance
            try {
-               // Đảm bảo container element tồn tại trước khi khởi tạo widget
                const targetContainer = document.getElementById('tradingview_chart_container');
                if (targetContainer && container.current) {
                    widgetInstance.current = new window.TradingView.widget(widgetConfig);
-                   scriptAdded.current = true; // Mark script as loaded and widget initialized
+                   scriptAdded.current = true;
                } else {
                    console.warn("TradingView container not found, retrying...");
-                   // Retry after a short delay
                    setTimeout(() => {
                        const retryContainer = document.getElementById('tradingview_chart_container');
                        if (retryContainer && container.current) {
@@ -91,21 +76,29 @@ export const TradingViewWidget: React.FC = memo(() => {
 
     container.current.appendChild(script);
 
-     // Setup MutationObserver to detect theme changes on HTML element
-     // Although we force dark theme, this can help if other styles depend on the class
+    // Setup MutationObserver to detect theme changes on HTML element
     const observer = new MutationObserver((mutationsList) => {
         for (const mutation of mutationsList) {
             if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                updateTheme(); // Re-apply dark theme if needed
+                // Determine the new theme based on the presence of the 'dark' class
+                const newTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+
+                // Check if the widget is initialized and the theme needs to be changed
+                // Also check if the changeTheme function exists before calling
+                if (widgetInstance.current && widgetInstance.current.options.theme !== newTheme && typeof widgetInstance.current.changeTheme === 'function') {
+                     widgetInstance.current.changeTheme(newTheme);
+                     // Optionally update widgetConfig.theme if you were using it elsewhere, but changeTheme is usually enough
+                     // widgetConfig.theme = newTheme;
+                }
             }
         }
     });
 
-    // Start observing the document element for attribute changes
+    // Start observing the document element for attribute changes (specifically class)
+    // Use { attributes: true } to observe attribute changes.
     if (typeof document !== 'undefined') {
         observer.observe(document.documentElement, { attributes: true });
     }
-
 
     // Cleanup function
     return () => {
@@ -115,20 +108,15 @@ export const TradingViewWidget: React.FC = memo(() => {
       // Remove widget instance if it exists
       if (widgetInstance.current) {
         try {
-            // Thử xóa widget một cách an toàn
             if (typeof widgetInstance.current.remove === 'function') {
                 widgetInstance.current.remove();
             }
-            
-            // Backup cleanup: xóa trực tiếp container content
             const chartContainer = document.getElementById('tradingview_chart_container');
             if (chartContainer) {
                 chartContainer.innerHTML = '';
             }
-            
         } catch (error) {
             console.warn("TradingView widget cleanup warning:", error);
-            // Fallback: xóa toàn bộ nội dung container
             try {
                 const chartContainer = document.getElementById('tradingview_chart_container');
                 if (chartContainer) {
@@ -140,17 +128,15 @@ export const TradingViewWidget: React.FC = memo(() => {
         }
         widgetInstance.current = null;
       }
-      
+
       // Clean up the container div safely
       if (container.current) {
         try {
-          // Safer way to clean up children
           const containerElement = container.current;
           while (containerElement.firstChild) {
             try {
               containerElement.removeChild(containerElement.firstChild);
             } catch (childError) {
-              // If removeChild fails, try innerHTML
               containerElement.innerHTML = '';
               break;
             }
@@ -159,18 +145,16 @@ export const TradingViewWidget: React.FC = memo(() => {
           console.warn("Container cleanup warning:", error);
         }
       }
-      
+
       // Reset script added status
       scriptAdded.current = false;
     };
   }, []); // Empty dependency array ensures this runs only once on mount
 
-   // Container div for the advanced widget
    return (
     <div className="middle-column h-full w-full">
         <div id="chart-container" className="h-full w-full">
             <div id="tradingview_btcusdt" className="tradingview-widget-container h-full w-full" ref={container}>
-                {/* The widget script will target this ID */}
                 <div id="tradingview_chart_container" className="h-full w-full"></div>
             </div>
         </div>

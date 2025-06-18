@@ -3,49 +3,49 @@
 @tailwind utilities;
 
 body {
-  font-family: "Roboto", Arial, Helvetica, sans-serif; /* Ensure Roboto font is applied */
+  font-family: "Inner", Arial, Helvetica, sans-serif;
 }
 
 @layer base {
   :root {
-    /* Dark Mode - Adjusted for #0f0f0f background */
-    --background: 0 0% 6%; /* #0f0f0f */
-    --foreground: 215 20% 85%; /* Light Grey Text */
-    --card: 0 0% 10%; /* Slightly lighter dark grey card */
-    --card-foreground: 215 20% 85%; /* Light Grey text on card */
-    --popover: 0 0% 10%; /* Slightly lighter dark grey popover */
-    --popover-foreground: 215 20% 85%; /* Light Grey text on popover */
+    /* Light Theme */
+    --background: 0 0% 100%; /* White */
+    --foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 222.2 84% 4.9%; /* Nearly Black */
     --primary: 25 95% 53%; /* Vibrant Orange gradient base - KEEPING AS REQUESTED */
-    --primary-foreground: 0 0% 100%; /* White text on gradient */
-    --secondary: 0 0% 10%; /* Slightly lighter dark grey for bot messages */
-    --secondary-foreground: 215 20% 85%; /* Light Gray Text for bot messages */
-    --muted: 0 0% 10%; /* Slightly lighter dark grey */
-    --muted-foreground: 218 15% 55%; /* Lighter Gray Text */
-    --accent: 0 0% 15%; /* Medium Dark Grey for accents/hover */
-    --accent-foreground: 215 20% 85%; /* Light Grey accent text */
+    --primary-foreground: 222.2 84% 4.9%; /* Nearly Black text on primary */
+    --secondary: 210 40% 96.1%; /* Light Grey */
+    --secondary-foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --muted: 210 40% 96.1%; /* Light Grey */
+    --muted-foreground: 215.4 16.3% 46.9%; /* Medium Grey */
+    --accent: 210 40% 96.1%; /* Light Grey */
+    --accent-foreground: 222.2 84% 4.9%; /* Nearly Black */
     --destructive: 0 63% 51%; /* Red */
     --destructive-foreground: 0 0% 98%; /* Light text on red */
-    --border: 0 0% 20%; /* Darker Gray Border */
-    --input: 0 0% 20%; /* Darker Input BG */
+    --border: 214.3 31.8% 91.4%; /* Light Grey Border */
+    --input: 214.3 31.8% 91.4%; /* Light Grey Input BG */
     --ring: 25 95% 53%; /* Vibrant Orange for focus rings - KEEPING AS REQUESTED */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --radius: 0.5rem; /* Standard border radius */
-     --sidebar-background: 0 0% 6%; /* Match background */
-    --sidebar-foreground: 215 20% 85%; /* Match foreground */
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 100%; /* Match background */
+    --sidebar-foreground: 222.2 84% 4.9%; /* Match foreground */
     --sidebar-primary: 25 95% 53%; /* Match primary */
-    --sidebar-primary-foreground: 0 0% 100%; /* Match primary-foreground */
-    --sidebar-accent: 0 0% 15%; /* Match accent */
-    --sidebar-accent-foreground: 215 20% 85%; /* Match accent-foreground */
-    --sidebar-border: 0 0% 20%; /* Match border */
+    --sidebar-primary-foreground: 222.2 84% 4.9%; /* Match primary-foreground */
+    --sidebar-accent: 210 40% 96.1%; /* Match accent */
+    --sidebar-accent-foreground: 222.2 84% 4.9%; /* Match accent-foreground */
+    --sidebar-border: 214.3 31.8% 91.4%; /* Match border */
     --sidebar-ring: 25 95% 53%; /* Match ring */
   }
 
   .dark {
-    /* Dark Mode - Adjusted for #0f0f0f background */
+    /* Dark Mode */
     --background: 0 0% 6%; /* #0f0f0f */
     --foreground: 215 20% 85%; /* Light Grey Text */
     --card: 0 0% 10%; /* Slightly lighter dark grey card */
@@ -70,8 +70,8 @@ body {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --radius: 0.5rem; /* Standard border radius */
-     --sidebar-background: 0 0% 6%; /* Match background */
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 6%; /* Match background */
     --sidebar-foreground: 215 20% 85%; /* Match foreground */
     --sidebar-primary: 25 95% 53%; /* Match primary */
     --sidebar-primary-foreground: 0 0% 100%; /* Match primary-foreground */
