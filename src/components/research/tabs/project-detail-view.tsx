@@ -1008,7 +1008,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
 
       {/* Model Logs Modal */}
       {showLogs && selectedModel && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] max-h-[90vh] w-[90vw] max-w-4xl">
+          <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setShowLogs(false)}></div>
           <CardHeader className="sticky top-0 bg-background border-b w-full">
             <div className="flex items-center justify-between">
               <div>
@@ -1284,7 +1285,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
 
       {/* Create Model Form */}
       {showCreateModel && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto">
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] max-h-[90vh] w-[90vw] max-w-4xl">
+          <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setShowCreateModel(false)}></div>
           <CardHeader className="sticky top-0 bg-background border-b">
             <div className="flex items-center justify-between">
               <div>
@@ -1502,7 +1504,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
 
       {/* Data Selector Modal */}
       {showDataSelector && modelToTrain && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] max-h-[90vh] w-[90vw] max-w-4xl">
+          <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setShowDataSelector(false)}></div>
           <CardHeader className="sticky top-0 bg-background border-b w-full">
             <div className="flex items-center justify-between">
               <div>
