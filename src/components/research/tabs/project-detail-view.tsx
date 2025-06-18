@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import Highcharts from 'highcharts';
+import HighchartsReact from 'highcharts-react-official';
 import { 
   ArrowLeft,
   Brain,
@@ -42,6 +44,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { DatasetSelector } from '../dataset-selector';
 import { TrainingProgressModal } from '../training-progress-modal';
 import { ModelPerformanceDisplay } from '../model-performance-display';
+import { PriceChart } from '../price-chart';
+import { format } from 'date-fns';
 
 interface Project {
   id: string;
@@ -445,8 +449,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
   };
 
   const handleCreateModel = async (modelData: any) => {
-    setIsCreating(true);
     try {
+      console.log('🚀 Creating model:', modelData);
       const payload = {
         project_id: projectId,
         name: modelData.name.trim(),
@@ -463,13 +467,11 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
         }),
         created_at: new Date().toISOString()
       };
-      
       const response = await fetch('/api/research/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
       let result;
       try {
         result = await response.json();
@@ -477,35 +479,20 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
         console.error('❌ Failed to parse response:', parseError);
         return { success: false, error: 'Invalid server response' };
       }
-
       if (response.ok) {
         console.log('✅ Model created successfully:', result.model);
-        await onRefresh();
-        setShowCreateModel(false);
-        // Reset form
-        setCreateForm({
-          name: '',
-          description: '',
-          category: 'prediction',
-          algorithm_type: '',
-          config_params: {
-            test_size: 0.2,
-            random_state: 42
-          }
-        });
+        await fetchProjectModels();
         return { success: true, model: result.model };
       } else {
         console.error('❌ Model creation failed:', { status: response.status, result });
-        return { 
-          success: false, 
-          error: result?.error || result?.message || `Server error (${response.status})` 
+        return {
+          success: false,
+          error: result?.error || result?.message || `Server error (${response.status})`
         };
       }
     } catch (error) {
       console.error('❌ Model creation network error:', error);
       return { success: false, error: 'Network error - check connection' };
-    } finally {
-      setIsCreating(false);
     }
   };
 
@@ -1885,30 +1872,58 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
   );
 }
 
+interface BacktestConfig {
+  name: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  timeframe: string;
+  symbol: string;
+  initialCapital: number;
+  positionSize: number;
+  stopLoss: number;
+  takeProfit: number;
+}
+
+interface OHLCV {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 function ExperimentsTab({ projectId }: any) {
   const [experiments, setExperiments] = useState<any[]>([]);
-  const [showExperimentTypeModal, setShowExperimentTypeModal] = useState(false);
-  const [selectedExperimentType, setSelectedExperimentType] = useState<'backtest' | 'hypothesis_test' | null>(null);
-  const [showBacktestConfig, setShowBacktestConfig] = useState(false);
-  const [showHypothesisConfig, setShowHypothesisConfig] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [creatingExperiment, setCreatingExperiment] = useState(false);
+  const [showExperimentTypeModal, setShowExperimentTypeModal] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
-  const [creatingExperiment, setCreatingExperiment] = useState(false);
-  const [selectedExperiment, setSelectedExperiment] = useState<any>(null);
-  const [showDetails, setShowDetails] = useState(false);
-  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [backtestConfig, setBacktestConfig] = useState({
+  const [backtestConfig, setBacktestConfig] = useState<BacktestConfig>({
     name: '',
     description: '',
-    startDate: '',
-    endDate: '',
+    startDate: format(new Date(), 'yyyy-MM-dd'),
+    endDate: format(new Date(), 'yyyy-MM-dd'),
+    startTime: '00:00',
+    endTime: '23:59',
+    timeframe: '1h',
+    symbol: 'BTCUSDT',
     initialCapital: 10000,
-    positionSize: 10,
+    positionSize: 1,
     stopLoss: 2,
     takeProfit: 4
   });
-
+  const [chartData, setChartData] = useState<OHLCV[]>([]);
+  const [loadingChart, setLoadingChart] = useState(false);
+  const [selectedExperimentType, setSelectedExperimentType] = useState<'backtest' | 'hypothesis_test' | null>(null);
+  const [showBacktestConfig, setShowBacktestConfig] = useState(false);
+  const [showHypothesisConfig, setShowHypothesisConfig] = useState(false);
+  const [selectedExperiment, setSelectedExperiment] = useState<any>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [hypothesisConfig, setHypothesisConfig] = useState({
     name: '',
     description: '',
@@ -2209,6 +2224,42 @@ function ExperimentsTab({ projectId }: any) {
     }
   };
 
+  const loadChartData = async () => {
+    try {
+      setLoadingChart(true);
+      
+      // Tạo timestamp từ ngày và giờ
+      const startTimestamp = new Date(`${backtestConfig.startDate}T${backtestConfig.startTime}`).getTime();
+      const endTimestamp = new Date(`${backtestConfig.endDate}T${backtestConfig.endTime}`).getTime();
+
+      // Gọi API để lấy dữ liệu
+      const response = await fetch('/api/research/ohlcv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symbol: backtestConfig.symbol,
+          timeframe: backtestConfig.timeframe,
+          startTime: startTimestamp,
+          endTime: endTimestamp
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch OHLCV data');
+      }
+
+      const data = await response.json();
+      setChartData(data.ohlcv || []);
+    } catch (error) {
+      console.error('Error loading chart data:', error);
+      alert('Lỗi khi tải dữ liệu biểu đồ');
+    } finally {
+      setLoadingChart(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -2372,105 +2423,315 @@ function ExperimentsTab({ projectId }: any) {
 
       {/* Backtest Configuration Modal */}
       {showBacktestConfig && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 w-[1500px] max-h-[90vh] left-[50%] top-[50%] transform translate-x-[-50%] translate-y-[-50%]">
           <CardHeader>
             <CardTitle>Cấu hình Backtest</CardTitle>
             <CardDescription>
               Thiết lập các tham số cho thí nghiệm backtest
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Tên thí nghiệm</Label>
-                <Input 
-                  placeholder="Nhập tên thí nghiệm" 
-                  value={backtestConfig.name}
-                  onChange={(e) => handleBacktestConfigChange('name', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Mô tả</Label>
-                <Input 
-                  placeholder="Nhập mô tả" 
-                  value={backtestConfig.description}
-                  onChange={(e) => handleBacktestConfigChange('description', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Ngày bắt đầu</Label>
-                <Input 
-                  type="date" 
-                  value={backtestConfig.startDate}
-                  onChange={(e) => handleBacktestConfigChange('startDate', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Ngày kết thúc</Label>
-                <Input 
-                  type="date" 
-                  value={backtestConfig.endDate}
-                  onChange={(e) => handleBacktestConfigChange('endDate', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Vốn ban đầu</Label>
-                <Input 
-                  type="number" 
-                  placeholder="VD: 10000" 
-                  value={backtestConfig.initialCapital}
-                  onChange={(e) => handleBacktestConfigChange('initialCapital', parseFloat(e.target.value))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Kích thước vị thế (%)</Label>
-                <Input 
-                  type="number" 
-                  placeholder="VD: 10" 
-                  value={backtestConfig.positionSize}
-                  onChange={(e) => handleBacktestConfigChange('positionSize', parseFloat(e.target.value))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Stop Loss (%)</Label>
-                <Input 
-                  type="number" 
-                  placeholder="VD: 2" 
-                  value={backtestConfig.stopLoss}
-                  onChange={(e) => handleBacktestConfigChange('stopLoss', parseFloat(e.target.value))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Take Profit (%)</Label>
-                <Input 
-                  type="number" 
-                  placeholder="VD: 4" 
-                  value={backtestConfig.takeProfit}
-                  onChange={(e) => handleBacktestConfigChange('takeProfit', parseFloat(e.target.value))}
-                />
+          <CardContent className="space-y-6">
+            {/* Phần 1: Biểu đồ nến */}
+            <div className="space-y-4">
+              <div className="border rounded-lg p-4 h-[400px] flex flex-col justify-center">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-semibold">BTC/USDT</h3>
+                </div>
+                <div className="h-full">
+                  {loadingChart ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                      <span className="ml-2 text-sm">Đang tải dữ liệu...</span>
+                    </div>
+                  ) : chartData.length > 0 ? (
+                    <div className="w-full h-full">
+                      <HighchartsReact
+                        highcharts={Highcharts}
+                        options={{
+                          chart: {
+                            height: 350,
+                            style: {
+                              fontFamily: 'inherit'
+                            },
+                            spacing: [5, 5, 5, 5]
+                          },
+                          title: {
+                            text: undefined,
+                            style: { fontSize: '12px' },
+                            margin: 0
+                          },
+                          xAxis: {
+                            type: 'datetime',
+                            labels: {
+                              style: {
+                                fontSize: '9px'
+                              }
+                            }
+                          },
+                          yAxis: {
+                            title: {
+                              text: 'Price',
+                              style: {
+                                fontSize: '10px'
+                              }
+                            },
+                            labels: {
+                              style: {
+                                fontSize: '9px'
+                              }
+                            }
+                          },
+                          series: [{
+                            name: 'Close Price',
+                            type: 'line',
+                            data: chartData.map(candle => [candle.timestamp, candle.close]),
+                            color: '#3b82f6',
+                            lineWidth: 1,
+                            marker: {
+                              enabled: false
+                            }
+                          }],
+                          tooltip: {
+                            xDateFormat: '%Y-%m-%d %H:%M:%S',
+                            valueDecimals: 2
+                          },
+                          legend: {
+                            enabled: false
+                          },
+                          credits: {
+                            enabled: false
+                          }
+                        }}
+                      />
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Dữ liệu đã tải: {chartData.length} nến
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      Chọn khoảng thời gian và nhấn "Tải dữ liệu" để xem biểu đồ
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Phần 2: Các tab */}
+            <div className="space-y-4">
+              <Tabs defaultValue="data" className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="data">Cấu hình dữ liệu</TabsTrigger>
+                  <TabsTrigger value="config">Cấu hình backtest</TabsTrigger>
+                  <TabsTrigger value="script">Python script</TabsTrigger>
+                  <TabsTrigger value="result">Backtest result</TabsTrigger>
+                </TabsList>
+                <TabsContent value="data" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Thời gian bắt đầu</Label>
+                      <div className="flex gap-2">
+                        <Input 
+                          type="date"
+                          value={backtestConfig.startDate}
+                          onChange={(e) => handleBacktestConfigChange('startDate', e.target.value)}
+                        />
+                        <Input 
+                          type="time"
+                          value={backtestConfig.startTime}
+                          onChange={(e) => handleBacktestConfigChange('startTime', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Thời gian kết thúc</Label>
+                      <div className="flex gap-2">
+                        <Input 
+                          type="date"
+                          value={backtestConfig.endDate}
+                          onChange={(e) => handleBacktestConfigChange('endDate', e.target.value)}
+                        />
+                        <Input 
+                          type="time"
+                          value={backtestConfig.endTime}
+                          onChange={(e) => handleBacktestConfigChange('endTime', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Timeframe</Label>
+                      <Select 
+                        value={backtestConfig.timeframe}
+                        onValueChange={(value) => handleBacktestConfigChange('timeframe', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Chọn timeframe" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1m">1 phút</SelectItem>
+                          <SelectItem value="5m">5 phút</SelectItem>
+                          <SelectItem value="15m">15 phút</SelectItem>
+                          <SelectItem value="30m">30 phút</SelectItem>
+                          <SelectItem value="1h">1 giờ</SelectItem>
+                          <SelectItem value="4h">4 giờ</SelectItem>
+                          <SelectItem value="1d">1 ngày</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cặp giao dịch</Label>
+                      <Select 
+                        value={backtestConfig.symbol}
+                        onValueChange={(value) => handleBacktestConfigChange('symbol', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Chọn cặp giao dịch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="BTCUSDT">BTC/USDT</SelectItem>
+                          <SelectItem value="ETHUSDT">ETH/USDT</SelectItem>
+                          <SelectItem value="BNBUSDT">BNB/USDT</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button 
+                      variant="outline"
+                      onClick={loadChartData}
+                      disabled={loadingChart}
+                    >
+                      {loadingChart ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Đang tải...
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="h-4 w-4 mr-2" />
+                          Tải dữ liệu
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </TabsContent>
+                <TabsContent value="config" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Tên thí nghiệm</Label>
+                      <Input 
+                        placeholder="Nhập tên thí nghiệm" 
+                        value={backtestConfig.name}
+                        onChange={(e) => handleBacktestConfigChange('name', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Mô tả</Label>
+                      <Input 
+                        placeholder="Nhập mô tả" 
+                        value={backtestConfig.description}
+                        onChange={(e) => handleBacktestConfigChange('description', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Ngày bắt đầu</Label>
+                      <Input 
+                        type="date"
+                        value={backtestConfig.startDate}
+                        onChange={(e) => handleBacktestConfigChange('startDate', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Ngày kết thúc</Label>
+                      <Input 
+                        type="date"
+                        value={backtestConfig.endDate}
+                        onChange={(e) => handleBacktestConfigChange('endDate', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Vốn ban đầu</Label>
+                      <Input 
+                        type="number"
+                        value={backtestConfig.initialCapital}
+                        onChange={(e) => handleBacktestConfigChange('initialCapital', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Kích thước vị thế (%)</Label>
+                      <Input 
+                        type="number"
+                        value={backtestConfig.positionSize}
+                        onChange={(e) => handleBacktestConfigChange('positionSize', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Stop Loss (%)</Label>
+                      <Input 
+                        type="number"
+                        value={backtestConfig.stopLoss}
+                        onChange={(e) => handleBacktestConfigChange('stopLoss', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Take Profit (%)</Label>
+                      <Input 
+                        type="number"
+                        value={backtestConfig.takeProfit}
+                        onChange={(e) => handleBacktestConfigChange('takeProfit', Number(e.target.value))}
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="script" className="space-y-4">
+                  <div className="h-[300px] border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Python Script</h3>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm">
+                          <Save className="h-4 w-4 mr-2" />
+                          Lưu script
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="h-[220px] flex items-center justify-center text-muted-foreground">
+                      Python script sẽ được hiển thị ở đây
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="result" className="space-y-4">
+                  <div className="h-[300px] border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Kết quả Backtest</h3>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm">
+                          <Download className="h-4 w-4 mr-2" />
+                          Tải kết quả
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="h-[220px] flex items-center justify-center text-muted-foreground">
+                      Kết quả backtest sẽ được hiển thị ở đây
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
           </CardContent>
-          <CardFooter className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowBacktestConfig(false)}
-              className="flex-1"
-            >
+          <CardFooter className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowBacktestConfig(false)}>
               Hủy
             </Button>
-            <Button 
-              onClick={createBacktestExperiment}
-              disabled={creatingExperiment}
-              className="flex-1"
-            >
+            <Button onClick={createBacktestExperiment} disabled={creatingExperiment}>
               {creatingExperiment ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Đang tạo...
                 </>
               ) : (
-                'Tạo thí nghiệm'
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Chạy backtest
+                </>
               )}
             </Button>
           </CardFooter>
@@ -2923,6 +3184,26 @@ function ExperimentsTab({ projectId }: any) {
           </CardContent>
         </Card>
       )}
+
+      {/* Chart Section */}
+      {(() => {
+        const chartDataFiltered = chartData
+          .map(candle => ({
+            ...candle,
+            timestamp: typeof candle.timestamp === 'string'
+              ? new Date(candle.timestamp).getTime()
+              : (candle.timestamp > 1e12 ? candle.timestamp : candle.timestamp * 1000)
+          }))
+          .filter(candle => typeof candle.timestamp === 'number' && !isNaN(candle.timestamp) && typeof candle.close === 'number' && !isNaN(candle.close));
+        console.log('ChartDataFiltered (5 dòng đầu):', chartDataFiltered.slice(0, 5), 'Tổng:', chartDataFiltered.length);
+        return (
+          <PriceChart 
+            symbol={backtestConfig.symbol}
+            timeframe={backtestConfig.timeframe}
+            data={chartDataFiltered}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -2985,7 +3266,6 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm)
       });
-
       if (response.ok) {
         await fetchProjectDetails();
         setIsEditing(false);
@@ -2998,7 +3278,6 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
   const createModel = async (modelData: any) => {
     try {
       console.log('🚀 Creating model:', modelData);
-      
       const payload = {
         project_id: projectId,
         name: modelData.name.trim(),
@@ -3015,13 +3294,11 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         }),
         created_at: new Date().toISOString()
       };
-      
       const response = await fetch('/api/research/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
       let result;
       try {
         result = await response.json();
@@ -3029,16 +3306,15 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         console.error('❌ Failed to parse response:', parseError);
         return { success: false, error: 'Invalid server response' };
       }
-
       if (response.ok) {
         console.log('✅ Model created successfully:', result.model);
         await fetchProjectModels();
         return { success: true, model: result.model };
       } else {
         console.error('❌ Model creation failed:', { status: response.status, result });
-        return { 
-          success: false, 
-          error: result?.error || result?.message || `Server error (${response.status})` 
+        return {
+          success: false,
+          error: result?.error || result?.message || `Server error (${response.status})`
         };
       }
     } catch (error) {
@@ -3046,15 +3322,6 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
       return { success: false, error: 'Network error - check connection' };
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        <span className="ml-2">Đang tải project...</span>
-      </div>
-    );
-  }
 
   if (!project) {
     return (
