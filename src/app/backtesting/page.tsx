@@ -80,6 +80,48 @@ export default function BacktestingPage() {
         { name: 'slowPeriod', label: 'Chu kỳ MA chậm', type: 'number', default: 20 },
         { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
       ]
+    },
+    {
+      id: 'rsi_strategy',
+      name: 'RSI Strategy',
+      description: 'Chiến lược giao dịch dựa trên chỉ báo RSI (Relative Strength Index)',
+      parameters: [
+        { name: 'period', label: 'Chu kỳ RSI', type: 'number', default: 14 },
+        { name: 'overbought', label: 'Ngưỡng quá mua', type: 'number', default: 70 },
+        { name: 'oversold', label: 'Ngưỡng quá bán', type: 'number', default: 30 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'bollinger_bands',
+      name: 'Bollinger Bands',
+      description: 'Chiến lược giao dịch dựa trên dải Bollinger Bands',
+      parameters: [
+        { name: 'period', label: 'Chu kỳ', type: 'number', default: 20 },
+        { name: 'stdDev', label: 'Độ lệch chuẩn', type: 'number', default: 2 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'macd_strategy',
+      name: 'MACD Strategy',
+      description: 'Chiến lược giao dịch dựa trên chỉ báo MACD (Moving Average Convergence Divergence)',
+      parameters: [
+        { name: 'fastEMA', label: 'EMA nhanh', type: 'number', default: 12 },
+        { name: 'slowEMA', label: 'EMA chậm', type: 'number', default: 26 },
+        { name: 'signalPeriod', label: 'Chu kỳ tín hiệu', type: 'number', default: 9 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'breakout_strategy',
+      name: 'Breakout Strategy',
+      description: 'Chiến lược giao dịch dựa trên đột phá kênh giá',
+      parameters: [
+        { name: 'period', label: 'Chu kỳ kênh giá', type: 'number', default: 20 },
+        { name: 'multiplier', label: 'Hệ số nhân', type: 'number', default: 2 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
     }
   ];
 

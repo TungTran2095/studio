@@ -46,6 +46,8 @@ import { TrainingProgressModal } from '../training-progress-modal';
 import { ModelPerformanceDisplay } from '../model-performance-display';
 import { PriceChart } from '../price-chart';
 import { format } from 'date-fns';
+import { useToast } from "@/components/ui/use-toast";
+import { supabase } from '@/lib/supabase-client';
 
 interface Project {
   id: string;
@@ -2008,12 +2010,30 @@ interface BacktestConfig {
   positionSize: number;
   stopLoss: number;
   takeProfit: number;
+  maxPositions?: number;
+  maxDrawdown?: number;
+  trailingStop?: boolean;
+  trailingStopDistance?: number;
   strategyType?: string;
   rsiBuy?: string;
   rsiSell?: string;
   macdBuy?: string;
   macdSell?: string;
   aiRule?: string;
+  fastPeriod?: number;
+  slowPeriod?: number;
+  rsiPeriod?: number;
+  overbought?: number;
+  oversold?: number;
+  fastEMA?: number;
+  slowEMA?: number;
+  signalPeriod?: number;
+  period?: number;
+  stdDev?: number;
+  bbPeriod?: number;
+  bbStdDev?: number;
+  multiplier?: number;
+  channelPeriod?: number;
 }
 
 interface OHLCV {
@@ -2026,6 +2046,7 @@ interface OHLCV {
 }
 
 function ExperimentsTab({ projectId, models }: { projectId: string, models: any[] }) {
+  const { toast } = useToast();
   const [experiments, setExperiments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingExperiment, setCreatingExperiment] = useState(false);
@@ -2082,39 +2103,139 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     try {
       setCreatingExperiment(true);
       console.log('📝 Creating backtest experiment:', backtestConfig);
-      const response = await fetch('/api/research/experiments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: projectId,
-          name: backtestConfig.name,
-          type: 'backtest',
-          description: backtestConfig.description,
-          config: {
-            startDate: backtestConfig.startDate,
-            endDate: backtestConfig.endDate,
-            initialCapital: backtestConfig.initialCapital,
-            positionSize: backtestConfig.positionSize,
-            stopLoss: backtestConfig.stopLoss,
-            takeProfit: backtestConfig.takeProfit,
-            pythonScript: pythonScript // gửi script lên backend
+
+      // Chuẩn bị cấu hình chiến lược dựa trên loại chiến lược được chọn
+      let strategyConfig = {};
+      switch (backtestConfig.strategyType) {
+        case 'ma_crossover':
+          strategyConfig = {
+            type: 'ma_crossover',
+            parameters: {
+              fastPeriod: backtestConfig.fastPeriod || 10,
+              slowPeriod: backtestConfig.slowPeriod || 20
+            }
+          };
+          break;
+        case 'rsi':
+          strategyConfig = {
+            type: 'rsi',
+            parameters: {
+              period: backtestConfig.rsiPeriod || 14,
+              overbought: backtestConfig.overbought || 70,
+              oversold: backtestConfig.oversold || 30
+            }
+          };
+          break;
+        case 'macd':
+          strategyConfig = {
+            type: 'macd',
+            parameters: {
+              fastEMA: backtestConfig.fastEMA || 12,
+              slowEMA: backtestConfig.slowEMA || 26,
+              signalPeriod: backtestConfig.signalPeriod || 9
+            }
+          };
+          break;
+        case 'bollinger_bands':
+          strategyConfig = {
+            type: 'bollinger_bands',
+            parameters: {
+              period: backtestConfig.bbPeriod || 20,
+              stdDev: backtestConfig.bbStdDev || 2
+            }
+          };
+          break;
+        case 'breakout':
+          strategyConfig = {
+            type: 'breakout',
+            parameters: {
+              channelPeriod: backtestConfig.channelPeriod || 20,
+              multiplier: backtestConfig.multiplier || 2
+            }
+          };
+          break;
+      }
+
+      // Chuẩn bị cấu hình đầy đủ cho backtest
+      const fullConfig = {
+        strategy: strategyConfig,
+        trading: {
+          symbol: backtestConfig.symbol,
+          timeframe: backtestConfig.timeframe,
+          startDate: backtestConfig.startDate,
+          endDate: backtestConfig.endDate,
+          startTime: backtestConfig.startTime,
+          endTime: backtestConfig.endTime,
+          initialCapital: backtestConfig.initialCapital || 10000,
+          positionSize: backtestConfig.positionSize || 1
+        },
+        riskManagement: {
+          stopLoss: backtestConfig.stopLoss || 2,
+          takeProfit: backtestConfig.takeProfit || 4,
+          maxPositions: backtestConfig.maxPositions || 1,
+          maxDrawdown: backtestConfig.maxDrawdown || 10,
+          trailingStop: backtestConfig.trailingStop || true,
+          trailingStopDistance: backtestConfig.trailingStopDistance || 1
+        }
+      };
+
+      // Lưu experiment vào database
+      const { data: experiment, error } = await supabase
+        .from('research_experiments')
+        .insert([
+          {
+            name: backtestConfig.name,
+            description: backtestConfig.description,
+            type: 'backtest',
+            status: 'pending',
+            config: fullConfig,
+            project_id: projectId
           }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Gọi API để chạy backtest
+      const response = await fetch('/api/research/backtests/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          experimentId: experiment.id,
+          config: fullConfig
         })
       });
-      const data = await response.json();
-      if (response.ok) {
-        console.log('✅ Backtest experiment created:', data);
-        setBacktestResult(data.result || null); // lưu kết quả trả về
-        await fetchExperiments();
-        setShowBacktestConfig(false);
-        alert('✅ Đã tạo thí nghiệm backtest thành công!');
-      } else {
-        console.error('❌ Failed to create backtest experiment:', data.error);
-        alert(`❌ Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to start backtest');
       }
+
+      // Không đóng modal, chỉ reset form
+      setBacktestConfig({
+        name: '',
+        description: '',
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        strategyType: 'ma_crossover'
+      });
+
+      toast({
+        title: 'Backtest đã được tạo',
+        description: 'Backtest đang được chạy trong background. Kết quả sẽ được cập nhật sau khi hoàn thành.',
+      });
+
+      // Refresh danh sách experiments
+      await fetchExperiments();
     } catch (error) {
-      console.error('❌ Error creating backtest experiment:', error);
-      alert('❌ Lỗi kết nối khi tạo thí nghiệm');
+      console.error('Error creating backtest experiment:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể tạo backtest experiment. Vui lòng thử lại.',
+        variant: 'destructive',
+      });
     } finally {
       setCreatingExperiment(false);
     }
@@ -2876,8 +2997,11 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         </SelectTrigger>
                         <SelectContent>
                           <div className="px-2 py-1 text-xs text-muted-foreground">Chiến lược cơ bản</div>
+                          <SelectItem value="ma_crossover">Moving Average Crossover</SelectItem>
                           <SelectItem value="macd">MACD</SelectItem>
                           <SelectItem value="rsi">RSI</SelectItem>
+                          <SelectItem value="bollinger_bands">Bollinger Bands</SelectItem>
+                          <SelectItem value="breakout">Breakout</SelectItem>
                           <div className="px-2 py-1 text-xs text-muted-foreground">Chiến lược nâng cao (AI)</div>
                           {/* Lấy danh sách model đã train từ models */}
                           {models.filter((m: any) => m.status === 'completed').map((m: any) => (
@@ -2886,45 +3010,145 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         </SelectContent>
                       </Select>
                     </div>
-                    {/* Thêm ô nhập rule giao dịch */}
+
+                    {/* Cấu hình cho từng chiến lược */}
+                    {backtestConfig.strategyType === 'ma_crossover' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ MA nhanh</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.fastPeriod || 10}
+                            onChange={(e) => handleBacktestConfigChange('fastPeriod', parseInt(e.target.value))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Chu kỳ MA chậm</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.slowPeriod || 20}
+                            onChange={(e) => handleBacktestConfigChange('slowPeriod', parseInt(e.target.value))}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {backtestConfig.strategyType === 'rsi' && (
-                      <div className="space-y-2 col-span-2">
-                        <Label>Rule giao dịch RSI</Label>
-                        <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ RSI</Label>
                           <Input
                             type="number"
-                            placeholder="Mua khi RSI > ..."
-                            value={backtestConfig.rsiBuy || ''}
-                            onChange={e => handleBacktestConfigChange('rsiBuy', e.target.value)}
+                            min="1"
+                            value={backtestConfig.rsiPeriod || 14}
+                            onChange={(e) => handleBacktestConfigChange('rsiPeriod', parseInt(e.target.value))}
                           />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Ngưỡng quá mua</Label>
                           <Input
                             type="number"
-                            placeholder="Bán khi RSI < ..."
-                            value={backtestConfig.rsiSell || ''}
-                            onChange={e => handleBacktestConfigChange('rsiSell', e.target.value)}
+                            min="0"
+                            max="100"
+                            value={backtestConfig.overbought || 70}
+                            onChange={(e) => handleBacktestConfigChange('overbought', parseInt(e.target.value))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Ngưỡng quá bán</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={backtestConfig.oversold || 30}
+                            onChange={(e) => handleBacktestConfigChange('oversold', parseInt(e.target.value))}
                           />
                         </div>
                       </div>
                     )}
+
                     {backtestConfig.strategyType === 'macd' && (
-                      <div className="space-y-2 col-span-2">
-                        <Label>Rule giao dịch MACD</Label>
-                        <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>EMA nhanh</Label>
                           <Input
                             type="number"
-                            placeholder="Mua khi MACD > ..."
-                            value={backtestConfig.macdBuy || ''}
-                            onChange={e => handleBacktestConfigChange('macdBuy', e.target.value)}
+                            min="1"
+                            value={backtestConfig.fastEMA || 12}
+                            onChange={(e) => handleBacktestConfigChange('fastEMA', parseInt(e.target.value))}
                           />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>EMA chậm</Label>
                           <Input
                             type="number"
-                            placeholder="Bán khi MACD < ..."
-                            value={backtestConfig.macdSell || ''}
-                            onChange={e => handleBacktestConfigChange('macdSell', e.target.value)}
+                            min="1"
+                            value={backtestConfig.slowEMA || 26}
+                            onChange={(e) => handleBacktestConfigChange('slowEMA', parseInt(e.target.value))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Chu kỳ tín hiệu</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.signalPeriod || 9}
+                            onChange={(e) => handleBacktestConfigChange('signalPeriod', parseInt(e.target.value))}
                           />
                         </div>
                       </div>
                     )}
+
+                    {backtestConfig.strategyType === 'bollinger_bands' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.bbPeriod || 20}
+                            onChange={(e) => handleBacktestConfigChange('bbPeriod', parseInt(e.target.value))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Độ lệch chuẩn</Label>
+                          <Input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={backtestConfig.bbStdDev || 2}
+                            onChange={(e) => handleBacktestConfigChange('bbStdDev', parseFloat(e.target.value))}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'breakout' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ kênh giá</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.channelPeriod || 20}
+                            onChange={(e) => handleBacktestConfigChange('channelPeriod', parseInt(e.target.value))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Hệ số nhân</Label>
+                          <Input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={backtestConfig.multiplier || 2}
+                            onChange={(e) => handleBacktestConfigChange('multiplier', parseFloat(e.target.value))}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {/* Thêm ô nhập rule giao dịch */}
                     {backtestConfig.strategyType && backtestConfig.strategyType.startsWith('ai_') && (
                       <div className="space-y-2 col-span-2">
                         <Label>Rule giao dịch AI Model</Label>
