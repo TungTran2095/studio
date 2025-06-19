@@ -157,7 +157,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
     features: ['open_price', 'high_price', 'low_price', 'close_price', 'volume'],
     target: 'close_price',
     testSize: 0.2,
-    dataLimit: 10000
+    dataLimit: 10000,
+    timeframe: '1m' // Thêm trường timeframe
   });
   const [availableData, setAvailableData] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -514,6 +515,11 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       // Build query with filters based on user selection
       let query = `/api/data/ohlcv?limit=${trainingData.dataLimit}&order=timestamp.desc`;
       
+      // Thêm timeframe vào query
+      if (trainingData.timeframe) {
+        query += `&timeframe=${trainingData.timeframe}`;
+      }
+      
       // Add date filters if specified
       if (trainingData.startDate && trainingData.endDate) {
         const startDateTime = `${trainingData.startDate}T00:00:00Z`;
@@ -531,14 +537,26 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       
       console.log('🔗 [Reload Data] API Query:', query);
       
-      const response = await fetch(query);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📊 [Reload Data] API Response:', data);
-        
+      let data = null;
+      // Nếu timeframe là 1m thì lấy trực tiếp từ API
+      if (trainingData.timeframe === '1m') {
+        const response = await fetch(query);
+        if (response.ok) {
+          data = await response.json();
+        }
+      } else {
+        // Nếu timeframe khác 1m, lấy dữ liệu 1m rồi tổng hợp lại
+        let baseQuery = query.replace(`&timeframe=${trainingData.timeframe}`, '&timeframe=1m');
+        const response = await fetch(baseQuery);
+        if (response.ok) {
+          const raw = await response.json();
+          // Hàm tổng hợp dữ liệu 1m thành timeframe lớn hơn
+          data = { data: aggregateOHLCV(raw.data || [], trainingData.timeframe) };
+        }
+      }
+      if (data) {
         setAvailableData(data.data || []);
-        
-        // Only auto-set date range if user hasn't specified dates yet
+        // ... giữ nguyên các xử lý sau khi setAvailableData ...
         if ((!trainingData.startDate || !trainingData.endDate) && data.data && data.data.length > 0) {
           const latest = data.data[0].open_time;
           const earliest = data.data[data.data.length - 1].open_time;
@@ -547,7 +565,6 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
             endDate: latest ? latest.split('T')[0] : '',
             startDate: earliest ? earliest.split('T')[0] : ''
           }));
-          
           console.log('📅 [Reload Data] Auto-set date range (first time):', {
             startDate: earliest ? earliest.split('T')[0] : '',
             endDate: latest ? latest.split('T')[0] : '',
@@ -560,20 +577,15 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
             totalRecords: data.data?.length || 0
           });
         }
-        
         console.log('✅ [Reload Data] Data loaded successfully:', data.data?.length || 0, 'records');
-        
-        // Show success message with date range info
         if (data.data && data.data.length > 0) {
           const dateRangeInfo = trainingData.startDate && trainingData.endDate 
             ? `📅 Date range: ${trainingData.startDate} to ${trainingData.endDate}`
             : `📅 Latest records: ${data.data[data.data.length - 1].open_time?.split('T')[0]} to ${data.data[0].open_time?.split('T')[0]}`;
-            
           alert(`✅ Đã reload ${data.data.length.toLocaleString()} records!\n${dateRangeInfo}`);
         }
       } else {
-        console.error('❌ [Reload Data] Failed to fetch OHLCV data:', response.status);
-        alert(`❌ Không thể tải dữ liệu OHLCV (Status: ${response.status})`);
+        alert('❌ Không thể tải dữ liệu OHLCV');
       }
     } catch (error) {
       console.error('❌ [Reload Data] Error fetching data:', error);
@@ -583,6 +595,97 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       console.log('🏁 [Reload Data] Loading finished');
     }
   };
+
+  // Hàm tổng hợp OHLCV từ 1m sang timeframe lớn hơn
+  function aggregateOHLCV(data: any[], timeframe: string) {
+    // Hỗ trợ các timeframe: 1m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d
+    const tfMap: any = {
+      '1m': 1,
+      '5m': 5,
+      '15m': 15,
+      '30m': 30,
+      '1h': 60,
+      '2h': 120,
+      '4h': 240,
+      '6h': 360,
+      '8h': 480,
+      '12h': 720,
+      '1d': 1440
+    };
+
+    const tf = tfMap[timeframe];
+    if (!tf || tf === 1) return data; // Nếu là 1m hoặc timeframe không hợp lệ, trả về nguyên data
+
+    const result = [];
+    let currentChunk: any[] = [];
+    let currentTimestamp: string | null = null;
+
+    // Hàm kiểm tra xem một timestamp có thuộc về cùng một nhóm timeframe không
+    const isSameTimeframe = (timestamp1: string, timestamp2: string) => {
+      const date1 = new Date(timestamp1);
+      const date2 = new Date(timestamp2);
+      
+      const minutes1 = date1.getUTCHours() * 60 + date1.getUTCMinutes();
+      const minutes2 = date2.getUTCHours() * 60 + date2.getUTCMinutes();
+      
+      return Math.floor(minutes1 / tf) === Math.floor(minutes2 / tf) &&
+             date1.getUTCFullYear() === date2.getUTCFullYear() &&
+             date1.getUTCMonth() === date2.getUTCMonth() &&
+             date1.getUTCDate() === date2.getUTCDate();
+    };
+
+    // Hàm tính giá trị OHLCV cho một chunk
+    const calculateOHLCV = (chunk: any[]) => {
+      if (chunk.length === 0) return null;
+      
+      const openTime = chunk[0].open_time;
+      const open = chunk[0].open_price || chunk[0].open;
+      const close = chunk[chunk.length - 1].close_price || chunk[chunk.length - 1].close;
+      const high = Math.max(...chunk.map(x => x.high_price || x.high));
+      const low = Math.min(...chunk.map(x => x.low_price || x.low));
+      const volume = chunk.reduce((sum, x) => sum + Number(x.volume), 0);
+      
+      return {
+        open_time: openTime,
+        open_price: open,
+        high_price: high,
+        low_price: low,
+        close_price: close,
+        volume: volume,
+        // Thêm các trường tương thích ngược
+        open: open,
+        high: high,
+        low: low,
+        close: close
+      };
+    };
+
+    // Xử lý từng candle
+    for (const candle of data) {
+      if (!currentTimestamp) {
+        currentTimestamp = candle.open_time;
+        currentChunk = [candle];
+      } else if (isSameTimeframe(currentTimestamp, candle.open_time)) {
+        currentChunk.push(candle);
+      } else {
+        // Khi gặp candle thuộc timeframe mới
+        const ohlcv = calculateOHLCV(currentChunk);
+        if (ohlcv) result.push(ohlcv);
+        
+        // Bắt đầu chunk mới
+        currentTimestamp = candle.open_time;
+        currentChunk = [candle];
+      }
+    }
+
+    // Xử lý chunk cuối cùng
+    if (currentChunk.length > 0) {
+      const ohlcv = calculateOHLCV(currentChunk);
+      if (ohlcv) result.push(ohlcv);
+    }
+
+    return result;
+  }
 
   // Auto-update train/test split when data or testSize changes
   useEffect(() => {
@@ -1598,6 +1701,26 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                       onChange={(e) => setTrainingData(prev => ({ ...prev, endDate: e.target.value }))}
                     />
                   </div>
+                  {/* Thêm chọn timeframe */}
+                  <div>
+                    <Label htmlFor="timeframe">Timeframe</Label>
+                    <Select
+                      value={trainingData.timeframe}
+                      onValueChange={(value) => setTrainingData(prev => ({ ...prev, timeframe: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn timeframe" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1m">1 phút</SelectItem>
+                        <SelectItem value="5m">5 phút</SelectItem>
+                        <SelectItem value="15m">15 phút</SelectItem>
+                        <SelectItem value="1h">1 giờ</SelectItem>
+                        <SelectItem value="4h">4 giờ</SelectItem>
+                        <SelectItem value="1d">1 ngày</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1885,6 +2008,12 @@ interface BacktestConfig {
   positionSize: number;
   stopLoss: number;
   takeProfit: number;
+  strategyType?: string;
+  rsiBuy?: string;
+  rsiSell?: string;
+  macdBuy?: string;
+  macdSell?: string;
+  aiRule?: string;
 }
 
 interface OHLCV {
@@ -1893,9 +2022,10 @@ interface OHLCV {
   high: number;
   low: number;
   close: number;
+  volume: number;
 }
 
-function ExperimentsTab({ projectId }: any) {
+function ExperimentsTab({ projectId, models }: { projectId: string, models: any[] }) {
   const [experiments, setExperiments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingExperiment, setCreatingExperiment] = useState(false);
@@ -1931,6 +2061,8 @@ function ExperimentsTab({ projectId }: any) {
     significanceLevel: '0.05',
     testType: 't-test'
   });
+  const [pythonScript, setPythonScript] = useState<string>('');
+  const [backtestResult, setBacktestResult] = useState<any>(null);
 
   const handleBacktestConfigChange = (field: string, value: string | number) => {
     setBacktestConfig(prev => ({
@@ -1950,7 +2082,6 @@ function ExperimentsTab({ projectId }: any) {
     try {
       setCreatingExperiment(true);
       console.log('📝 Creating backtest experiment:', backtestConfig);
-      
       const response = await fetch('/api/research/experiments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1965,15 +2096,15 @@ function ExperimentsTab({ projectId }: any) {
             initialCapital: backtestConfig.initialCapital,
             positionSize: backtestConfig.positionSize,
             stopLoss: backtestConfig.stopLoss,
-            takeProfit: backtestConfig.takeProfit
+            takeProfit: backtestConfig.takeProfit,
+            pythonScript: pythonScript // gửi script lên backend
           }
         })
       });
-
       const data = await response.json();
-      
       if (response.ok) {
         console.log('✅ Backtest experiment created:', data);
+        setBacktestResult(data.result || null); // lưu kết quả trả về
         await fetchExperiments();
         setShowBacktestConfig(false);
         alert('✅ Đã tạo thí nghiệm backtest thành công!');
@@ -2260,6 +2391,27 @@ function ExperimentsTab({ projectId }: any) {
     }
   };
 
+  // Đặt dataForChart ở đây, ngoài mọi block, trước return
+  const dataForChart: OHLCV[] = chartData
+    .map((candle: any) => ({
+      timestamp: typeof candle.timestamp === 'string'
+        ? new Date(candle.timestamp).getTime()
+        : (candle.timestamp > 1e12 ? candle.timestamp : candle.timestamp * 1000),
+      open: parseFloat(candle.open),
+      high: parseFloat(candle.high),
+      low: parseFloat(candle.low),
+      close: parseFloat(candle.close),
+      volume: parseFloat(candle.volume)
+    }))
+    .filter((candle: OHLCV) => 
+      typeof candle.timestamp === 'number' && !isNaN(candle.timestamp) &&
+      typeof candle.close === 'number' && !isNaN(candle.close) &&
+      typeof candle.open === 'number' && !isNaN(candle.open) &&
+      typeof candle.high === 'number' && !isNaN(candle.high) &&
+      typeof candle.low === 'number' && !isNaN(candle.low) &&
+      typeof candle.volume === 'number' && !isNaN(candle.volume)
+    );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -2453,38 +2605,51 @@ function ExperimentsTab({ projectId }: any) {
                             style: {
                               fontFamily: 'inherit'
                             },
-                            spacing: [5, 5, 5, 5]
+                            spacing: [5, 5, 5, 5],
+                            backgroundColor: 'transparent'
                           },
                           title: {
-                            text: undefined,
-                            style: { fontSize: '12px' },
-                            margin: 0
+                            text: undefined
                           },
                           xAxis: {
                             type: 'datetime',
                             labels: {
                               style: {
-                                fontSize: '9px'
+                                fontSize: '10px',
+                                color: '#888888'
                               }
-                            }
+                            },
+                            lineColor: '#2e2e2e',
+                            tickColor: '#2e2e2e'
                           },
                           yAxis: {
                             title: {
                               text: 'Price',
                               style: {
-                                fontSize: '10px'
+                                color: '#888888'
                               }
                             },
                             labels: {
                               style: {
-                                fontSize: '9px'
+                                fontSize: '10px',
+                                color: '#888888'
                               }
+                            },
+                            gridLineColor: '#2e2e2e'
+                          },
+                          plotOptions: {
+                            line: {
+                              color: '#22c55e',
+                              lineWidth: 1.5
                             }
                           },
                           series: [{
                             name: 'Close Price',
                             type: 'line',
-                            data: chartData.map(candle => [candle.timestamp, candle.close]),
+                            data: dataForChart.map(candle => [
+                              candle.timestamp,
+                              candle.close
+                            ]),
                             color: '#3b82f6',
                             lineWidth: 1,
                             marker: {
@@ -2504,7 +2669,7 @@ function ExperimentsTab({ projectId }: any) {
                         }}
                       />
                       <div className="text-xs text-muted-foreground mt-1">
-                        Dữ liệu đã tải: {chartData.length} nến
+                        Dữ liệu đã tải: {dataForChart.length} nến
                       </div>
                     </div>
                   ) : (
@@ -2515,6 +2680,72 @@ function ExperimentsTab({ projectId }: any) {
                 </div>
               </div>
             </div>
+
+                  {/* Bảng preview dữ liệu 5 dòng đầu */}
+      {dataForChart && dataForChart.length > 0 && (
+        <div className="mt-4 mb-4">
+          <h4 className="font-semibold text-sm mb-2">5 dòng dữ liệu đầu tiên (Timeframe: {backtestConfig.timeframe})</h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs border">
+              <thead>
+                <tr className="bg-muted border-b">
+                  <th className="p-2 text-left">Time</th>
+                  <th className="p-2 text-right">Open</th>
+                  <th className="p-2 text-right">High</th>
+                  <th className="p-2 text-right">Low</th>
+                  <th className="p-2 text-right">Close</th>
+                  <th className="p-2 text-right">Volume</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  // Lấy dữ liệu đã được gộp theo timeframe
+                  const previewData = dataForChart || [];
+                  return previewData.slice(0, 5).map((row: any, idx: number) => {
+                    let timeStr = 'N/A';
+                    const timestamp = row.timestamp || row.open_time;
+                    if (timestamp) {
+                      const d = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
+                      // Format theo timeframe
+                      const hours = d.getHours();
+                      const minutes = d.getMinutes();
+                      const date = d.toLocaleDateString('vi-VN');
+                      
+                      switch(backtestConfig.timeframe) {
+                        case '1d':
+                          timeStr = date;
+                          break;
+                        case '4h':
+                          // Làm tròn xuống 4 giờ gần nhất
+                          const hour4h = Math.floor(hours / 4) * 4;
+                          timeStr = `${String(hour4h).padStart(2, '0')}:00 ${date}`;
+                          break;
+                        case '1h':
+                          // Hiển thị đúng giờ, phút luôn là 00
+                          timeStr = `${String(hours).padStart(2, '0')}:00 ${date}`;
+                          break;
+                        default:
+                          // Cho các timeframe nhỏ hơn 1h, hiển thị cả giờ và phút
+                          timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${date}`;
+                      }
+                    }
+                    return (
+                      <tr key={idx} className="border-b hover:bg-muted/50">
+                        <td className="p-2 font-mono text-xs">{timeStr}</td>
+                        <td className="p-2 text-right font-mono">{(row.open_price || row.open)?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="p-2 text-right font-mono">{(row.high_price || row.high)?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="p-2 text-right font-mono">{(row.low_price || row.low)?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="p-2 text-right font-mono font-medium">{(row.close_price || row.close)?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="p-2 text-right font-mono">{row.volume?.toLocaleString('vi-VN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
             {/* Phần 2: Các tab */}
             <div className="space-y-4">
@@ -2632,22 +2863,79 @@ function ExperimentsTab({ projectId }: any) {
                         onChange={(e) => handleBacktestConfigChange('description', e.target.value)}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Ngày bắt đầu</Label>
-                      <Input 
-                        type="date"
-                        value={backtestConfig.startDate}
-                        onChange={(e) => handleBacktestConfigChange('startDate', e.target.value)}
-                      />
+                    {/* BỎ 2 mục ngày bắt đầu, ngày kết thúc ở đây */}
+                    {/* Thêm dropdown chọn chiến lược */}
+                    <div className="space-y-2 col-span-2">
+                      <Label>Chọn chiến lược</Label>
+                      <Select
+                        value={backtestConfig.strategyType || ''}
+                        onValueChange={value => handleBacktestConfigChange('strategyType', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Chọn chiến lược backtest" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <div className="px-2 py-1 text-xs text-muted-foreground">Chiến lược cơ bản</div>
+                          <SelectItem value="macd">MACD</SelectItem>
+                          <SelectItem value="rsi">RSI</SelectItem>
+                          <div className="px-2 py-1 text-xs text-muted-foreground">Chiến lược nâng cao (AI)</div>
+                          {/* Lấy danh sách model đã train từ models */}
+                          {models.filter((m: any) => m.status === 'completed').map((m: any) => (
+                            <SelectItem key={m.id} value={`ai_${m.id}`}>{`AI Model: ${m.name}`}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Ngày kết thúc</Label>
-                      <Input 
-                        type="date"
-                        value={backtestConfig.endDate}
-                        onChange={(e) => handleBacktestConfigChange('endDate', e.target.value)}
-                      />
-                    </div>
+                    {/* Thêm ô nhập rule giao dịch */}
+                    {backtestConfig.strategyType === 'rsi' && (
+                      <div className="space-y-2 col-span-2">
+                        <Label>Rule giao dịch RSI</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="number"
+                            placeholder="Mua khi RSI > ..."
+                            value={backtestConfig.rsiBuy || ''}
+                            onChange={e => handleBacktestConfigChange('rsiBuy', e.target.value)}
+                          />
+                          <Input
+                            type="number"
+                            placeholder="Bán khi RSI < ..."
+                            value={backtestConfig.rsiSell || ''}
+                            onChange={e => handleBacktestConfigChange('rsiSell', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {backtestConfig.strategyType === 'macd' && (
+                      <div className="space-y-2 col-span-2">
+                        <Label>Rule giao dịch MACD</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="number"
+                            placeholder="Mua khi MACD > ..."
+                            value={backtestConfig.macdBuy || ''}
+                            onChange={e => handleBacktestConfigChange('macdBuy', e.target.value)}
+                          />
+                          <Input
+                            type="number"
+                            placeholder="Bán khi MACD < ..."
+                            value={backtestConfig.macdSell || ''}
+                            onChange={e => handleBacktestConfigChange('macdSell', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {backtestConfig.strategyType && backtestConfig.strategyType.startsWith('ai_') && (
+                      <div className="space-y-2 col-span-2">
+                        <Label>Rule giao dịch AI Model</Label>
+                        <Textarea
+                          placeholder="Nhập rule giao dịch cho AI model (ví dụ: Mua khi dự báo tăng > 0.7, bán khi dự báo giảm > 0.7)"
+                          value={backtestConfig.aiRule || ''}
+                          onChange={e => handleBacktestConfigChange('aiRule', e.target.value)}
+                        />
+                      </div>
+                    )}
+                    {/* Các trường còn lại */}
                     <div className="space-y-2">
                       <Label>Vốn ban đầu</Label>
                       <Input 
@@ -2683,19 +2971,29 @@ function ExperimentsTab({ projectId }: any) {
                   </div>
                 </TabsContent>
                 <TabsContent value="script" className="space-y-4">
-                  <div className="h-[300px] border rounded-lg p-4">
+                  <div className="h-[300px] border rounded-lg p-4 flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Python Script</h3>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            alert('Đã lưu script!');
+                          }}
+                        >
                           <Save className="h-4 w-4 mr-2" />
                           Lưu script
                         </Button>
                       </div>
                     </div>
-                    <div className="h-[220px] flex items-center justify-center text-muted-foreground">
-                      Python script sẽ được hiển thị ở đây
-                    </div>
+                    <Textarea
+                      className="flex-1 font-mono text-sm resize-none"
+                      placeholder="Paste hoặc viết code Python backtest ở đây..."
+                      value={pythonScript}
+                      onChange={e => setPythonScript(e.target.value)}
+                      style={{ minHeight: 200, maxHeight: 220 }}
+                    />
                   </div>
                 </TabsContent>
                 <TabsContent value="result" className="space-y-4">
@@ -2710,7 +3008,11 @@ function ExperimentsTab({ projectId }: any) {
                       </div>
                     </div>
                     <div className="h-[220px] flex items-center justify-center text-muted-foreground">
-                      Kết quả backtest sẽ được hiển thị ở đây
+                      {backtestResult ? (
+                        <pre className="text-xs text-left w-full h-full overflow-auto">{JSON.stringify(backtestResult, null, 2)}</pre>
+                      ) : (
+                        'Kết quả backtest sẽ được hiển thị ở đây'
+                      )}
                     </div>
                   </div>
                 </TabsContent>
@@ -3187,20 +3489,11 @@ function ExperimentsTab({ projectId }: any) {
 
       {/* Chart Section */}
       {(() => {
-        const chartDataFiltered = chartData
-          .map(candle => ({
-            ...candle,
-            timestamp: typeof candle.timestamp === 'string'
-              ? new Date(candle.timestamp).getTime()
-              : (candle.timestamp > 1e12 ? candle.timestamp : candle.timestamp * 1000)
-          }))
-          .filter(candle => typeof candle.timestamp === 'number' && !isNaN(candle.timestamp) && typeof candle.close === 'number' && !isNaN(candle.close));
-        console.log('ChartDataFiltered (5 dòng đầu):', chartDataFiltered.slice(0, 5), 'Tổng:', chartDataFiltered.length);
         return (
           <PriceChart 
             symbol={backtestConfig.symbol}
             timeframe={backtestConfig.timeframe}
-            data={chartDataFiltered}
+            data={dataForChart}
           />
         );
       })()}
@@ -3590,7 +3883,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         </TabsContent>
 
         <TabsContent value="experiments" className="space-y-6">
-          <ExperimentsTab projectId={projectId} />
+          <ExperimentsTab projectId={projectId} models={models} />
         </TabsContent>
 
         <TabsContent value="results" className="space-y-6">

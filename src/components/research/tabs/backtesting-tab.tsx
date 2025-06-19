@@ -17,7 +17,8 @@ import {
   Zap,
   Clock,
   DollarSign,
-  TrendingDown
+  TrendingDown,
+  X
 } from 'lucide-react';
 
 interface Backtest {
@@ -41,6 +42,7 @@ export function BacktestingTab() {
     lookback_period: 20,
     threshold: 0.02
   });
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   useEffect(() => {
     fetchBacktests();
@@ -340,6 +342,13 @@ export function BacktestingTab() {
           )}
         </CardContent>
       </Card>
+
+      {showConfigModal && (
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] max-h-[90vh] w-[90vw] max-w-4xl">
+          <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setShowConfigModal(false)}></div>
+          {/* Add your modal content here */}
+        </Card>
+      )}
     </div>
   );
 } 

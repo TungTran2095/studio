@@ -170,6 +170,40 @@ export default function BacktestingPage() {
     }
   };
 
+  const handleLoadData = async () => {
+    try {
+      setIsLoadingData(true);
+      addLog('Đang tải dữ liệu...');
+
+      const response = await fetch('/api/research/ohlcv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symbol: formData.symbol,
+          timeframe: formData.timeframe,
+          startTime: formData.startDate,
+          endTime: formData.endDate
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Lỗi khi tải dữ liệu');
+      }
+
+      const data = await response.json();
+      setRawData(data.ohlcv);
+      addLog(`Đã tải ${data.count} điểm dữ liệu`);
+    } catch (error: any) {
+      setError(error.message);
+      addLog(`Lỗi: ${error.message}`);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
   const addLog = (message: string) => {
     console.log(message);
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -340,6 +374,25 @@ export default function BacktestingPage() {
               </div>
 
               <div className="flex justify-end pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="mr-2"
+                  onClick={handleLoadData}
+                  disabled={isLoadingData}
+                >
+                  {isLoadingData ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Đang tải...
+                    </>
+                  ) : (
+                    <>
+                      <BarChart4 className="mr-2 h-4 w-4" />
+                      Tải dữ liệu
+                    </>
+                  )}
+                </Button>
                 <Button type="submit" disabled={loading}>
                   {loading ? (
                     <>
