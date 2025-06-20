@@ -55,47 +55,51 @@ export async function POST(request: Request) {
     });
 
     pythonProcess.on('close', async (code) => {
-      console.log(`Backtest process exited with code ${code}`);
-
-      let finalStatus = code === 0 ? 'completed' : 'failed';
-      let results = null;
-
-      if (code === 0 && scriptOutput) {
+      if (code === 0) {
+        // Parse từng dòng output, chỉ lấy dòng là JSON
+        const lines = scriptOutput.trim().split('\n');
+        let tradesObj = null;
+        let summaryObj = null;
         try {
-          // Cố gắng tìm và parse JSON từ output
-          const lines = scriptOutput.trim().split('\n');
-          const lastLine = lines[lines.length - 1];
-          results = JSON.parse(lastLine);
-          console.log('Parsed backtest results:', results);
+          // Lọc ra các dòng JSON hợp lệ
+          const jsonLines = lines.filter(line => line.trim().startsWith('{') && line.trim().endsWith('}'));
+          if (jsonLines.length >= 2) {
+            tradesObj = JSON.parse(jsonLines[0]);
+            summaryObj = JSON.parse(jsonLines[1]);
+          } else if (jsonLines.length === 1) {
+            const obj = JSON.parse(jsonLines[0]);
+            if (obj.trades) tradesObj = obj;
+            else summaryObj = obj;
+          }
         } catch (e) {
-          console.error('Failed to parse backtest results from stdout:', e);
-          finalStatus = 'failed';
-          scriptError += '\nError: Failed to parse results JSON from script output.';
+          console.error('Lỗi parse output từ script:', e);
         }
-      }
 
-      // Cập nhật trạng thái và kết quả experiment
-      const updatePayload: { status: string; results?: any, error?: string } = {
-        status: finalStatus,
-      };
+        // Update cả hai cột nếu có dữ liệu
+        const updateData: Record<string, any> = {};
+        if (tradesObj && tradesObj.trades) updateData.trades = tradesObj.trades;
+        if (summaryObj) updateData.results = summaryObj;
+        updateData.status = 'completed';
+        updateData.completed_at = new Date().toISOString();
 
-      if (results) {
-        updatePayload.results = results;
-      }
+        await supabase
+          .from('research_experiments')
+          .update(updateData)
+          .eq('id', experimentId);
 
-      if (finalStatus === 'failed' && scriptError) {
-        updatePayload.error = scriptError;
-      }
-      
-      const { error } = await supabase
-        .from('research_experiments')
-        .update(updatePayload)
-        .eq('id', experimentId);
-
-      if (error) {
-        console.error('Error updating experiment status and results:', error);
+        return NextResponse.json({
+          success: true,
+          message: 'Backtest completed successfully',
+          results: {
+            trades: tradesObj ? tradesObj.trades : null,
+            summary: summaryObj
+          }
+        });
       } else {
-        console.log(`✅ Experiment ${experimentId} updated with status: ${finalStatus}`);
+        return NextResponse.json(
+          { error: 'Backtest script failed', details: scriptError },
+          { status: 500 }
+        );
       }
     });
 

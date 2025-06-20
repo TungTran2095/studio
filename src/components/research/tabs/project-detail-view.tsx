@@ -2220,7 +2220,17 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         })
       });
 
-      if (!response.ok) {
+      let result = null;
+      if (response.ok) {
+        result = await response.json();
+        // Nếu có trades, update lại bản ghi với trades
+        if (result && result.trades) {
+          await supabase
+            .from('research_experiments')
+            .update({ trades: result.trades })
+            .eq('id', experiment.id);
+        }
+      } else {
         throw new Error('Failed to start backtest');
       }
 
@@ -2402,6 +2412,11 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         if (data.experiment) {
           finalExperiment = data.experiment;
         }
+      }
+      // Nếu có trades ở DB, gán vào results để UI bảng giao dịch lấy đúng nguồn
+      if (finalExperiment.trades) {
+        if (!finalExperiment.results) finalExperiment.results = {};
+        finalExperiment.results.trades = finalExperiment.trades;
       }
       setSelectedExperiment(finalExperiment);
       if (finalExperiment.type === 'backtest') {
@@ -3208,7 +3223,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                     />
                   </div>
                 </TabsContent>
-                <TabsContent value="result" className="space-y-4">
+                <TabsContent value="results" className="space-y-4">
                   <div className="h-[300px] border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Kết quả Backtest</h3>
@@ -3685,9 +3700,76 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                       <Card>
                         <CardHeader><CardTitle className="text-base">Kết quả backtest</CardTitle></CardHeader>
                         <CardContent>
-                          <div className="bg-muted p-4 rounded-lg">
-                            <pre className="text-sm overflow-auto max-h-60">{JSON.stringify(selectedExperiment.results || selectedExperiment.metrics || {}, null, 2)}</pre>
-                          </div>
+                          {selectedExperiment.results || selectedExperiment.metrics ? (
+                            (() => {
+                              const resultObj = selectedExperiment.results || selectedExperiment.metrics || {};
+                              return <>
+                                <BacktestResultDetail results={resultObj} />
+                                {/* Hiển thị bảng trades nếu có */}
+                                {Array.isArray(resultObj.trades) && resultObj.trades.length > 0 ? (
+                                  <div className="mb-6">
+                                    <h4 className="font-semibold mb-2">Danh sách giao dịch</h4>
+                                    <div className="overflow-x-auto">
+                                      <table className="min-w-full text-xs border">
+                                        <thead>
+                                          <tr className="bg-muted border-b">
+                                            <th className="p-2 text-left">Thời gian vào</th>
+                                            <th className="p-2 text-left">Thời gian ra</th>
+                                            <th className="p-2 text-center">Loại</th>
+                                            <th className="p-2 text-right">Giá vào</th>
+                                            <th className="p-2 text-right">Giá ra</th>
+                                            <th className="p-2 text-right">Khối lượng</th>
+                                            <th className="p-2 text-right">Lợi nhuận</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {resultObj.trades.slice(0, 50).map((trade: any, idx: number) => {
+                                            const entry = Number(trade.entry_price);
+                                            const exit = Number(trade.exit_price);
+                                            const size = Number(trade.size);
+                                            const profit = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                            return (
+                                              <tr key={idx} className="border-b">
+                                                <td className="p-2">{trade.entry_time ? new Date(trade.entry_time).toLocaleString('vi-VN') : '-'}</td>
+                                                <td className="p-2">{trade.exit_time ? new Date(trade.exit_time).toLocaleString('vi-VN') : '-'}</td>
+                                                <td className="p-2 text-center">{trade.side || trade.type || '-'}</td>
+                                                <td className="p-2 text-right">{trade.entry_price !== undefined ? trade.entry_price : '-'}</td>
+                                                <td className="p-2 text-right">{trade.exit_price !== undefined ? trade.exit_price : '-'}</td>
+                                                <td className="p-2 text-right">{trade.size !== undefined ? trade.size : '-'}</td>
+                                                <td className={`p-2 text-right font-semibold ${profit > 0 ? 'text-green-600' : profit < 0 ? 'text-red-600' : ''}`}>{profit.toFixed(2)}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                        <tfoot>
+                                          <tr className="font-bold bg-muted/70">
+                                            <td className="p-2 text-right" colSpan={6}>Tổng lợi nhuận</td>
+                                            <td className="p-2 text-right">
+                                              {(() => {
+                                                const total = resultObj.trades.slice(0, 50).reduce((sum: number, t: any) => {
+                                                  const entry = Number(t.entry_price);
+                                                  const exit = Number(t.exit_price);
+                                                  const size = Number(t.size);
+                                                  const profit = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                                  return sum + profit;
+                                                }, 0);
+                                                return <span className={total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}>{total.toFixed(2)}</span>;
+                                              })()}
+                                            </td>
+                                          </tr>
+                                        </tfoot>
+                                      </table>
+                                      <div className="text-xs text-muted-foreground mt-1">* Hiển thị tối đa 50 giao dịch gần nhất</div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground mb-4">Không có giao dịch nào trong backtest này.</div>
+                                )}
+                              </>;
+                            })()
+                          ) : (
+                            <div className="text-center text-muted-foreground">Chưa có kết quả backtest</div>
+                          )}
                         </CardContent>
                       </Card>
                     </TabsContent>
@@ -3788,6 +3870,42 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+// Thêm component hiển thị chi tiết kết quả backtest
+function BacktestResultDetail({ results }: { results: any }) {
+  if (!results) return null;
+  // Loại bỏ trades nếu đã có bảng riêng
+  const { trades, ...metrics } = results;
+  const explain: Record<string, string> = {
+    win_rate: 'Tỷ lệ giao dịch thắng trên tổng số giao dịch.',
+    average_win: 'Lợi nhuận trung bình mỗi lệnh thắng.',
+    average_loss: 'Thua lỗ trung bình mỗi lệnh thua.',
+    max_drawdown: 'Mức sụt giảm lớn nhất của tài khoản.',
+    sharpe_ratio: 'Đo lường hiệu suất điều chỉnh theo rủi ro.',
+    total_return: 'Tổng phần trăm lợi nhuận so với vốn ban đầu.',
+    total_trades: 'Tổng số lệnh đã thực hiện.',
+    final_capital: 'Số dư cuối cùng sau backtest.',
+    losing_trades: 'Số lệnh thua.',
+    winning_trades: 'Số lệnh thắng.'
+  };
+  return (
+    <div className="mb-6">
+      <h4 className="font-semibold mb-2">Chỉ số Backtest chi tiết</h4>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {Object.entries(metrics).map(([key, value]) => (
+          <div key={key} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+            <span className="font-semibold">{key.replace(/_/g, ' ')}:</span>
+            <span className="font-mono">{typeof value === 'number' ? Number(value).toFixed(4) : String(value)}</span>
+            <span className="relative group cursor-pointer">
+              <span className="text-blue-500 border border-blue-400 rounded-full px-1 text-xs ml-1">i</span>
+              <span className="absolute left-1/2 z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 whitespace-nowrap -translate-x-1/2 mt-2 shadow-lg">{explain[key] || key}</span>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -172,12 +172,24 @@ if __name__ == '__main__':
     try:
         # Run backtest
         results = run_backtest(config, args.experiment_id)
-        
-        # In kết quả performance ra stdout để Node.js có thể bắt được
-        if 'performance' in results:
-            print(json.dumps(results['performance']))
+
+        def convert_datetime(obj):
+            if isinstance(obj, (pd.Timestamp, datetime)):
+                return obj.isoformat()
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.floating):
+                return float(obj)
+            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+        # In riêng từng phần cho API/backend dễ lấy
+        if results:
+            print(json.dumps({"trades": results.get("trades", [])}, default=convert_datetime))  # Dành cho cột trades
+            print(json.dumps(results.get("performance", {}), default=convert_datetime))           # Dành cho cột results (summary)
+            # Nếu muốn in full để debug:
+            # print(json.dumps(results, default=convert_datetime))
         else:
-            print(json.dumps({'error': 'Performance data not found in results'}))
+            print(json.dumps({'error': 'No results returned from backtest'}))
 
         exit(0)
     except Exception as e:
