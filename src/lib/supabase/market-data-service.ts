@@ -10,26 +10,47 @@ import {
 } from '@/types/market-data';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Sử dụng Service Role Key để có quyền ghi dữ liệu từ server-side
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; 
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Supabase URL and Service Role Key are required.');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export class MarketDataService {
   // OHLC Data Management
   async saveOHLCData(data: OHLCData[]): Promise<{ success: boolean; error?: string }> {
+    if (!data || data.length === 0) {
+      return { success: true }; // Nothing to save
+    }
+
     try {
+      // Lấy symbol từ bản ghi đầu tiên để xác định tên bảng
+      const symbol = data[0].symbol;
+      if (!symbol) {
+        return { success: false, error: 'Symbol not found in data' };
+      }
+      // Xây dựng tên bảng động, ví dụ: 'OHLCV_BTCUSDT_1m'
+      const tableName = `OHLCV_${symbol.replace('/', '')}_1m`;
+
+      // Chuyển đổi dữ liệu để chèn
+      const recordsToInsert = data.map(d => ({
+        symbol: d.symbol,
+        timestamp: d.timestamp.toISOString(),
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+        volume: d.volume,
+        interval: d.interval
+      }));
+
+      // Upsert dữ liệu
       const { error } = await supabase
-        .from('ohlc_data')
-        .upsert(data.map(d => ({
-          symbol: d.symbol,
-          timestamp: d.timestamp.toISOString(),
-          open: d.open,
-          high: d.high,
-          low: d.low,
-          close: d.close,
-          volume: d.volume,
-          interval: d.interval
-        })));
+        .from(tableName)
+        .upsert(recordsToInsert, { onConflict: 'timestamp,symbol,interval' });
 
       if (error) throw error;
       return { success: true };
@@ -82,10 +103,10 @@ export class MarketDataService {
           name: source.name,
           type: source.type,
           endpoint: source.endpoint,
-          api_key: source.apiKey,
           is_active: source.isActive,
           last_sync: source.lastSync?.toISOString(),
-          config: source.config
+          config: source.config,
+          status: source.status
         });
 
       if (error) throw error;
@@ -109,11 +130,14 @@ export class MarketDataService {
         name: d.name,
         type: d.type,
         endpoint: d.endpoint,
-        apiKey: d.api_key,
         isActive: d.is_active,
         lastSync: d.last_sync ? new Date(d.last_sync) : undefined,
-        config: d.config || {}
-      })) || [];
+        config: d.config || { apiKey: '' },
+        status: d.status || 'unknown',
+        lastConnected: undefined,
+        responseTime: undefined,
+        isSecure: undefined,
+      } as DataSource)) || [];
     } catch (error) {
       console.error('Error fetching data sources:', error);
       return [];

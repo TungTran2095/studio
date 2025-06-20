@@ -27,33 +27,34 @@ supabase: Client = create_client(
 def load_data(symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
     """Load historical price data for backtesting from Supabase"""
     try:
-        # Lấy dữ liệu từ bảng market_data
-        response = supabase.table('market_data') \
+        # Dựa trên thông tin từ người dùng, dữ liệu OHLCV nằm trong bảng cụ thể cho mỗi symbol.
+        # Ví dụ: 'OHLCV_BTC_USDT_1m'.
+        # Xây dựng tên bảng một cách động từ symbol, giả sử timeframe cơ sở là 1m.
+        table_name = f"OHLCV_BTC_USDT_1m"
+        print(f"INFO: Attempting to load data from table '{table_name}'")
+
+        # Lấy dữ liệu từ bảng được xây dựng động
+        response = supabase.table(table_name) \
             .select('*') \
-            .eq('symbol', symbol) \
-            .gte('timestamp', start_date) \
-            .lte('timestamp', end_date) \
-            .order('timestamp', desc=False) \
+            .gte('open_time', start_date) \
+            .lte('open_time', end_date) \
+            .order('open_time', desc=False) \
             .execute()
         
         if not response.data:
-            raise ValueError(f"No data found for symbol {symbol} between {start_date} and {end_date}")
+            raise ValueError(f"No data found for symbol {symbol} in table {table_name} between {start_date} and {end_date}")
 
         # Convert to DataFrame
         df = pd.DataFrame(response.data)
-        
-        # Đổi tên cột cho phù hợp
-        df = df.rename(columns={
-            'open_price': 'open',
-            'high_price': 'high',
-            'low_price': 'low',
-            'close_price': 'close'
-        })
-        
-        # Chuyển đổi timestamp thành datetime index
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df.set_index('timestamp', inplace=True)
-        
+
+        # Đảm bảo các cột đúng chuẩn OHLCV
+        # Nếu cần, có thể rename cho đồng nhất
+        # Ở đây giả sử các cột đã đúng: open, high, low, close, volume
+
+        # Chuyển đổi open_time thành datetime index
+        df['open_time'] = pd.to_datetime(df['open_time'])
+        df.set_index('open_time', inplace=True)
+
         # Resample data theo timeframe
         if timeframe != '1m':  # Nếu không phải 1 phút thì cần resample
             # Map timeframe to pandas offset string
@@ -171,8 +172,14 @@ if __name__ == '__main__':
     try:
         # Run backtest
         results = run_backtest(config, args.experiment_id)
-        print('Backtest completed successfully')
+        
+        # In kết quả performance ra stdout để Node.js có thể bắt được
+        if 'performance' in results:
+            print(json.dumps(results['performance']))
+        else:
+            print(json.dumps({'error': 'Performance data not found in results'}))
+
         exit(0)
     except Exception as e:
-        print(f'Error running backtest: {str(e)}')
+        print(json.dumps({'error': f'Error running backtest: {str(e)}'}))
         exit(1) 

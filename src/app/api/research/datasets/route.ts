@@ -162,8 +162,9 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('❌ [Datasets API] Error creating dataset:', error);
+      const errorMessage = error?.message || 'Unknown Supabase error. The table might not exist.';
       return NextResponse.json(
-        { error: 'Failed to create dataset: ' + error.message },
+        { error: `Failed to create dataset: ${errorMessage}` },
         { status: 500 }
       );
     }
@@ -176,8 +177,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ [Datasets API] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected server error occurred';
     return NextResponse.json(
-      { error: 'Internal server error: ' + (error as Error).message },
+      { error: `Internal server error: ${errorMessage}` },
       { status: 500 }
     );
   }

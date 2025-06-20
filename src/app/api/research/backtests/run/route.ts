@@ -37,28 +37,65 @@ export async function POST(request: Request) {
       '--experiment_id', experimentId,
       '--config', JSON.stringify(config)
     ]);
+    
+    let scriptOutput = '';
+    let scriptError = '';
 
     // Log output từ script (optional)
     pythonProcess.stdout.on('data', (data) => {
-      console.log(`Backtest output: ${data}`);
+      const output = data.toString();
+      console.log(`Backtest output: ${output}`);
+      scriptOutput += output;
     });
 
     pythonProcess.stderr.on('data', (data) => {
-      console.error(`Backtest error: ${data}`);
+      const errorOutput = data.toString();
+      console.error(`Backtest error: ${errorOutput}`);
+      scriptError += errorOutput;
     });
 
     pythonProcess.on('close', async (code) => {
       console.log(`Backtest process exited with code ${code}`);
 
-      // Cập nhật trạng thái experiment
-      const status = code === 0 ? 'completed' : 'failed';
+      let finalStatus = code === 0 ? 'completed' : 'failed';
+      let results = null;
+
+      if (code === 0 && scriptOutput) {
+        try {
+          // Cố gắng tìm và parse JSON từ output
+          const lines = scriptOutput.trim().split('\n');
+          const lastLine = lines[lines.length - 1];
+          results = JSON.parse(lastLine);
+          console.log('Parsed backtest results:', results);
+        } catch (e) {
+          console.error('Failed to parse backtest results from stdout:', e);
+          finalStatus = 'failed';
+          scriptError += '\nError: Failed to parse results JSON from script output.';
+        }
+      }
+
+      // Cập nhật trạng thái và kết quả experiment
+      const updatePayload: { status: string; results?: any, error?: string } = {
+        status: finalStatus,
+      };
+
+      if (results) {
+        updatePayload.results = results;
+      }
+
+      if (finalStatus === 'failed' && scriptError) {
+        updatePayload.error = scriptError;
+      }
+      
       const { error } = await supabase
         .from('research_experiments')
-        .update({ status })
+        .update(updatePayload)
         .eq('id', experimentId);
 
       if (error) {
-        console.error('Error updating experiment status:', error);
+        console.error('Error updating experiment status and results:', error);
+      } else {
+        console.log(`✅ Experiment ${experimentId} updated with status: ${finalStatus}`);
       }
     });
 

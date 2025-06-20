@@ -484,7 +484,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       }
       if (response.ok) {
         console.log('✅ Model created successfully:', result.model);
-        await fetchProjectModels();
+        await onRefresh();
         return { success: true, model: result.model };
       } else {
         console.error('❌ Model creation failed:', { status: response.status, result });
@@ -2075,6 +2075,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const [selectedExperiment, setSelectedExperiment] = useState<any>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [experimentChartData, setExperimentChartData] = useState<OHLCV[]>([]);
+  const [loadingExperimentChart, setLoadingExperimentChart] = useState(false);
   const [hypothesisConfig, setHypothesisConfig] = useState({
     name: '',
     description: '',
@@ -2100,6 +2102,15 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   };
 
   const createBacktestExperiment = async () => {
+    if (!supabase) {
+      toast({
+        title: 'Lỗi kết nối',
+        description: 'Không thể kết nối đến database. Vui lòng thử lại.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setCreatingExperiment(true);
       console.log('📝 Creating backtest experiment:', backtestConfig);
@@ -2213,13 +2224,24 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         throw new Error('Failed to start backtest');
       }
 
-      // Không đóng modal, chỉ reset form
+      // Đóng modal cấu hình backtest
+      setShowBacktestConfig(false);
+
+      // Reset form
       setBacktestConfig({
         name: '',
         description: '',
+        startDate: format(new Date(), 'yyyy-MM-dd'),
+        endDate: format(new Date(), 'yyyy-MM-dd'),
+        startTime: '00:00',
+        endTime: '23:59',
         symbol: 'BTCUSDT',
         timeframe: '1h',
-        strategyType: 'ma_crossover'
+        strategyType: 'ma_crossover',
+        initialCapital: 10000,
+        positionSize: 1,
+        stopLoss: 2,
+        takeProfit: 4
       });
 
       toast({
@@ -2268,14 +2290,14 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         console.log('✅ Hypothesis test experiment created:', data);
         await fetchExperiments();
         setShowHypothesisConfig(false);
-        alert('✅ Đã tạo thí nghiệm kiểm tra giả thuyết thành công!');
+        toast({ title: 'Thành công', description: 'Đã tạo thí nghiệm kiểm tra giả thuyết thành công!' });
       } else {
         console.error('❌ Failed to create hypothesis test experiment:', data.error);
-        alert(`❌ Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`);
+        toast({ title: 'Lỗi', description: `Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`, variant: 'destructive' });
       }
     } catch (error) {
       console.error('❌ Error creating hypothesis test experiment:', error);
-      alert('❌ Lỗi kết nối khi tạo thí nghiệm');
+      toast({ title: 'Lỗi', description: 'Lỗi kết nối khi tạo thí nghiệm', variant: 'destructive' });
     } finally {
       setCreatingExperiment(false);
     }
@@ -2288,83 +2310,106 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const fetchExperiments = async () => {
     try {
       setLoading(true);
-      console.log('📡 Fetching experiments for project:', projectId);
-      
-      const response = await fetch(`/api/research/experiments?project_id=${projectId}`);
-      const data = await response.json();
-      
-      if (response.ok) {
-        setExperiments(data.experiments || []);
-        setSetupRequired(false);
-        console.log('✅ Experiments loaded:', data.experiments?.length || 0);
-      } else {
-        console.error('❌ Failed to fetch experiments:', data.error);
-        
-        if (data.setup_required || response.status === 404) {
-          console.log('⚠️ Database setup required');
-          setSetupRequired(true);
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('research_experiments')
+          .select('*')
+          .eq('project_id', projectId);
+
+        if (error) {
+          console.error('Error fetching experiments:', error);
+          if ((error as any).details.includes("does not exist")) {
+            setSetupRequired(true);
+          } else {
+            toast({ title: "Lỗi", description: "Không thể tải danh sách thí nghiệm.", variant: "destructive" });
+          }
           setExperiments([]);
         } else {
-          console.error('Failed to fetch experiments:', data.error);
-          setExperiments([]);
+          setExperiments(data || []);
+          setSetupRequired(false);
         }
       }
     } catch (error) {
-      console.error('❌ Error fetching experiments:', error);
-      setExperiments([]);
+      console.error('Error fetching experiments:', error);
+      toast({ title: "Lỗi", description: "Lỗi kết nối khi tải thí nghiệm.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
-
+  
   const setupDatabase = async () => {
+    setSettingUp(true);
     try {
-      setSettingUp(true);
-      console.log('🔧 Setting up experiments database...');
-      
-      const response = await fetch('/api/research/setup-experiments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log('✅ Database setup successful');
-        setSetupRequired(false);
+      const response = await fetch('/api/research/experiments/setup', { method: 'POST' });
+      const data = await response.json();
+      if (response.ok) {
+        toast({ title: "Thành công", description: "Setup database thành công! Đang tải lại..." });
         await fetchExperiments();
       } else {
-        console.error('❌ Database setup failed:', result.error);
-        alert(`❌ Lỗi setup database: ${result.error}`);
+        toast({ title: "Lỗi", description: `Setup database thất bại: ${data.error}`, variant: "destructive" });
       }
     } catch (error) {
-      console.error('❌ Setup error:', error);
-      alert('❌ Lỗi kết nối khi setup database');
+      console.error('Error setting up database:', error);
+      toast({ title: "Lỗi", description: "Lỗi kết nối khi setup database.", variant: "destructive" });
     } finally {
       setSettingUp(false);
     }
   };
 
   const viewExperimentDetails = async (experiment: any) => {
+    const loadData = async (exp: any) => {
+      if (!exp || exp.type !== 'backtest' || !exp.config?.trading) {
+        setExperimentChartData([]);
+        return;
+      }
+      setLoadingExperimentChart(true);
+      try {
+        const { symbol, timeframe, startDate, startTime, endDate, endTime } = exp.config.trading;
+        const startTimestamp = new Date(`${startDate}T${startTime || '00:00:00'}`).getTime();
+        const endTimestamp = new Date(`${endDate}T${endTime || '23:59:59'}`).getTime();
+        const response = await fetch('/api/research/ohlcv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, timeframe, startTime: startTimestamp, endTime: endTimestamp }),
+        });
+        if (!response.ok) throw new Error('Failed to fetch OHLCV data');
+        const data = await response.json();
+        const formattedData = (data.ohlcv || []).map((candle: any) => ({
+          timestamp: new Date(candle.timestamp).getTime(),
+          open: parseFloat(candle.open),
+          high: parseFloat(candle.high),
+          low: parseFloat(candle.low),
+          close: parseFloat(candle.close),
+          volume: parseFloat(candle.volume)
+        })).filter((c: OHLCV) => !Object.values(c).some(v => isNaN(v)));
+        setExperimentChartData(formattedData);
+      } catch (error) {
+        console.error('Error loading experiment chart data:', error);
+        toast({ title: 'Lỗi', description: 'Không thể tải dữ liệu biểu đồ.', variant: 'destructive' });
+        setExperimentChartData([]);
+      } finally {
+        setLoadingExperimentChart(false);
+      }
+    };
+
     try {
-      console.log('🔍 [View Details] Clicked on experiment:', experiment);
       setIsLoadingDetails(true);
-      setSelectedExperiment(experiment); // Set ngay lập tức để hiển thị modal
       setShowDetails(true);
-      
-      // Fetch thêm thông tin chi tiết từ API
       const response = await fetch(`/api/research/experiments?id=${experiment.id}`);
+      let finalExperiment = experiment;
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ [View Details] Fetched experiment details:', data);
         if (data.experiment) {
-          setSelectedExperiment(data.experiment);
+          finalExperiment = data.experiment;
         }
-      } else {
-        console.error('❌ [View Details] Failed to fetch details:', response.status);
+      }
+      setSelectedExperiment(finalExperiment);
+      if (finalExperiment.type === 'backtest') {
+        await loadData(finalExperiment);
       }
     } catch (error) {
-      console.error('❌ [View Details] Error:', error);
+      console.error('Error fetching details:', error);
+      setSelectedExperiment(experiment);
     } finally {
       setIsLoadingDetails(false);
     }
@@ -2372,35 +2417,27 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
 
   const startExperiment = async (experimentId: string) => {
     try {
-      console.log('🚀 Starting experiment:', experimentId);
-      
       const response = await fetch(`/api/research/experiments?id=${experimentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'running',
-          started_at: new Date().toISOString()
-        })
+        body: JSON.stringify({ status: 'running', started_at: new Date().toISOString() })
       });
-
       if (response.ok) {
         await fetchExperiments();
-        alert('✅ Đã bắt đầu thí nghiệm!');
+        toast({ title: "Thành công", description: "Đã bắt đầu thí nghiệm!" });
       } else {
         const error = await response.json();
-        alert(`❌ Lỗi khi bắt đầu thí nghiệm: ${error.error || 'Không xác định'}`);
+        toast({ title: "Lỗi", description: `Lỗi khi bắt đầu thí nghiệm: ${error.error || 'Không xác định'}`, variant: 'destructive' });
       }
     } catch (error) {
       console.error('Error starting experiment:', error);
-      alert('❌ Lỗi kết nối khi bắt đầu thí nghiệm');
+      toast({ title: "Lỗi", description: "Lỗi kết nối khi bắt đầu thí nghiệm", variant: 'destructive' });
     }
   };
 
   const createMA20Backtest = async () => {
     try {
       setCreatingExperiment(true);
-      console.log('📝 Creating MA20 backtest experiment for project:', projectId);
-      
       const response = await fetch('/api/research/experiments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2410,53 +2447,27 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           type: 'backtest',
           description: 'Chiến lược: Mua khi giá đóng cửa vượt MA20, bán khi giá giảm dưới MA20',
           config: {
-            strategy: {
-              name: 'MA20 Crossover',
-              type: 'moving_average',
-              parameters: {
-                ma_period: 20,
-                ma_type: 'simple',
-                signal_type: 'crossover'
-              }
-            },
-            trading: {
-              symbol: 'BTCUSDT',
-              timeframe: '1h',
-              start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 ngày trước
-              end_date: new Date().toISOString(),
-              initial_capital: 10000,
-              position_size: 0.1, // 10% vốn mỗi lần
-              stop_loss: 0.02, // 2%
-              take_profit: 0.04 // 4%
-            },
-            risk_management: {
-              max_positions: 1,
-              max_drawdown: 0.1, // 10%
-              trailing_stop: true,
-              trailing_stop_distance: 0.01 // 1%
-            }
+            strategy: { name: 'MA20 Crossover', type: 'moving_average', parameters: { ma_period: 20, ma_type: 'simple', signal_type: 'crossover' } },
+            trading: { symbol: 'BTCUSDT', timeframe: '1h', start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), end_date: new Date().toISOString(), initial_capital: 10000, position_size: 0.1, stop_loss: 0.02, take_profit: 0.04 },
+            risk_management: { max_positions: 1, max_drawdown: 0.1, trailing_stop: true, trailing_stop_distance: 0.01 }
           }
         })
       });
-
       const data = await response.json();
-      
       if (response.ok) {
-        console.log('✅ MA20 backtest created:', data);
         await fetchExperiments();
-        alert('✅ Đã tạo thí nghiệm backtest MA20 thành công!');
+        toast({ title: "Thành công", description: "Đã tạo thí nghiệm backtest MA20 thành công!" });
       } else {
-        console.error('❌ Failed to create MA20 backtest:', data.error);
         if (data.setup_required) {
           setSetupRequired(true);
-          alert('⚠️ Cần setup database trước khi tạo thí nghiệm. Đang chuyển đến trang setup...');
+          toast({ title: "Cảnh báo", description: "Cần setup database trước khi tạo thí nghiệm.", variant: "destructive" });
         } else {
-          alert(`❌ Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`);
+          toast({ title: "Lỗi", description: `Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`, variant: "destructive" });
         }
       }
     } catch (error) {
       console.error('❌ Error creating MA20 backtest:', error);
-      alert('❌ Lỗi kết nối khi tạo thí nghiệm');
+      toast({ title: "Lỗi", description: "Lỗi kết nối khi tạo thí nghiệm", variant: "destructive" });
     } finally {
       setCreatingExperiment(false);
     }
@@ -2479,17 +2490,11 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const loadChartData = async () => {
     try {
       setLoadingChart(true);
-      
-      // Tạo timestamp từ ngày và giờ
       const startTimestamp = new Date(`${backtestConfig.startDate}T${backtestConfig.startTime}`).getTime();
       const endTimestamp = new Date(`${backtestConfig.endDate}T${backtestConfig.endTime}`).getTime();
-
-      // Gọi API để lấy dữ liệu
       const response = await fetch('/api/research/ohlcv', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           symbol: backtestConfig.symbol,
           timeframe: backtestConfig.timeframe,
@@ -2497,41 +2502,24 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           endTime: endTimestamp
         })
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch OHLCV data');
-      }
-
+      if (!response.ok) throw new Error('Failed to fetch OHLCV data');
       const data = await response.json();
-      setChartData(data.ohlcv || []);
+      const formattedData = (data.ohlcv || []).map((candle: any) => ({
+        timestamp: new Date(candle.timestamp).getTime(),
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+        volume: parseFloat(candle.volume)
+      })).filter((c: OHLCV) => !Object.values(c).some(v => isNaN(v)));
+      setChartData(formattedData);
     } catch (error) {
       console.error('Error loading chart data:', error);
-      alert('Lỗi khi tải dữ liệu biểu đồ');
+      toast({ title: 'Lỗi', description: 'Lỗi khi tải dữ liệu biểu đồ', variant: 'destructive' });
     } finally {
       setLoadingChart(false);
     }
   };
-
-  // Đặt dataForChart ở đây, ngoài mọi block, trước return
-  const dataForChart: OHLCV[] = chartData
-    .map((candle: any) => ({
-      timestamp: typeof candle.timestamp === 'string'
-        ? new Date(candle.timestamp).getTime()
-        : (candle.timestamp > 1e12 ? candle.timestamp : candle.timestamp * 1000),
-      open: parseFloat(candle.open),
-      high: parseFloat(candle.high),
-      low: parseFloat(candle.low),
-      close: parseFloat(candle.close),
-      volume: parseFloat(candle.volume)
-    }))
-    .filter((candle: OHLCV) => 
-      typeof candle.timestamp === 'number' && !isNaN(candle.timestamp) &&
-      typeof candle.close === 'number' && !isNaN(candle.close) &&
-      typeof candle.open === 'number' && !isNaN(candle.open) &&
-      typeof candle.high === 'number' && !isNaN(candle.high) &&
-      typeof candle.low === 'number' && !isNaN(candle.low) &&
-      typeof candle.volume === 'number' && !isNaN(candle.volume)
-    );
 
   if (loading) {
     return (
@@ -2767,7 +2755,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                           series: [{
                             name: 'Close Price',
                             type: 'line',
-                            data: dataForChart.map(candle => [
+                            data: chartData.map(candle => [
                               candle.timestamp,
                               candle.close
                             ]),
@@ -2790,7 +2778,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         }}
                       />
                       <div className="text-xs text-muted-foreground mt-1">
-                        Dữ liệu đã tải: {dataForChart.length} nến
+                        Dữ liệu đã tải: {chartData.length} nến
                       </div>
                     </div>
                   ) : (
@@ -2803,7 +2791,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
             </div>
 
                   {/* Bảng preview dữ liệu 5 dòng đầu */}
-      {dataForChart && dataForChart.length > 0 && (
+      {chartData && chartData.length > 0 && (
         <div className="mt-4 mb-4">
           <h4 className="font-semibold text-sm mb-2">5 dòng dữ liệu đầu tiên (Timeframe: {backtestConfig.timeframe})</h4>
           <div className="overflow-x-auto">
@@ -2821,7 +2809,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
               <tbody>
                 {(() => {
                   // Lấy dữ liệu đã được gộp theo timeframe
-                  const previewData = dataForChart || [];
+                  const previewData = chartData || [];
                   return previewData.slice(0, 5).map((row: any, idx: number) => {
                     let timeStr = 'N/A';
                     const timestamp = row.timestamp || row.open_time;
@@ -3562,9 +3550,9 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                 <Button 
                   variant="outline" 
                   onClick={() => {
-                    console.log('🔍 [Modal] Closing details modal');
                     setShowDetails(false);
                     setSelectedExperiment(null);
+                    setExperimentChartData([]); // Reset data chart
                   }}
                 >
                   <X className="h-4 w-4 mr-2" />
@@ -3574,153 +3562,232 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Basic Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Thông tin cơ bản</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Trạng thái</Label>
-                    <div className="mt-1">
-                      <Badge variant={
-                        selectedExperiment.status === 'completed' ? 'default' :
-                        selectedExperiment.status === 'running' ? 'secondary' :
-                        selectedExperiment.status === 'failed' ? 'destructive' : 'outline'
-                      }>
-                        {selectedExperiment.status === 'completed' ? '✅ Hoàn thành' :
-                         selectedExperiment.status === 'running' ? '🔄 Đang chạy' :
-                         selectedExperiment.status === 'failed' ? '❌ Lỗi' : 
-                         selectedExperiment.status === 'pending' ? '⏳ Chờ' : selectedExperiment.status}
-                      </Badge>
+            <div>
+              {selectedExperiment.type === 'backtest' ? (
+                <>
+                  <div className="border rounded-lg p-4 h-[400px] flex flex-col justify-center">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold">{selectedExperiment.config?.trading?.symbol || 'Symbol'}</h3>
+                    </div>
+                    <div className="h-full">
+                      {loadingExperimentChart ? (
+                        <div className="flex items-center justify-center h-full">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                          <span className="ml-2 text-sm">Đang tải dữ liệu biểu đồ...</span>
+                        </div>
+                      ) : experimentChartData.length > 0 ? (
+                        <HighchartsReact
+                          highcharts={Highcharts}
+                          options={{
+                            chart: { height: 350, style: { fontFamily: 'inherit' }, spacing: [5, 5, 5, 5], backgroundColor: 'transparent' },
+                            title: { text: undefined },
+                            xAxis: { type: 'datetime', labels: { style: { fontSize: '10px', color: '#888888' } }, lineColor: '#2e2e2e', tickColor: '#2e2e2e' },
+                            yAxis: { title: { text: 'Price', style: { color: '#888888' } }, labels: { style: { fontSize: '10px', color: '#888888' } }, gridLineColor: '#2e2e2e' },
+                            plotOptions: { line: { color: '#22c55e', lineWidth: 1.5 } },
+                            series: [{
+                              name: 'Close Price',
+                              type: 'line',
+                              data: experimentChartData.map(candle => [candle.timestamp, candle.close]),
+                              color: '#3b82f6',
+                              lineWidth: 1,
+                              marker: { enabled: false }
+                            }],
+                            tooltip: { xDateFormat: '%Y-%m-%d %H:%M:%S', valueDecimals: 2 },
+                            legend: { enabled: false },
+                            credits: { enabled: false }
+                          }}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                          Không có dữ liệu nến để hiển thị
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div>
-                    <Label>Loại thí nghiệm</Label>
-                    <div className="mt-1">
-                      <Badge variant="outline" className="capitalize">
-                        {selectedExperiment.type}
-                      </Badge>
+
+                  {experimentChartData.length > 0 && (
+                    <div className="mt-4 mb-4">
+                      <h4 className="font-semibold text-sm mb-2">5 dòng dữ liệu đầu tiên (Timeframe: {selectedExperiment.config?.trading?.timeframe})</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-xs border">
+                          <thead>
+                            <tr className="bg-muted border-b">
+                              <th className="p-2 text-left">Time</th>
+                              <th className="p-2 text-right">Open</th>
+                              <th className="p-2 text-right">High</th>
+                              <th className="p-2 text-right">Low</th>
+                              <th className="p-2 text-right">Close</th>
+                              <th className="p-2 text-right">Volume</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {experimentChartData.slice(0, 5).map((row, idx) => {
+                              let timeStr = 'N/A';
+                              const timestamp = row.timestamp;
+                              if (timestamp) {
+                                const d = new Date(timestamp);
+                                const hours = d.getHours();
+                                const minutes = d.getMinutes();
+                                const date = d.toLocaleDateString('vi-VN');
+                                switch (selectedExperiment.config?.trading?.timeframe) {
+                                  case '1d': timeStr = date; break;
+                                  case '4h': const hour4h = Math.floor(hours / 4) * 4; timeStr = `${String(hour4h).padStart(2, '0')}:00 ${date}`; break;
+                                  case '1h': timeStr = `${String(hours).padStart(2, '0')}:00 ${date}`; break;
+                                  default: timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${date}`;
+                                }
+                              }
+                              return (
+                                <tr key={idx} className="border-b hover:bg-muted/50">
+                                  <td className="p-2 font-mono text-xs">{timeStr}</td>
+                                  <td className="p-2 text-right font-mono">{row.open?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td className="p-2 text-right font-mono">{row.high?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td className="p-2 text-right font-mono">{row.low?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td className="p-2 text-right font-mono font-medium">{row.close?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td className="p-2 text-right font-mono">{row.volume?.toLocaleString('vi-VN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <Label>Ngày tạo</Label>
-                    <div className="mt-1 text-sm">
-                      {new Date(selectedExperiment.created_at).toLocaleString('vi-VN')}
-                    </div>
-                  </div>
-                  <div>
-                    <Label>Tiến độ</Label>
-                    <div className="mt-1">
-                      <Progress value={selectedExperiment.progress || 0} className="h-2" />
-                      <span className="text-sm text-muted-foreground mt-1 block">
-                        {selectedExperiment.progress || 0}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                {selectedExperiment.description && (
-                  <div>
-                    <Label>Mô tả</Label>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {selectedExperiment.description}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  )}
 
-            {/* Configuration */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Cấu hình</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-muted p-4 rounded-lg">
-                  <pre className="text-sm overflow-auto">
-                    {JSON.stringify(selectedExperiment.config || {}, null, 2)}
-                  </pre>
-                </div>
-              </CardContent>
-            </Card>
+                  <Tabs defaultValue="config" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="config">Cấu hình backtest</TabsTrigger>
+                      <TabsTrigger value="result">Kết quả backtest</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="config" className="space-y-4">
+                      <Card>
+                        <CardHeader><CardTitle className="text-base">Cấu hình đã chọn</CardTitle></CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label>Khoảng thời gian</Label>
+                              <div className="mt-1 text-sm">
+                                {`${selectedExperiment.config?.trading?.startDate} ${selectedExperiment.config?.trading?.startTime || ''}`.trim()} ~ {`${selectedExperiment.config?.trading?.endDate} ${selectedExperiment.config?.trading?.endTime || ''}`.trim()}
+                              </div>
+                            </div>
+                            <div><Label>Timeframe</Label><div className="mt-1 text-sm">{selectedExperiment.config?.trading?.timeframe}</div></div>
+                            <div><Label>Cặp giao dịch</Label><div className="mt-1 text-sm">{selectedExperiment.config?.trading?.symbol}</div></div>
+                            <div>
+                              <Label>Config chiến lược</Label>
+                              <div className="mt-1 text-xs bg-muted p-2 rounded">
+                                <pre className="text-xs overflow-auto max-h-40">{JSON.stringify(selectedExperiment.config?.strategy, null, 2)}</pre>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                    <TabsContent value="result" className="space-y-4">
+                      <Card>
+                        <CardHeader><CardTitle className="text-base">Kết quả backtest</CardTitle></CardHeader>
+                        <CardContent>
+                          <div className="bg-muted p-4 rounded-lg">
+                            <pre className="text-sm overflow-auto max-h-60">{JSON.stringify(selectedExperiment.results || selectedExperiment.metrics || {}, null, 2)}</pre>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                  </Tabs>
+                </>
+              ) : (
+                <>
+                  {/* UI cũ cho các loại thí nghiệm khác */}
+                  <Card>
+                    <CardHeader><CardTitle className="text-base">Thông tin cơ bản</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Trạng thái</Label>
+                          <div className="mt-1">
+                            <Badge variant={
+                              selectedExperiment.status === 'completed' ? 'default' :
+                              selectedExperiment.status === 'running' ? 'secondary' :
+                              selectedExperiment.status === 'failed' ? 'destructive' : 'outline'
+                            }>
+                              {selectedExperiment.status === 'completed' ? '✅ Hoàn thành' :
+                               selectedExperiment.status === 'running' ? '🔄 Đang chạy' :
+                               selectedExperiment.status === 'failed' ? '❌ Lỗi' :
+                               selectedExperiment.status === 'pending' ? '⏳ Chờ' : selectedExperiment.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div><Label>Loại thí nghiệm</Label><div className="mt-1"><Badge variant="outline" className="capitalize">{selectedExperiment.type}</Badge></div></div>
+                        <div><Label>Ngày tạo</Label><div className="mt-1 text-sm">{new Date(selectedExperiment.created_at).toLocaleString('vi-VN')}</div></div>
+                        <div>
+                          <Label>Tiến độ</Label>
+                          <div className="mt-1">
+                            <Progress value={selectedExperiment.progress || 0} className="h-2" />
+                            <span className="text-sm text-muted-foreground mt-1 block">{selectedExperiment.progress || 0}%</span>
+                          </div>
+                        </div>
+                      </div>
+                      {selectedExperiment.description && (
+                        <div>
+                          <Label>Mô tả</Label>
+                          <p className="mt-1 text-sm text-muted-foreground">{selectedExperiment.description}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
-            {/* Results */}
-            {selectedExperiment.results && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Kết quả</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-muted p-4 rounded-lg">
-                    <pre className="text-sm overflow-auto">
-                      {JSON.stringify(selectedExperiment.results, null, 2)}
-                    </pre>
+                  {selectedExperiment.config && (
+                    <Card>
+                      <CardHeader><CardTitle className="text-base">Cấu hình</CardTitle></CardHeader>
+                      <CardContent>
+                        <div className="bg-muted p-4 rounded-lg">
+                          <pre className="text-sm overflow-auto">{JSON.stringify(selectedExperiment.config, null, 2)}</pre>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {selectedExperiment.results && (
+                    <Card>
+                      <CardHeader><CardTitle className="text-base">Kết quả</CardTitle></CardHeader>
+                      <CardContent>
+                        <div className="bg-muted p-4 rounded-lg">
+                          <pre className="text-sm overflow-auto">{JSON.stringify(selectedExperiment.results, null, 2)}</pre>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {selectedExperiment.error && (
+                    <Card>
+                      <CardHeader><CardTitle className="text-base text-red-500">Lỗi</CardTitle></CardHeader>
+                      <CardContent>
+                        <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-700/30">
+                          <pre className="text-sm text-red-600 dark:text-red-400 overflow-auto">{selectedExperiment.error}</pre>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <div className="flex gap-3 pt-4 border-t">
+                    {selectedExperiment.status === 'pending' && (
+                      <Button onClick={() => startExperiment(selectedExperiment.id)} className="flex-1">
+                        <Play className="h-4 w-4 mr-2" />Bắt đầu thí nghiệm
+                      </Button>
+                    )}
+                    {selectedExperiment.status === 'running' && (
+                      <Button variant="destructive" className="flex-1" onClick={() => {/* TODO: Stop experiment */}}>
+                        <X className="h-4 w-4 mr-2" />Dừng thí nghiệm
+                      </Button>
+                    )}
+                    <Button variant="outline" className="flex-1" onClick={() => {/* TODO: Export results */}}>
+                      <Download className="h-4 w-4 mr-2" />Xuất kết quả
+                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Error Log */}
-            {selectedExperiment.error && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base text-red-500">Lỗi</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-700/30">
-                    <pre className="text-sm text-red-600 dark:text-red-400 overflow-auto">
-                      {selectedExperiment.error}
-                    </pre>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-4 border-t">
-              {selectedExperiment.status === 'pending' && (
-                <Button 
-                  onClick={() => startExperiment(selectedExperiment.id)}
-                  className="flex-1"
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Bắt đầu thí nghiệm
-                </Button>
+                </>
               )}
-              {selectedExperiment.status === 'running' && (
-                <Button 
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => {/* TODO: Stop experiment */}}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Dừng thí nghiệm
-                </Button>
-              )}
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={() => {/* TODO: Export results */}}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Xuất kết quả
-              </Button>
             </div>
           </CardContent>
         </Card>
       )}
-
-      {/* Chart Section */}
-      {(() => {
-        return (
-          <PriceChart 
-            symbol={backtestConfig.symbol}
-            timeframe={backtestConfig.timeframe}
-            data={dataForChart}
-          />
-        );
-      })()}
     </div>
   );
 }
