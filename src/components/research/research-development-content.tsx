@@ -27,12 +27,7 @@ import {
   BookOpen
 } from "lucide-react";
 
-import { ModelBuilderTab } from './tabs/model-builder-tab';
-import { HypothesisTestingTab } from './tabs/hypothesis-testing-tab';
-import { BacktestingTab } from './tabs/backtesting-tab';
-import { OptimizationTab } from './tabs/optimization-tab';
 import { ResearchProjectsTab } from './tabs/research-projects-tab';
-import { ModelLibraryTab } from './tabs/model-library-tab';
 import { GuidesTab } from './tabs/guides-tab';
 import { DatabaseSetupGuide } from './tabs/database-setup-guide';
 
@@ -110,27 +105,12 @@ export function ResearchDevelopmentContent() {
       {/* Content */}
       <div className="flex-1 p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-8 bg-muted/50">
+          <TabsList className="grid w-full grid-cols-3 bg-muted/50">
             <TabsTrigger value="overview" className="text-xs">
               Tổng quan
             </TabsTrigger>
             <TabsTrigger value="projects" className="text-xs">
               Dự án
-            </TabsTrigger>
-            <TabsTrigger value="model-builder" className="text-xs">
-              Xây dựng mô hình
-            </TabsTrigger>
-            <TabsTrigger value="hypothesis" className="text-xs">
-              Kiểm tra giả thuyết
-            </TabsTrigger>
-            <TabsTrigger value="backtesting" className="text-xs">
-              Backtesting
-            </TabsTrigger>
-            <TabsTrigger value="optimization" className="text-xs">
-              Tối ưu hóa
-            </TabsTrigger>
-            <TabsTrigger value="library" className="text-xs">
-              Thư viện mô hình
             </TabsTrigger>
             <TabsTrigger value="guides" className="text-xs">
               Hướng dẫn
@@ -144,26 +124,6 @@ export function ResearchDevelopmentContent() {
 
             <TabsContent value="projects" className="mt-0">
               <ResearchProjectsTab />
-            </TabsContent>
-
-            <TabsContent value="model-builder" className="mt-0">
-              <ModelBuilderTab />
-            </TabsContent>
-
-            <TabsContent value="hypothesis" className="mt-0">
-              <HypothesisTestingTab />
-            </TabsContent>
-
-            <TabsContent value="backtesting" className="mt-0">
-              <BacktestingTab />
-            </TabsContent>
-
-            <TabsContent value="optimization" className="mt-0">
-              <OptimizationTab projects={projects} availableModels={availableModels} />
-            </TabsContent>
-
-            <TabsContent value="library" className="mt-0">
-              <ModelLibraryTab />
             </TabsContent>
 
             <TabsContent value="guides" className="mt-0">

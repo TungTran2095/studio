@@ -18,7 +18,6 @@ import {
   BarChart3,
   Settings,
   Folder,
-  Library,
   Zap,
   AlertCircle,
   Info,
@@ -42,35 +41,27 @@ export function GuidesTab({ onNavigateToTab }: GuideTabProps) {
       completed: false
     },
     {
-      id: 'hypothesis',
-      title: '2. Kiểm tra Giả thuyết',
-      description: 'Phân tích statistical để validate ý tưởng trading',
-      action: () => onNavigateToTab?.('hypothesis'),
-      icon: TestTube,
-      completed: false
-    },
-    {
-      id: 'model',
-      title: '3. Xây dựng Mô hình',
-      description: 'Tạo model từ template hoặc custom development',
-      action: () => onNavigateToTab?.('model-builder'),
+      id: 'models',
+      title: '2. Xây dựng Mô hình',
+      description: 'Tạo và quản lý các mô hình trong project',
+      action: () => onNavigateToTab?.('projects'),
       icon: Brain,
       completed: false
     },
     {
-      id: 'backtest',
-      title: '4. Chạy Backtesting',
-      description: 'Kiểm tra hiệu suất trên dữ liệu lịch sử',
-      action: () => onNavigateToTab?.('backtesting'),
-      icon: BarChart3,
+      id: 'experiments',
+      title: '3. Chạy Experiments',
+      description: 'Thực hiện các thí nghiệm và backtesting',
+      action: () => onNavigateToTab?.('projects'),
+      icon: TestTube,
       completed: false
     },
     {
-      id: 'optimize',
-      title: '5. Tối ưu hóa',
-      description: 'Fine-tune parameters để cải thiện performance',
-      action: () => onNavigateToTab?.('optimization'),
-      icon: Settings,
+      id: 'analysis',
+      title: '4. Phân tích Kết quả',
+      description: 'Đánh giá hiệu suất và tối ưu hóa',
+      action: () => onNavigateToTab?.('projects'),
+      icon: BarChart3,
       completed: false
     }
   ];
@@ -85,37 +76,42 @@ export function GuidesTab({ onNavigateToTab }: GuideTabProps) {
         'Tạo và quản lý projects',
         'Version control cho research',
         'Collaboration với team',
-        'Progress tracking'
+        'Progress tracking',
+        'Xây dựng mô hình',
+        'Kiểm tra giả thuyết',
+        'Backtesting chiến lược',
+        'Tối ưu hóa tham số'
       ],
       usage: 'Sử dụng để tổ chức và theo dõi các nghiên cứu dài hạn. Mỗi project có thể chứa nhiều models, hypothesis tests và backtests.'
     },
     {
-      id: 'hypothesis-testing',
-      name: 'Hypothesis Testing',
-      description: 'Kiểm tra giả thuyết thống kê với real data',
-      icon: TestTube,
-      capabilities: [
-        'Correlation analysis (Pearson, Spearman)',
-        'T-Tests (Independent, Paired)',
-        'ANOVA (One-way, Two-way)',
-        'Chi-Square independence tests',
-        'Granger Causality tests'
-      ],
-      usage: 'Dùng để validate các ý tưởng trading trước khi xây dựng model. VD: "Có phải volume cao dẫn đến volatility tăng?"'
-    },
-    {
-      id: 'model-builder',
-      name: 'Model Builder',
-      description: 'Xây dựng models từ templates hoặc custom',
+      id: 'model-management',
+      name: 'Model Management',
+      description: 'Quản lý và phát triển các mô hình',
       icon: Brain,
       capabilities: [
         'Statistical models (ARIMA, GARCH)',
         'Machine Learning (RF, XGBoost, LSTM)',
         'Financial math (Black-Scholes, VaR)',
         'Custom model development',
-        'Feature engineering tools'
+        'Feature engineering tools',
+        'Model training và evaluation'
       ],
-      usage: 'Tạo prediction models hoặc trading signals. Bắt đầu với templates để học, sau đó develop custom models.'
+      usage: 'Tạo prediction models hoặc trading signals trong project. Bắt đầu với templates để học, sau đó develop custom models.'
+    },
+    {
+      id: 'experiment-tracking',
+      name: 'Experiment Tracking',
+      description: 'Theo dõi và quản lý các thí nghiệm',
+      icon: TestTube,
+      capabilities: [
+        'Hypothesis testing',
+        'Statistical analysis',
+        'A/B testing',
+        'Performance comparison',
+        'Result visualization'
+      ],
+      usage: 'Thực hiện và theo dõi các thí nghiệm để validate ý tưởng trading trước khi deploy.'
     },
     {
       id: 'backtesting',
@@ -144,20 +140,6 @@ export function GuidesTab({ onNavigateToTab }: GuideTabProps) {
         'Multi-objective optimization'
       ],
       usage: 'Fine-tune model parameters để maximize Sharpe ratio, minimize drawdown, etc. Cẩn thận overfitting!'
-    },
-    {
-      id: 'library',
-      name: 'Model Library',
-      description: 'Thư viện models từ cộng đồng',
-      icon: Library,
-      capabilities: [
-        'Browse community models',
-        'Download và test models',
-        'Share models của bạn',
-        'Rating và reviews',
-        'Performance leaderboards'
-      ],
-      usage: 'Tìm inspiration từ models của người khác. Test trước khi sử dụng với dữ liệu thật.'
     }
   ];
 
