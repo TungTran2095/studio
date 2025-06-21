@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { MacOSCloseButton } from '@/components/ui/macos-close-button';
 import { 
   Plus, 
   Settings, 
@@ -26,7 +27,9 @@ import {
   Clock,
   RotateCcw,
   Link,
-  Shield
+  Shield,
+  Edit,
+  AlertTriangle
 } from 'lucide-react';
 import { DataSource } from '@/types/market-data';
 import { realDataService } from '@/lib/market-data/real-data-service';

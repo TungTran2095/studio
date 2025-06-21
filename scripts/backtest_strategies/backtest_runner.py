@@ -130,9 +130,37 @@ def run_backtest(config: Dict[str, Any], experiment_id: str) -> Dict[str, Any]:
 
     # Run backtest
     results = strategy.run_backtest(data)
+    
+    # Lấy dữ liệu indicator từ strategy
+    signals_data = strategy.generate_signals(data)
+    
+    # Chuẩn bị dữ liệu indicator cho chart
+    indicators_data = {
+        'timestamps': (signals_data.index.astype(np.int64) // 10**6).tolist(),  # Convert to milliseconds
+        'close_prices': signals_data['close'].tolist(),
+        'indicators': {}
+    }
+    
+    # Thêm các indicator tùy theo loại strategy
+    if strategy_type == 'rsi':
+        indicators_data['indicators']['rsi'] = [convert_datetime(x) for x in signals_data['rsi'].tolist()]
+    elif strategy_type == 'macd':
+        indicators_data['indicators']['macd'] = [convert_datetime(x) for x in signals_data['macd'].tolist()]
+        indicators_data['indicators']['signal'] = [convert_datetime(x) for x in signals_data['signal'].tolist()]
+        indicators_data['indicators']['histogram'] = [convert_datetime(x) for x in signals_data['histogram'].tolist()]
+    elif strategy_type == 'ma_crossover':
+        indicators_data['indicators']['fast_ma'] = [convert_datetime(x) for x in signals_data['fast_ma'].tolist()]
+        indicators_data['indicators']['slow_ma'] = [convert_datetime(x) for x in signals_data['slow_ma'].tolist()]
+    elif strategy_type == 'bollinger_bands':
+        indicators_data['indicators']['upper'] = [convert_datetime(x) for x in signals_data['upper'].tolist()]
+        indicators_data['indicators']['middle'] = [convert_datetime(x) for x in signals_data['middle'].tolist()]
+        indicators_data['indicators']['lower'] = [convert_datetime(x) for x in signals_data['lower'].tolist()]
 
     # Save results
     save_results(results, results_dir, strategy_type)
+
+    # Thêm indicators data vào results
+    results['indicators'] = indicators_data
 
     return results
 
@@ -159,6 +187,41 @@ def save_results(results: Dict[str, Any], results_dir: str, strategy_type: str):
 
     print(f"Results saved to {results_dir}/{filename}_*")
 
+def convert_datetime(obj):
+    """Convert various data types to JSON serializable format"""
+    if isinstance(obj, (pd.Timestamp, datetime)):
+        return obj.isoformat()
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, (np.floating, float)):
+        # Xử lý NaN values
+        if pd.isna(obj) or np.isnan(obj):
+            return None
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        # Xử lý numpy arrays với NaN values
+        return [None if pd.isna(x) or np.isnan(x) else float(x) for x in obj.tolist()]
+    if isinstance(obj, pd.Series):
+        # Xử lý pandas Series với NaN values
+        return [None if pd.isna(x) or np.isnan(x) else float(x) for x in obj.tolist()]
+    if isinstance(obj, dict):
+        # Xử lý nested dictionaries
+        return {k: convert_datetime(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        # Xử lý lists
+        return [convert_datetime(item) for item in obj]
+    if isinstance(obj, (str, int, bool, type(None))):
+        # Các kiểu dữ liệu cơ bản đã JSON serializable
+        return obj
+    # Xử lý các kiểu numpy khác
+    if hasattr(obj, 'item'):
+        try:
+            return obj.item()
+        except:
+            pass
+    # Nếu không xử lý được, chuyển thành string
+    return str(obj)
+
 if __name__ == '__main__':
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Run backtest strategy')
@@ -173,19 +236,13 @@ if __name__ == '__main__':
         # Run backtest
         results = run_backtest(config, args.experiment_id)
 
-        def convert_datetime(obj):
-            if isinstance(obj, (pd.Timestamp, datetime)):
-                return obj.isoformat()
-            if isinstance(obj, np.integer):
-                return int(obj)
-            if isinstance(obj, np.floating):
-                return float(obj)
-            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-
         # In riêng từng phần cho API/backend dễ lấy
         if results:
             print(json.dumps({"trades": results.get("trades", [])}, default=convert_datetime))  # Dành cho cột trades
             print(json.dumps(results.get("performance", {}), default=convert_datetime))           # Dành cho cột results (summary)
+            # In dữ liệu indicator cho chart
+            if "indicators" in results:
+                print(json.dumps({"indicators": results["indicators"]}, default=convert_datetime))
             # Nếu muốn in full để debug:
             # print(json.dumps(results, default=convert_datetime))
         else:

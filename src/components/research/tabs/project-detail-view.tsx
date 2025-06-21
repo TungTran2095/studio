@@ -1,46 +1,53 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import Highcharts from 'highcharts';
-import HighchartsReact from 'highcharts-react-official';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { MacOSCloseButton } from '@/components/ui/macos-close-button';
 import { 
-  ArrowLeft,
-  Brain,
-  TestTube,
+  ArrowLeft, 
+  Plus, 
+  Brain, 
+  Database, 
+  Activity, 
+  Play, 
+  X, 
+  Download, 
+  Edit, 
+  Save, 
+  Eye,
   BarChart3,
-  Settings,
-  Plus,
-  Play,
-  Edit,
-  Save,
-  X,
-  CheckCircle,
-  Activity,
   Clock,
+  TestTube,
   TrendingUp,
-  Download,
+  PieChart,
+  LineChart,
+  RefreshCw,
+  CheckCircle,
+  AlertTriangle,
+  Info,
+  Settings,
+  Terminal,
   Upload,
   FileText,
   Zap,
   Target,
-  LineChart,
-  Eye,
-  AlertTriangle,
   HelpCircle,
-  Terminal,
-  Database
+  Bug
 } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { createClient } from '@supabase/supabase-js';
+import Highcharts from 'highcharts';
+import HighchartsReact from 'highcharts-react-official';
+import { cn } from '@/lib/utils';
 import { DatasetSelector } from '../dataset-selector';
 import { TrainingProgressModal } from '../training-progress-modal';
 import { ModelPerformanceDisplay } from '../model-performance-display';
@@ -1390,10 +1397,10 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                   Chọn thuật toán AI/ML và cấu hình parameters
                 </CardDescription>
               </div>
-              <Button variant="outline" onClick={() => setShowCreateModel(false)}>
-                <X className="h-4 w-4 mr-2" />
-                Đóng
-              </Button>
+              <MacOSCloseButton 
+                onClick={() => setShowCreateModel(false)}
+                size="md"
+              />
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1625,16 +1632,13 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                   <Activity className="h-4 w-4 mr-2" />
                   {isLoadingData ? 'Đang tải...' : 'Reload Data'}
                 </Button>
-                <Button 
-                  variant="outline" 
+                <MacOSCloseButton 
                   onClick={() => {
                     setShowDataSelector(false);
                     setModelToTrain(null);
                   }}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Hủy
-                </Button>
+                  size="md"
+                />
               </div>
             </div>
           </CardHeader>
@@ -2350,10 +2354,19 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const setupDatabase = async () => {
     setSettingUp(true);
     try {
+      // Setup experiments table
       const response = await fetch('/api/research/experiments/setup', { method: 'POST' });
       const data = await response.json();
       if (response.ok) {
-        toast({ title: "Thành công", description: "Setup database thành công! Đang tải lại..." });
+        // Setup indicators column
+        const indicatorsResponse = await fetch('/api/research/setup-indicators', { method: 'POST' });
+        const indicatorsData = await indicatorsResponse.json();
+        
+        if (indicatorsResponse.ok) {
+          toast({ title: "Thành công", description: "Setup database và indicators column thành công! Đang tải lại..." });
+        } else {
+          toast({ title: "Cảnh báo", description: `Setup database thành công nhưng indicators column thất bại: ${indicatorsData.error}`, variant: "destructive" });
+        }
         await fetchExperiments();
       } else {
         toast({ title: "Lỗi", description: `Setup database thất bại: ${data.error}`, variant: "destructive" });
@@ -3417,30 +3430,18 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {experiments.map((experiment) => (
-            <Card key={experiment.id}>
+            <Card key={experiment.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-500">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                      <TestTube className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{experiment.name}</CardTitle>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant={
-                          experiment.status === 'completed' ? 'default' :
-                          experiment.status === 'running' ? 'secondary' :
-                          experiment.status === 'failed' ? 'destructive' : 'outline'
-                        }>
-                          {experiment.status === 'completed' ? '✅ Hoàn thành' :
-                           experiment.status === 'running' ? '🔄 Đang chạy' :
-                           experiment.status === 'failed' ? '❌ Lỗi' : 
-                           experiment.status === 'pending' ? '⏳ Chờ' : experiment.status}
-                        </Badge>
-                        <Badge variant="outline" className="capitalize">
-                          {experiment.type}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base font-semibold truncate">{experiment.name}</CardTitle>
+                        <Badge variant="outline" className="capitalize text-xs">
+                          {experiment.type === 'backtest' ? 'Backtest' :
+                           experiment.type === 'hypothesis_test' ? 'Kiểm định' : experiment.type}
                         </Badge>
                       </div>
                     </div>
@@ -3448,24 +3449,83 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                 </div>
               </CardHeader>
 
-              <CardContent>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Progress:</span>
-                    <span>{experiment.progress}%</span>
+              <CardContent className="pt-0">
+                {/* Hiển thị mô tả nếu có */}
+                {experiment.description && (
+                  <div className="mb-4">
+                    <p className="text-sm text-muted-foreground line-clamp-2">{experiment.description}</p>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Created:</span>
-                    <span>{new Date(experiment.created_at).toLocaleDateString('vi-VN')}</span>
-                  </div>
-                  {experiment.description && (
-                    <div className="pt-2 border-t">
-                      <p className="text-xs text-muted-foreground">{experiment.description}</p>
+                )}
+
+                {/* Hiển thị chỉ số backtest nếu có kết quả */}
+                {experiment.status === 'completed' && experiment.results && experiment.type === 'backtest' && (
+                  <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                    <h4 className="text-sm font-medium mb-2 text-foreground">Kết quả Backtest</h4>
+                    <div className="flex items-center justify-between text-xs">
+                      {experiment.results.total_return !== undefined && (
+                        <div className="text-center flex-1">
+                          <div className={`font-semibold ${
+                            experiment.results.total_return >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`} title="Tổng lợi nhuận: Chỉ số này cho thấy hiệu suất tổng thể của chiến lược. Giá trị dương = lợi nhuận, âm = thua lỗ">
+                            {experiment.results.total_return >= 0 ? '+' : ''}{experiment.results.total_return?.toFixed(2)}%
+                          </div>
+                          <div className="text-muted-foreground">Tổng lợi nhuận</div>
+                        </div>
+                      )}
+                      {experiment.results.sharpe_ratio !== undefined && (
+                        <div className="text-center flex-1">
+                          <div className="font-semibold text-blue-600" title="Sharpe Ratio: Đo lường lợi nhuận so với rủi ro. >1 = tốt, >2 = rất tốt, <0 = kém">
+                            {experiment.results.sharpe_ratio?.toFixed(2)}
+                          </div>
+                          <div className="text-muted-foreground">Sharpe Ratio</div>
+                        </div>
+                      )}
+                      {experiment.results.max_drawdown !== undefined && (
+                        <div className="text-center flex-1">
+                          <div className="font-semibold text-red-600" title="Max Drawdown: Mức thua lỗ lớn nhất từ đỉnh. <10% = tốt, >20% = rủi ro cao">
+                            {experiment.results.max_drawdown?.toFixed(2)}%
+                          </div>
+                          <div className="text-muted-foreground">Max Drawdown</div>
+                        </div>
+                      )}
+                      {experiment.results.win_rate !== undefined && (
+                        <div className="text-center flex-1">
+                          <div className="font-semibold text-green-600" title="Win Rate: Tỷ lệ giao dịch thắng. >50% = tốt, >60% = rất tốt">
+                            {experiment.results.win_rate?.toFixed(1)}%
+                          </div>
+                          <div className="text-muted-foreground">Win Rate</div>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+                )}
+
+                {/* Hiển thị thông tin chiến lược nếu có */}
+                {experiment.config?.strategy && experiment.type === 'backtest' && (
+                  <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
+                    <div className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
+                      Chiến lược: {experiment.config.strategy.type || 'N/A'}
+                    </div>
+                    {experiment.config.trading && (
+                      <div className="text-xs text-blue-600 dark:text-blue-400">
+                        {experiment.config.trading.symbol} • {experiment.config.trading.timeframe}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Hiển thị thông tin thời gian */}
+                <div className="text-xs text-muted-foreground mb-4">
+                  Tạo lúc: {new Date(experiment.created_at).toLocaleString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
                 </div>
                 
-                <div className="flex gap-2 mt-4">
+                <div className="flex gap-2">
                   <Button 
                     size="sm" 
                     variant="outline" 
@@ -3564,15 +3624,30 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                 </Button>
                 <Button 
                   variant="outline" 
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`/api/research/debug-indicators?experiment_id=${selectedExperiment.id}`);
+                      const data = await response.json();
+                      console.log('🔍 Debug Indicators Data:', data);
+                      alert(`Debug data logged to console. Check browser console for details.\n\nExperiment: ${data.experiment?.name}\nHas Indicators: ${data.experiment?.hasIndicators}\nKeys: ${data.experiment?.indicatorsKeys?.join(', ')}`);
+                    } catch (error) {
+                      console.error('Debug error:', error);
+                      alert('Error debugging indicators');
+                    }
+                  }}
+                >
+                  <Bug className="h-4 w-4 mr-2" />
+                  Debug
+                </Button>
+                <MacOSCloseButton 
                   onClick={() => {
                     setShowDetails(false);
                     setSelectedExperiment(null);
                     setExperimentChartData([]); // Reset data chart
                   }}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Đóng
-                </Button>
+                  size="md"
+                />
               </div>
             </div>
           </CardHeader>
@@ -3591,27 +3666,496 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                           <span className="ml-2 text-sm">Đang tải dữ liệu biểu đồ...</span>
                         </div>
                       ) : experimentChartData.length > 0 ? (
-                        <HighchartsReact
-                          highcharts={Highcharts}
-                          options={{
-                            chart: { height: 350, style: { fontFamily: 'inherit' }, spacing: [5, 5, 5, 5], backgroundColor: 'transparent' },
-                            title: { text: undefined },
-                            xAxis: { type: 'datetime', labels: { style: { fontSize: '10px', color: '#888888' } }, lineColor: '#2e2e2e', tickColor: '#2e2e2e' },
-                            yAxis: { title: { text: 'Price', style: { color: '#888888' } }, labels: { style: { fontSize: '10px', color: '#888888' } }, gridLineColor: '#2e2e2e' },
-                            plotOptions: { line: { color: '#22c55e', lineWidth: 1.5 } },
-                            series: [{
+                        (() => {
+                          // Lấy trades từ kết quả backtest nếu có
+                          let tradeMarkers: any[] = [];
+                          if (selectedExperiment.results && Array.isArray(selectedExperiment.results.trades)) {
+                            tradeMarkers = selectedExperiment.results.trades.flatMap((trade: any, idx: number) => {
+                              const markers = [];
+                              if (trade.entry_time && trade.entry_price) {
+                                markers.push({
+                                  x: new Date(trade.entry_time).getTime(),
+                                  y: Number(trade.entry_price),
+                                  marker: {
+                                    symbol: 'triangle',
+                                    fillColor: '#22c55e',
+                                    lineColor: '#22c55e',
+                                    radius: 6
+                                  },
+                                  title: { text: 'Mua', style: { color: '#22c55e', fontWeight: 'bold' } },
+                                  side: trade.side || trade.type || 'buy',
+                                  tradeIdx: idx,
+                                  type: 'buy'
+                                });
+                              }
+                              if (trade.exit_time && trade.exit_price) {
+                                markers.push({
+                                  x: new Date(trade.exit_time).getTime(),
+                                  y: Number(trade.exit_price),
+                                  marker: {
+                                    symbol: 'triangle-down',
+                                    fillColor: '#ef4444',
+                                    lineColor: '#ef4444',
+                                    radius: 6
+                                  },
+                                  title: { text: 'Bán', style: { color: '#ef4444', fontWeight: 'bold' } },
+                                  side: trade.side || trade.type || 'sell',
+                                  tradeIdx: idx,
+                                  type: 'sell'
+                                });
+                              }
+                              return markers;
+                            });
+                          }
+
+                          // Chuẩn bị series cho chart
+                          const series: any[] = [
+                            {
                               name: 'Close Price',
                               type: 'line',
                               data: experimentChartData.map(candle => [candle.timestamp, candle.close]),
                               color: '#3b82f6',
                               lineWidth: 1,
                               marker: { enabled: false }
-                            }],
-                            tooltip: { xDateFormat: '%Y-%m-%d %H:%M:%S', valueDecimals: 2 },
-                            legend: { enabled: false },
-                            credits: { enabled: false }
-                          }}
-                        />
+                            }
+                          ];
+
+                          // Thêm indicators dựa trên loại chiến lược
+                          const strategyType = selectedExperiment.config?.strategy?.type || selectedExperiment.config?.strategyType;
+                          const indicators = selectedExperiment.indicators;
+
+                          // Debug logging
+                          console.log('🔍 Debug indicators:', {
+                            strategyType,
+                            config: selectedExperiment.config,
+                            configKeys: selectedExperiment.config ? Object.keys(selectedExperiment.config) : [],
+                            strategyConfig: selectedExperiment.config?.strategy,
+                            strategyTypeFromStrategy: selectedExperiment.config?.strategy?.type,
+                            strategyTypeFromConfig: selectedExperiment.config?.strategyType,
+                            indicators,
+                            hasIndicators: !!indicators,
+                            indicatorsKeys: indicators ? Object.keys(indicators) : [],
+                            experimentId: selectedExperiment.id,
+                            experimentType: selectedExperiment.type
+                          });
+
+                          // Test: Thêm indicators mẫu nếu không có dữ liệu thực
+                          if (!indicators && experimentChartData.length > 0) {
+                            console.log('🔍 Adding sample indicators for testing');
+                            const sampleTimestamps = experimentChartData.map(candle => candle.timestamp);
+                            const samplePrices = experimentChartData.map(candle => candle.close);
+                            
+                            // Tạo RSI mẫu
+                            const sampleRSI = samplePrices.map((price, idx) => {
+                              if (idx < 14) return null;
+                              const recentPrices = samplePrices.slice(idx - 14, idx + 1);
+                              const gains = recentPrices.map((p, i) => i > 0 ? Math.max(0, p - recentPrices[i-1]) : 0);
+                              const losses = recentPrices.map((p, i) => i > 0 ? Math.max(0, recentPrices[i-1] - p) : 0);
+                              const avgGain = gains.reduce((a, b) => a + b, 0) / 14;
+                              const avgLoss = losses.reduce((a, b) => a + b, 0) / 14;
+                              return avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+                            });
+                            
+                            series.push({
+                              name: 'Sample RSI',
+                              type: 'line',
+                              data: sampleTimestamps.map((ts, idx) => [ts, sampleRSI[idx]]).filter(item => item[1] !== null),
+                              color: '#f59e0b',
+                              lineWidth: 1,
+                              marker: { enabled: false },
+                              yAxis: 1
+                            });
+                          }
+
+                          if (indicators && strategyType) {
+                            if (strategyType === 'rsi' && indicators.rsi) {
+                              // Lọc bỏ các giá trị null/undefined
+                              const validData = indicators.timestamps.map((ts: number, idx: number) => {
+                                const rsiValue = indicators.rsi[idx];
+                                return rsiValue !== null && rsiValue !== undefined ? [ts, rsiValue] : null;
+                              }).filter((item: any) => item !== null);
+                              
+                              // Thêm RSI vào chart riêng biệt
+                              series.push({
+                                name: 'RSI',
+                                type: 'line',
+                                data: validData,
+                                color: '#f59e0b',
+                                lineWidth: 1,
+                                marker: { enabled: false },
+                                yAxis: 1
+                              });
+                              
+                              // Thêm đường ngưỡng overbought (70)
+                              series.push({
+                                name: 'Overbought (70)',
+                                type: 'line',
+                                data: indicators.timestamps.map((ts: number) => [ts, 70]),
+                                color: '#ef4444',
+                                lineWidth: 1,
+                                marker: { enabled: false },
+                                yAxis: 1,
+                                dashStyle: 'dash'
+                              });
+                              
+                              // Thêm đường ngưỡng oversold (30)
+                              series.push({
+                                name: 'Oversold (30)',
+                                type: 'line',
+                                data: indicators.timestamps.map((ts: number) => [ts, 30]),
+                                color: '#10b981',
+                                lineWidth: 1,
+                                marker: { enabled: false },
+                                yAxis: 1,
+                                dashStyle: 'dash'
+                              });
+                            } else if (strategyType === 'macd' && indicators.macd) {
+                              // Lọc bỏ các giá trị null/undefined cho MACD
+                              const macdData = indicators.timestamps.map((ts: number, idx: number) => {
+                                const macdValue = indicators.macd[idx];
+                                return macdValue !== null && macdValue !== undefined ? [ts, macdValue] : null;
+                              }).filter((item: any) => item !== null);
+                              
+                              const signalData = indicators.timestamps.map((ts: number, idx: number) => {
+                                const signalValue = indicators.signal[idx];
+                                return signalValue !== null && signalValue !== undefined ? [ts, signalValue] : null;
+                              }).filter((item: any) => item !== null);
+                              
+                              const histogramData = indicators.timestamps.map((ts: number, idx: number) => {
+                                const histogramValue = indicators.histogram[idx];
+                                return histogramValue !== null && histogramValue !== undefined ? [ts, histogramValue] : null;
+                              }).filter((item: any) => item !== null);
+                              
+                              // Thêm MACD vào chart riêng biệt
+                              series.push(
+                                {
+                                  name: 'MACD',
+                                  type: 'line',
+                                  data: macdData,
+                                  color: '#3b82f6',
+                                  lineWidth: 1,
+                                  marker: { enabled: false },
+                                  yAxis: 1
+                                },
+                                {
+                                  name: 'Signal',
+                                  type: 'line',
+                                  data: signalData,
+                                  color: '#ef4444',
+                                  lineWidth: 1,
+                                  marker: { enabled: false },
+                                  yAxis: 1
+                                },
+                                {
+                                  name: 'Histogram',
+                                  type: 'column',
+                                  data: histogramData,
+                                  color: '#10b981',
+                                  yAxis: 1
+                                }
+                              );
+                              
+                              // Thêm đường zero cho MACD
+                              series.push({
+                                name: 'Zero Line',
+                                type: 'line',
+                                data: indicators.timestamps.map((ts: number) => [ts, 0]),
+                                color: '#888888',
+                                lineWidth: 1,
+                                marker: { enabled: false },
+                                yAxis: 1,
+                                dashStyle: 'dash'
+                              });
+                            } else if (strategyType === 'ma_crossover' && indicators.fast_ma) {
+                              // Lọc bỏ các giá trị null/undefined cho MA
+                              const fastMaData = indicators.timestamps.map((ts: number, idx: number) => {
+                                const fastMaValue = indicators.fast_ma[idx];
+                                return fastMaValue !== null && fastMaValue !== undefined ? [ts, fastMaValue] : null;
+                              }).filter((item: any) => item !== null);
+                              
+                              const slowMaData = indicators.timestamps.map((ts: number, idx: number) => {
+                                const slowMaValue = indicators.slow_ma[idx];
+                                return slowMaValue !== null && slowMaValue !== undefined ? [ts, slowMaValue] : null;
+                              }).filter((item: any) => item !== null);
+                              
+                              // Thêm Moving Averages vào cùng chart với giá
+                              series.push(
+                                {
+                                  name: 'Fast MA',
+                                  type: 'line',
+                                  data: fastMaData,
+                                  color: '#f59e0b',
+                                  lineWidth: 1,
+                                  marker: { enabled: false }
+                                },
+                                {
+                                  name: 'Slow MA',
+                                  type: 'line',
+                                  data: slowMaData,
+                                  color: '#8b5cf6',
+                                  lineWidth: 1,
+                                  marker: { enabled: false }
+                                }
+                              );
+                            } else if (strategyType === 'bollinger_bands' && indicators.upper) {
+                              // Thêm Bollinger Bands vào cùng chart với giá
+                              series.push(
+                                {
+                                  name: 'Upper Band',
+                                  type: 'line',
+                                  data: indicators.timestamps.map((ts: number, idx: number) => [ts, indicators.upper[idx]]),
+                                  color: '#ef4444',
+                                  lineWidth: 1,
+                                  marker: { enabled: false }
+                                },
+                                {
+                                  name: 'Middle Band',
+                                  type: 'line',
+                                  data: indicators.timestamps.map((ts: number, idx: number) => [ts, indicators.middle[idx]]),
+                                  color: '#f59e0b',
+                                  lineWidth: 1,
+                                  marker: { enabled: false }
+                                },
+                                {
+                                  name: 'Lower Band',
+                                  type: 'line',
+                                  data: indicators.timestamps.map((ts: number, idx: number) => [ts, indicators.lower[idx]]),
+                                  color: '#10b981',
+                                  lineWidth: 1,
+                                  marker: { enabled: false }
+                                }
+                              );
+                            } else if (indicators) {
+                              // Fallback: hiển thị indicators ngay cả khi không có strategyType
+                              console.log('🔍 Fallback: Hiển thị indicators không có strategyType');
+                              console.log('🔍 Indicators data:', {
+                                timestamps: indicators.timestamps?.length || 0,
+                                rsi: indicators.rsi?.length || 0,
+                                macd: indicators.macd?.length || 0,
+                                fast_ma: indicators.fast_ma?.length || 0,
+                                slow_ma: indicators.slow_ma?.length || 0,
+                                upper: indicators.upper?.length || 0,
+                                middle: indicators.middle?.length || 0,
+                                lower: indicators.lower?.length || 0,
+                                signal: indicators.signal?.length || 0,
+                                histogram: indicators.histogram?.length || 0
+                              });
+                              
+                              // Thử hiển thị tất cả indicators có sẵn
+                              if (indicators.rsi && indicators.timestamps && indicators.rsi.length > 0) {
+                                console.log('🔍 Adding RSI indicator');
+                                const validData = indicators.timestamps.map((ts: number, idx: number) => {
+                                  const rsiValue = indicators.rsi[idx];
+                                  return rsiValue !== null && rsiValue !== undefined ? [ts, rsiValue] : null;
+                                }).filter((item: any) => item !== null);
+                                
+                                if (validData.length > 0) {
+                                  series.push({
+                                    name: 'RSI',
+                                    type: 'line',
+                                    data: validData,
+                                    color: '#f59e0b',
+                                    lineWidth: 1,
+                                    marker: { enabled: false },
+                                    yAxis: 1
+                                  });
+                                  
+                                  // Thêm đường ngưỡng
+                                  series.push(
+                                    {
+                                      name: 'Overbought (70)',
+                                      type: 'line',
+                                      data: indicators.timestamps.map((ts: number) => [ts, 70]),
+                                      color: '#ef4444',
+                                      lineWidth: 1,
+                                      marker: { enabled: false },
+                                      yAxis: 1,
+                                      dashStyle: 'dash'
+                                    },
+                                    {
+                                      name: 'Oversold (30)',
+                                      type: 'line',
+                                      data: indicators.timestamps.map((ts: number) => [ts, 30]),
+                                      color: '#10b981',
+                                      lineWidth: 1,
+                                      marker: { enabled: false },
+                                      yAxis: 1,
+                                      dashStyle: 'dash'
+                                    }
+                                  );
+                                }
+                              }
+                              
+                              if (indicators.macd && indicators.timestamps && indicators.macd.length > 0) {
+                                console.log('🔍 Adding MACD indicator');
+                                const macdData = indicators.timestamps.map((ts: number, idx: number) => {
+                                  const macdValue = indicators.macd[idx];
+                                  return macdValue !== null && macdValue !== undefined ? [ts, macdValue] : null;
+                                }).filter((item: any) => item !== null);
+                                
+                                if (macdData.length > 0) {
+                                  series.push({
+                                    name: 'MACD',
+                                    type: 'line',
+                                    data: macdData,
+                                    color: '#3b82f6',
+                                    lineWidth: 1,
+                                    marker: { enabled: false },
+                                    yAxis: 1
+                                  });
+                                }
+                                
+                                if (indicators.signal && indicators.signal.length > 0) {
+                                  const signalData = indicators.timestamps.map((ts: number, idx: number) => {
+                                    const signalValue = indicators.signal[idx];
+                                    return signalValue !== null && signalValue !== undefined ? [ts, signalValue] : null;
+                                  }).filter((item: any) => item !== null);
+                                  
+                                  if (signalData.length > 0) {
+                                    series.push({
+                                      name: 'Signal',
+                                      type: 'line',
+                                      data: signalData,
+                                      color: '#ef4444',
+                                      lineWidth: 1,
+                                      marker: { enabled: false },
+                                      yAxis: 1
+                                    });
+                                  }
+                                }
+                              }
+                              
+                              if (indicators.fast_ma && indicators.timestamps && indicators.fast_ma.length > 0) {
+                                console.log('🔍 Adding MA indicators');
+                                const fastMaData = indicators.timestamps.map((ts: number, idx: number) => {
+                                  const fastMaValue = indicators.fast_ma[idx];
+                                  return fastMaValue !== null && fastMaValue !== undefined ? [ts, fastMaValue] : null;
+                                }).filter((item: any) => item !== null);
+                                
+                                if (fastMaData.length > 0) {
+                                  series.push({
+                                    name: 'Fast MA',
+                                    type: 'line',
+                                    data: fastMaData,
+                                    color: '#f59e0b',
+                                    lineWidth: 1,
+                                    marker: { enabled: false }
+                                  });
+                                }
+                                
+                                if (indicators.slow_ma && indicators.slow_ma.length > 0) {
+                                  const slowMaData = indicators.timestamps.map((ts: number, idx: number) => {
+                                    const slowMaValue = indicators.slow_ma[idx];
+                                    return slowMaValue !== null && slowMaValue !== undefined ? [ts, slowMaValue] : null;
+                                  }).filter((item: any) => item !== null);
+                                  
+                                  if (slowMaData.length > 0) {
+                                    series.push({
+                                      name: 'Slow MA',
+                                      type: 'line',
+                                      data: slowMaData,
+                                      color: '#8b5cf6',
+                                      lineWidth: 1,
+                                      marker: { enabled: false }
+                                    });
+                                  }
+                                }
+                              }
+                              
+                              if (indicators.upper && indicators.timestamps && indicators.upper.length > 0) {
+                                console.log('🔍 Adding Bollinger Bands indicators');
+                                series.push(
+                                  {
+                                    name: 'Upper Band',
+                                    type: 'line',
+                                    data: indicators.timestamps.map((ts: number, idx: number) => [ts, indicators.upper[idx]]),
+                                    color: '#ef4444',
+                                    lineWidth: 1,
+                                    marker: { enabled: false }
+                                  },
+                                  {
+                                    name: 'Middle Band',
+                                    type: 'line',
+                                    data: indicators.timestamps.map((ts: number, idx: number) => [ts, indicators.middle[idx]]),
+                                    color: '#f59e0b',
+                                    lineWidth: 1,
+                                    marker: { enabled: false }
+                                  },
+                                  {
+                                    name: 'Lower Band',
+                                    type: 'line',
+                                    data: indicators.timestamps.map((ts: number, idx: number) => [ts, indicators.lower[idx]]),
+                                    color: '#10b981',
+                                    lineWidth: 1,
+                                    marker: { enabled: false }
+                                  }
+                                );
+                              }
+                            }
+                          }
+
+                          // Thêm series marker cho buy/sell
+                          if (tradeMarkers.length > 0) {
+                            series.push({
+                              name: 'Buy/Sell',
+                              type: 'scatter',
+                              data: tradeMarkers.map(m => ({ x: m.x, y: m.y, marker: m.marker, tradeIdx: m.tradeIdx, type: m.type })),
+                              tooltip: {
+                                pointFormatter: function(this: any): string {
+                                  return `${this.type === 'buy' ? 'Mua' : 'Bán'}<br/>Giá: <b>${this.y}</b><br/>Thời gian: <b>${Highcharts.dateFormat('%Y-%m-%d %H:%M:%S', this.x)}</b>`;
+                                }
+                              },
+                              marker: { enabled: true, symbol: 'circle', radius: 6 },
+                              color: undefined,
+                              zIndex: 10
+                            });
+                          }
+
+                          // Chuẩn bị yAxis dựa trên loại indicator
+                          const yAxis = [
+                            {
+                              title: {
+                                text: 'Price',
+                                style: { color: '#888888' }
+                              },
+                              labels: {
+                                style: { fontSize: '10px', color: '#888888' }
+                              },
+                              gridLineColor: '#2e2e2e'
+                            }
+                          ];
+
+                          // Thêm yAxis thứ 2 cho RSI và MACD
+                          if (strategyType === 'rsi' || strategyType === 'macd') {
+                            yAxis.push({
+                              title: {
+                                text: strategyType === 'rsi' ? 'RSI' : 'MACD',
+                                style: { color: '#888888' }
+                              },
+                              labels: {
+                                style: { fontSize: '10px', color: '#888888' }
+                              },
+                              gridLineColor: '#2e2e2e'
+                            });
+                          }
+
+                          return (
+                            <HighchartsReact
+                              highcharts={Highcharts}
+                              options={{
+                                chart: { height: 350, style: { fontFamily: 'inherit' }, spacing: [5, 5, 5, 5], backgroundColor: 'transparent' },
+                                title: { text: undefined },
+                                xAxis: { type: 'datetime', labels: { style: { fontSize: '10px', color: '#888888' } }, lineColor: '#2e2e2e', tickColor: '#2e2e2e' },
+                                yAxis: yAxis,
+                                plotOptions: { line: { color: '#22c55e', lineWidth: 1.5 } },
+                                series: series,
+                                tooltip: { xDateFormat: '%Y-%m-%d %H:%M:%S', valueDecimals: 2, shared: true },
+                                legend: { enabled: true, itemStyle: { fontSize: '10px' } },
+                                credits: { enabled: false }
+                              }}
+                            />
+                          );
+                        })()
                       ) : (
                         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                           Không có dữ liệu nến để hiển thị
@@ -3692,6 +4236,68 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                 <pre className="text-xs overflow-auto max-h-40">{JSON.stringify(selectedExperiment.config?.strategy, null, 2)}</pre>
                               </div>
                             </div>
+                            
+                            {/* Thêm thông tin chiến lược chi tiết */}
+                            {selectedExperiment.config?.strategy?.type && (
+                              <div>
+                                <Label>Thông tin chiến lược</Label>
+                                <div className="mt-1 text-xs bg-muted p-2 rounded space-y-1">
+                                  <div className="font-medium">Loại chiến lược: {selectedExperiment.config.strategy.type}</div>
+                                  {selectedExperiment.config.strategy.type === 'rsi' && (
+                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                      <div>Period: {selectedExperiment.config.strategy.parameters?.period || 14}</div>
+                                      <div>Overbought: {selectedExperiment.config.strategy.parameters?.overbought || 70}</div>
+                                      <div>Oversold: {selectedExperiment.config.strategy.parameters?.oversold || 30}</div>
+                                    </div>
+                                  )}
+                                  {selectedExperiment.config.strategy.type === 'macd' && (
+                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                      <div>Fast EMA: {selectedExperiment.config.strategy.parameters?.fastEMA || 12}</div>
+                                      <div>Slow EMA: {selectedExperiment.config.strategy.parameters?.slowEMA || 26}</div>
+                                      <div>Signal Period: {selectedExperiment.config.strategy.parameters?.signalPeriod || 9}</div>
+                                    </div>
+                                  )}
+                                  {selectedExperiment.config.strategy.type === 'ma_crossover' && (
+                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                      <div>Fast Period: {selectedExperiment.config.strategy.parameters?.fastPeriod || 10}</div>
+                                      <div>Slow Period: {selectedExperiment.config.strategy.parameters?.slowPeriod || 20}</div>
+                                    </div>
+                                  )}
+                                  {selectedExperiment.config.strategy.type === 'bollinger_bands' && (
+                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                      <div>Period: {selectedExperiment.config.strategy.parameters?.period || 20}</div>
+                                      <div>Std Dev: {selectedExperiment.config.strategy.parameters?.stdDev || 2}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Debug panel cho indicators */}
+                            <div className="col-span-2">
+                              <Label>Debug Indicators</Label>
+                              <div className="mt-1 text-xs bg-red-50 p-2 rounded border border-red-200">
+                                <div className="font-medium text-red-700 mb-1">Thông tin Indicators:</div>
+                                <div className="space-y-1 text-[10px]">
+                                  <div><strong>Strategy Type:</strong> {selectedExperiment.config?.strategy?.type || 'N/A'}</div>
+                                  <div><strong>Has Indicators:</strong> {selectedExperiment.indicators ? 'Yes' : 'No'}</div>
+                                  <div><strong>Indicators Keys:</strong> {selectedExperiment.indicators ? Object.keys(selectedExperiment.indicators).join(', ') : 'None'}</div>
+                                  <div><strong>Timestamps Count:</strong> {selectedExperiment.indicators?.timestamps?.length || 0}</div>
+                                  {selectedExperiment.config?.strategy?.type === 'rsi' && (
+                                    <div><strong>RSI Values Count:</strong> {selectedExperiment.indicators?.rsi?.length || 0}</div>
+                                  )}
+                                  {selectedExperiment.config?.strategy?.type === 'macd' && (
+                                    <div><strong>MACD Values Count:</strong> {selectedExperiment.indicators?.macd?.length || 0}</div>
+                                  )}
+                                  {selectedExperiment.config?.strategy?.type === 'ma_crossover' && (
+                                    <div><strong>Fast MA Count:</strong> {selectedExperiment.indicators?.fast_ma?.length || 0}</div>
+                                  )}
+                                  {selectedExperiment.config?.strategy?.type === 'bollinger_bands' && (
+                                    <div><strong>Upper Band Count:</strong> {selectedExperiment.indicators?.upper?.length || 0}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -3708,11 +4314,11 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                 {/* Hiển thị bảng trades nếu có */}
                                 {Array.isArray(resultObj.trades) && resultObj.trades.length > 0 ? (
                                   <div className="mb-6">
-                                    <h4 className="font-semibold mb-2">Danh sách giao dịch</h4>
-                                    <div className="overflow-x-auto">
-                                      <table className="min-w-full text-xs border">
-                                        <thead>
-                                          <tr className="bg-muted border-b">
+                                    <h4 className="font-semibold mb-2">Danh sách giao dịch ({resultObj.trades.length} trades)</h4>
+                                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto border rounded">
+                                      <table className="min-w-full text-xs">
+                                        <thead className="sticky top-0 bg-muted border-b">
+                                          <tr>
                                             <th className="p-2 text-left">Thời gian vào</th>
                                             <th className="p-2 text-left">Thời gian ra</th>
                                             <th className="p-2 text-center">Loại</th>
@@ -3723,13 +4329,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {resultObj.trades.slice(0, 50).map((trade: any, idx: number) => {
+                                          {resultObj.trades.map((trade: any, idx: number) => {
                                             const entry = Number(trade.entry_price);
                                             const exit = Number(trade.exit_price);
                                             const size = Number(trade.size);
                                             const profit = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
                                             return (
-                                              <tr key={idx} className="border-b">
+                                              <tr key={idx} className="border-b hover:bg-muted/30">
                                                 <td className="p-2">{trade.entry_time ? new Date(trade.entry_time).toLocaleString('vi-VN') : '-'}</td>
                                                 <td className="p-2">{trade.exit_time ? new Date(trade.exit_time).toLocaleString('vi-VN') : '-'}</td>
                                                 <td className="p-2 text-center">{trade.side || trade.type || '-'}</td>
@@ -3741,12 +4347,12 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                             );
                                           })}
                                         </tbody>
-                                        <tfoot>
-                                          <tr className="font-bold bg-muted/70">
+                                        <tfoot className="sticky bottom-0 bg-muted/70 border-t">
+                                          <tr className="font-bold">
                                             <td className="p-2 text-right" colSpan={6}>Tổng lợi nhuận</td>
                                             <td className="p-2 text-right">
                                               {(() => {
-                                                const total = resultObj.trades.slice(0, 50).reduce((sum: number, t: any) => {
+                                                const total = resultObj.trades.reduce((sum: number, t: any) => {
                                                   const entry = Number(t.entry_price);
                                                   const exit = Number(t.exit_price);
                                                   const size = Number(t.size);
@@ -3759,8 +4365,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                           </tr>
                                         </tfoot>
                                       </table>
-                                      <div className="text-xs text-muted-foreground mt-1">* Hiển thị tối đa 50 giao dịch gần nhất</div>
                                     </div>
+                                    <div className="text-xs text-muted-foreground mt-1">* Hiển thị tất cả {resultObj.trades.length} giao dịch</div>
                                   </div>
                                 ) : (
                                   <div className="text-xs text-muted-foreground mb-4">Không có giao dịch nào trong backtest này.</div>

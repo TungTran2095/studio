@@ -1,9 +1,10 @@
+import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
+import { MacOSCloseButton } from '@/components/ui/macos-close-button';
 import { Plus } from "lucide-react";
 
 interface CreateExperimentModalProps {
@@ -94,9 +95,10 @@ export function CreateExperimentModal({ isOpen, onClose, onCreateExperiment }: C
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            Hủy
-          </Button>
+          <MacOSCloseButton 
+            onClick={onClose}
+            size="md"
+          />
           <Button onClick={handleSubmit} disabled={loading}>
             {loading ? "Đang tạo..." : "Tạo thí nghiệm"}
           </Button>

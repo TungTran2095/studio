@@ -1,0 +1,75 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+// Khởi tạo Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const experimentId = searchParams.get('experiment_id');
+
+    if (experimentId) {
+      // Debug một experiment cụ thể
+      const { data: experiment, error } = await supabase
+        .from('research_experiments')
+        .select('*')
+        .eq('id', experimentId)
+        .single();
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      const debugInfo = {
+        experiment: {
+          id: experiment.id,
+          name: experiment.name,
+          type: experiment.type,
+          status: experiment.status,
+          config: experiment.config,
+          hasIndicators: !!experiment.indicators,
+          indicatorsKeys: experiment.indicators ? Object.keys(experiment.indicators) : [],
+          indicatorsData: experiment.indicators
+        }
+      };
+
+      return NextResponse.json(debugInfo);
+    } else {
+      // Debug tất cả experiments có indicators
+      const { data: experiments, error } = await supabase
+        .from('research_experiments')
+        .select('*')
+        .not('indicators', 'is', null);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      const debugInfo = {
+        totalExperiments: experiments?.length || 0,
+        experiments: experiments?.map(exp => ({
+          id: exp.id,
+          name: exp.name,
+          type: exp.type,
+          status: exp.status,
+          strategyType: exp.config?.strategy?.type,
+          hasIndicators: !!exp.indicators,
+          indicatorsKeys: exp.indicators ? Object.keys(exp.indicators) : [],
+          timestampsCount: exp.indicators?.timestamps?.length || 0,
+          indicatorsData: exp.indicators
+        })) || []
+      };
+
+      return NextResponse.json(debugInfo);
+    }
+  } catch (error) {
+    console.error('Error debugging indicators:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+} 

@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Terminal, RefreshCw, Download } from "lucide-react";
+import { Progress } from '@/components/ui/progress';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { MacOSCloseButton } from '@/components/ui/macos-close-button';
+import { Terminal, RefreshCw, Download, CheckCircle, AlertTriangle, Clock, Activity, Brain, TrendingUp, BarChart3 } from "lucide-react";
 
 interface TrainingProgressModalProps {
   model: any;

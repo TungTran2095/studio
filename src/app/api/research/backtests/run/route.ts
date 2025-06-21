@@ -60,25 +60,42 @@ export async function POST(request: Request) {
         const lines = scriptOutput.trim().split('\n');
         let tradesObj = null;
         let summaryObj = null;
+        let indicatorsObj = null;
         try {
           // Lọc ra các dòng JSON hợp lệ
           const jsonLines = lines.filter(line => line.trim().startsWith('{') && line.trim().endsWith('}'));
-          if (jsonLines.length >= 2) {
+          if (jsonLines.length >= 3) {
             tradesObj = JSON.parse(jsonLines[0]);
             summaryObj = JSON.parse(jsonLines[1]);
+            indicatorsObj = JSON.parse(jsonLines[2]);
+          } else if (jsonLines.length === 2) {
+            const obj1 = JSON.parse(jsonLines[0]);
+            const obj2 = JSON.parse(jsonLines[1]);
+            if (obj1.trades) {
+              tradesObj = obj1;
+              summaryObj = obj2;
+            } else if (obj2.trades) {
+              tradesObj = obj2;
+              summaryObj = obj1;
+            } else {
+              summaryObj = obj1;
+              indicatorsObj = obj2;
+            }
           } else if (jsonLines.length === 1) {
             const obj = JSON.parse(jsonLines[0]);
             if (obj.trades) tradesObj = obj;
+            else if (obj.indicators) indicatorsObj = obj;
             else summaryObj = obj;
           }
         } catch (e) {
           console.error('Lỗi parse output từ script:', e);
         }
 
-        // Update cả hai cột nếu có dữ liệu
+        // Update cả ba cột nếu có dữ liệu
         const updateData: Record<string, any> = {};
         if (tradesObj && tradesObj.trades) updateData.trades = tradesObj.trades;
         if (summaryObj) updateData.results = summaryObj;
+        if (indicatorsObj && indicatorsObj.indicators) updateData.indicators = indicatorsObj.indicators;
         updateData.status = 'completed';
         updateData.completed_at = new Date().toISOString();
 
@@ -92,7 +109,8 @@ export async function POST(request: Request) {
           message: 'Backtest completed successfully',
           results: {
             trades: tradesObj ? tradesObj.trades : null,
-            summary: summaryObj
+            summary: summaryObj,
+            indicators: indicatorsObj ? indicatorsObj.indicators : null
           }
         });
       } else {
