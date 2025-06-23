@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +55,7 @@ import { PriceChart } from '../price-chart';
 import { format } from 'date-fns';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase-client';
+import { ProjectBotsTab } from './project-bots';
 
 interface Project {
   id: string;
@@ -128,6 +129,48 @@ function ResultsTab({ projectId, models }: any) {
 }
 
 function SettingsTab({ project, onUpdate }: any) {
+  const [name, setName] = useState(project?.name || "");
+  const [status, setStatus] = useState(project?.status || "active");
+  const [notifications, setNotifications] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(project?.name || "");
+    setStatus(project?.status || "active");
+    // Lấy trạng thái thông báo từ localStorage (theo project id)
+    if (project?.id) {
+      const noti = localStorage.getItem(`project_notify_${project.id}`);
+      setNotifications(noti === 'true');
+    }
+  }, [project]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      // Gọi API cập nhật project
+      const res = await fetch(`/api/research/projects?id=${project.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, status })
+      });
+      if (res.ok) {
+        // Lưu trạng thái thông báo vào localStorage
+        localStorage.setItem(`project_notify_${project.id}`, notifications ? 'true' : 'false');
+        setMessage('Cập nhật thành công!');
+        onUpdate && onUpdate();
+      } else {
+        const data = await res.json();
+        setMessage(data?.error || 'Có lỗi xảy ra khi cập nhật');
+      }
+    } catch (err) {
+      setMessage('Có lỗi mạng hoặc server!');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -138,12 +181,48 @@ function SettingsTab({ project, onUpdate }: any) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8">
-            <Settings className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">Settings</h3>
-            <p className="text-muted-foreground">
-              Cấu hình project settings
-            </p>
+          <div className="space-y-6 max-w-md mx-auto">
+            <div>
+              <Label htmlFor="project-name">Tên Project</Label>
+              <Input
+                id="project-name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Nhập tên project mới"
+              />
+            </div>
+            <div>
+              <Label htmlFor="project-status">Trạng thái Project</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger id="project-status">
+                  <SelectValue placeholder="Chọn trạng thái" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Đang hoạt động</SelectItem>
+                  <SelectItem value="archived">Lưu trữ</SelectItem>
+                  <SelectItem value="paused">Tạm dừng</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="project-notifications"
+                checked={notifications}
+                onChange={e => setNotifications(e.target.checked)}
+              />
+              <Label htmlFor="project-notifications">Bật thông báo cho project này</Label>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? 'Đang lưu...' : 'Lưu'}
+              </Button>
+            </div>
+            {message && (
+              <Alert className="mt-2">
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -2090,6 +2169,19 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   });
   const [pythonScript, setPythonScript] = useState<string>('');
   const [backtestResult, setBacktestResult] = useState<any>(null);
+  // Thêm state filter
+  const [filter, setFilter] = useState({
+    fromDate: '',
+    toDate: '',
+    minTotalReturn: '',
+    maxTotalReturn: '',
+    minSharpe: '',
+    maxSharpe: '',
+    minWinrate: '',
+    maxWinrate: '',
+    status: '',
+    type: '',
+  });
 
   const handleBacktestConfigChange = (field: string, value: string | number) => {
     setBacktestConfig(prev => ({
@@ -2549,6 +2641,44 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     }
   };
 
+  // Hàm reset filter
+  const resetFilter = () => setFilter({
+    fromDate: '',
+    toDate: '',
+    minTotalReturn: '',
+    maxTotalReturn: '',
+    minSharpe: '',
+    maxSharpe: '',
+    minWinrate: '',
+    maxWinrate: '',
+    status: '',
+    type: '',
+  });
+
+  // Hàm lọc danh sách
+  const filteredExperiments = useMemo(() => {
+    return experiments.filter((exp) => {
+      // Lọc theo loại thí nghiệm
+      if (filter.type && exp.type !== filter.type) return false;
+      // Lọc theo trạng thái
+      if (filter.status && exp.status !== filter.status) return false;
+      // Lọc theo ngày tạo
+      if (filter.fromDate && new Date(exp.created_at) < new Date(filter.fromDate)) return false;
+      if (filter.toDate && new Date(exp.created_at) > new Date(filter.toDate + 'T23:59:59')) return false;
+      // Chỉ filter các trường backtest nếu là backtest và có results
+      if (exp.type === 'backtest' && exp.results) {
+        const { total_return, sharpe_ratio, win_rate } = exp.results;
+        if (filter.minTotalReturn && (total_return === undefined || Number(total_return) < Number(filter.minTotalReturn))) return false;
+        if (filter.maxTotalReturn && (total_return === undefined || Number(total_return) > Number(filter.maxTotalReturn))) return false;
+        if (filter.minSharpe && (sharpe_ratio === undefined || Number(sharpe_ratio) < Number(filter.minSharpe))) return false;
+        if (filter.maxSharpe && (sharpe_ratio === undefined || Number(sharpe_ratio) > Number(filter.maxSharpe))) return false;
+        if (filter.minWinrate && (win_rate === undefined || Number(win_rate) < Number(filter.minWinrate))) return false;
+        if (filter.maxWinrate && (win_rate === undefined || Number(win_rate) > Number(filter.maxWinrate))) return false;
+      }
+      return true;
+    });
+  }, [experiments, filter]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -2616,7 +2746,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Danh sách Thí nghiệm ({experiments.length})</h3>
+          <h3 className="text-lg font-semibold">Danh sách Thí nghiệm ({filteredExperiments.length})</h3>
           <p className="text-muted-foreground">
             Quản lý và theo dõi các thí nghiệm trong project
           </p>
@@ -2709,6 +2839,109 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           )}
         </div>
       </div>
+
+      {/* Quick Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Thống kê Thí nghiệm</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{experiments.length}</div>
+              <div className="text-sm text-muted-foreground">Tổng thí nghiệm</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {experiments.filter(e => e.status === 'completed').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Hoàn thành</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {experiments.filter(e => e.status === 'running').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Đang chạy</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-600">
+                {experiments.filter(e => e.status === 'pending').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Chờ</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-600">
+                {experiments.filter(e => e.status === 'failed').length}
+              </div>
+              <div className="text-sm text-muted-foreground">Lỗi</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bộ lọc danh sách thí nghiệm */}
+      <Card className="mb-2">
+        <CardContent className="pt-4 pb-2">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+            <div>
+              <Label htmlFor="type">Loại thí nghiệm</Label>
+              <Select value={filter.type || 'all'} onValueChange={v => setFilter(f => ({ ...f, type: v === 'all' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder="Tất cả" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả</SelectItem>
+                  <SelectItem value="backtest">Backtest</SelectItem>
+                  <SelectItem value="hypothesis_test">Kiểm định</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="status">Trạng thái</Label>
+              <Select value={filter.status || 'all'} onValueChange={v => setFilter(f => ({ ...f, status: v === 'all' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder="Tất cả" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả</SelectItem>
+                  <SelectItem value="completed">Hoàn thành</SelectItem>
+                  <SelectItem value="running">Đang chạy</SelectItem>
+                  <SelectItem value="pending">Chờ</SelectItem>
+                  <SelectItem value="failed">Lỗi</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="fromDate">Từ ngày</Label>
+              <Input id="fromDate" type="date" value={filter.fromDate} onChange={e => setFilter(f => ({ ...f, fromDate: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="toDate">Đến ngày</Label>
+              <Input id="toDate" type="date" value={filter.toDate} onChange={e => setFilter(f => ({ ...f, toDate: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="minTotalReturn">Lợi nhuận (%)</Label>
+              <div className="flex gap-1">
+                <Input id="minTotalReturn" type="number" step="0.01" min="-100" max="1000" placeholder="Từ" value={filter.minTotalReturn} onChange={e => setFilter(f => ({ ...f, minTotalReturn: e.target.value }))} />
+                <Input id="maxTotalReturn" type="number" step="0.01" min="-100" max="1000" placeholder="Đến" value={filter.maxTotalReturn} onChange={e => setFilter(f => ({ ...f, maxTotalReturn: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="minSharpe">Sharpe Ratio</Label>
+              <div className="flex gap-1">
+                <Input id="minSharpe" type="number" step="0.01" placeholder="Từ" value={filter.minSharpe} onChange={e => setFilter(f => ({ ...f, minSharpe: e.target.value }))} />
+                <Input id="maxSharpe" type="number" step="0.01" placeholder="Đến" value={filter.maxSharpe} onChange={e => setFilter(f => ({ ...f, maxSharpe: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="minWinrate">Winrate (%)</Label>
+              <div className="flex gap-1">
+                <Input id="minWinrate" type="number" step="0.1" min="0" max="100" placeholder="Từ" value={filter.minWinrate} onChange={e => setFilter(f => ({ ...f, minWinrate: e.target.value }))} />
+                <Input id="maxWinrate" type="number" step="0.1" min="0" max="100" placeholder="Đến" value={filter.maxWinrate} onChange={e => setFilter(f => ({ ...f, maxWinrate: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-2 md:mt-0">
+              <Button variant="outline" type="button" onClick={resetFilter}>Reset</Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Backtest Configuration Modal */}
       {showBacktestConfig && (
@@ -3431,7 +3664,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {experiments.map((experiment) => (
+          {filteredExperiments.map((experiment) => (
             <Card key={experiment.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-500">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -3557,43 +3790,6 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       )}
 
       {/* Quick Stats */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Thống kê Thí nghiệm</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{experiments.length}</div>
-              <div className="text-sm text-muted-foreground">Tổng thí nghiệm</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {experiments.filter(e => e.status === 'completed').length}
-              </div>
-              <div className="text-sm text-muted-foreground">Hoàn thành</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
-                {experiments.filter(e => e.status === 'running').length}
-              </div>
-              <div className="text-sm text-muted-foreground">Đang chạy</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">
-                {experiments.filter(e => e.status === 'pending').length}
-              </div>
-              <div className="text-sm text-muted-foreground">Chờ</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">
-                {experiments.filter(e => e.status === 'failed').length}
-              </div>
-              <div className="text-sm text-muted-foreground">Lỗi</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Experiment Details Modal */}
       {showDetails && selectedExperiment && (
@@ -4806,7 +5002,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="models">Mô hình ({models.length})</TabsTrigger>
           <TabsTrigger value="experiments">Thí nghiệm</TabsTrigger>
-          <TabsTrigger value="results">Kết quả</TabsTrigger>
+          <TabsTrigger value="bots">Chạy bot</TabsTrigger>
           <TabsTrigger value="settings">Cài đặt</TabsTrigger>
         </TabsList>
 
@@ -4818,7 +5014,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
               <CardDescription>Các tác vụ thường dùng trong dự án nghiên cứu</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <Button 
                   variant="outline" 
                   className="h-auto p-4 flex-col gap-2"
@@ -4836,15 +5032,6 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
                   <TestTube className="h-6 w-6" />
                   <span>Chạy Test</span>
                   <span className="text-xs text-muted-foreground">Backtesting & validation</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-auto p-4 flex-col gap-2"
-                  onClick={() => setActiveTab('results')}
-                >
-                  <BarChart3 className="h-6 w-6" />
-                  <span>Xem Results</span>
-                  <span className="text-xs text-muted-foreground">Performance analysis</span>
                 </Button>
                 <Button 
                   variant="outline" 
@@ -4901,8 +5088,8 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
           <ExperimentsTab projectId={projectId} models={models} />
         </TabsContent>
 
-        <TabsContent value="results" className="space-y-6">
-          <ResultsTab projectId={projectId} models={models} />
+        <TabsContent value="bots" className="space-y-6">
+          <ProjectBotsTab projectId={projectId} models={models} />
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-6">
