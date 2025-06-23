@@ -56,6 +56,7 @@ import { format } from 'date-fns';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase-client';
 import { ProjectBotsTab } from './project-bots';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface Project {
   id: string;
@@ -1185,304 +1186,80 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       </Card>
 
       {/* Model Logs Modal */}
-      {showLogs && selectedModel && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] max-h-[90vh] w-[90vw] max-w-4xl">
-          <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setShowLogs(false)}></div>
-          <CardHeader className="sticky top-0 bg-background border-b w-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Terminal className="h-5 w-5" />
-                  Training Logs: {selectedModel.name}
-                  {isLoadingModelDetails && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  Logs huấn luyện từ cột training_logs trong Supabase
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => refreshModelDetails(selectedModel.id)}
-                  disabled={isLoadingModelDetails}
-                >
-                  <Activity className="h-4 w-4 mr-2" />
-                  {isLoadingModelDetails ? 'Đang tải...' : 'Refresh'}
-                </Button>
-                <Button variant="outline" onClick={() => setShowLogs(false)}>
-                  <X className="h-4 w-4 mr-2" />
-                  Đóng
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Model Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Thông tin Model</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">ID:</span>
-                    <span className="font-mono text-xs">{selectedModel.id}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Algorithm:</span>
-                    <span>{selectedModel.algorithm || selectedModel.model_type || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status:</span>
-                    <Badge variant={selectedModel.status === 'completed' ? 'default' : 'secondary'}>
-                      {selectedModel.status}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Created:</span>
-                    <span>{new Date(selectedModel.created_at).toLocaleString('vi-VN')}</span>
-                  </div>
-                  {selectedModel.description && (
-                    <div>
-                      <span className="text-muted-foreground">Description:</span>
-                      <p className="text-sm mt-1">{selectedModel.description}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Performance Metrics</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {selectedModel.performance_metrics ? (
-                    <div className="space-y-4">
-                      {typeof selectedModel.performance_metrics === 'object' ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {/* Training Metrics */}
-                          {selectedModel.performance_metrics.train && (
-                            <div className="p-3 bg-blue-900/20 border border-blue-700/30 rounded">
-                              <h4 className="font-medium text-blue-300 mb-2">Training Set</h4>
-                              <div className="space-y-2">
-                                {Object.entries(selectedModel.performance_metrics.train).map(([key, value]) => (
-                                  <div key={key} className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground capitalize">{key}:</span>
-                                    <span className="font-mono">
-                                      {typeof value === 'number' ? value.toFixed(4) : String(value)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Test/Validation Metrics */}
-                          {(selectedModel.performance_metrics.test || selectedModel.performance_metrics.validation) && (
-                            <div className="p-3 bg-green-900/20 border border-green-700/30 rounded">
-                              <h4 className="font-medium text-green-300 mb-2">
-                                {selectedModel.performance_metrics.test ? 'Test Set' : 'Validation Set'}
-                              </h4>
-                              <div className="space-y-2">
-                                {Object.entries(selectedModel.performance_metrics.test || selectedModel.performance_metrics.validation).map(([key, value]) => (
-                                  <div key={key} className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground capitalize">{key}:</span>
-                                    <span className="font-mono">
-                                      {typeof value === 'number' ? value.toFixed(4) : String(value)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Other metrics */}
-                          {Object.entries(selectedModel.performance_metrics)
-                            .filter(([key]) => !['train', 'test', 'validation'].includes(key))
-                            .map(([key, value]) => (
-                              <div key={key} className="p-3 bg-slate-800/50 border border-slate-700/30 rounded">
-                                <h4 className="font-medium text-slate-300 mb-2 capitalize">{key}</h4>
-                                {typeof value === 'object' && value !== null ? (
-                                  <div className="space-y-2">
-                                    {Object.entries(value).map(([subKey, subValue]) => (
-                                      <div key={subKey} className="flex justify-between text-sm">
-                                        <span className="text-muted-foreground capitalize">{subKey}:</span>
-                                        <span className="font-mono">
-                                          {typeof subValue === 'number' ? subValue.toFixed(4) : String(subValue)}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-sm font-mono">
-                                    {typeof value === 'number' ? value.toFixed(4) : String(value)}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                        </div>
-                      ) : (
-                        <div className="p-3 bg-slate-800/50 border border-slate-700/30 rounded">
-                          <p className="text-sm font-mono">{selectedModel.performance_metrics}</p>
-                        </div>
-                      )}
-                      
-                      {/* Model Status Badge */}
-                      <div className="flex items-center gap-2 pt-2 border-t">
-                        <span className="text-sm text-muted-foreground">Model Status:</span>
-                        <Badge variant={
-                          selectedModel.status === 'completed' ? 'default' : 
-                          selectedModel.status === 'training' ? 'secondary' : 
-                          'outline'
-                        }>
-                          {selectedModel.status}
-                        </Badge>
-                        {selectedModel.updated_at && (
-                          <span className="text-xs text-muted-foreground">
-                            Updated: {new Date(selectedModel.updated_at).toLocaleString('vi-VN')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <BarChart3 className="h-8 w-8 mx-auto mb-2" />
-                      <p>Chưa có performance metrics</p>
-                      <p className="text-xs">Train model để xem kết quả performance</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Training Logs */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Terminal className="h-4 w-4" />
-                  Training Logs
-                  {selectedModel.training_logs && selectedModel.training_logs.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">
-                      {selectedModel.training_logs.length} entries
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {selectedModel.training_logs && selectedModel.training_logs.length > 0 ? (
-                  <div className="space-y-2 max-h-64 overflow-y-auto bg-slate-900/50 border border-slate-700/30 p-3 rounded">
-                    {selectedModel.training_logs.map((log: any, index: number) => {
-                      // Handle different log formats
-                      const timestamp = log.timestamp || log.time || new Date().toISOString();
-                      const level = log.level || 'info';
-                      const message = log.message || log.msg || String(log);
-                      const source = log.source || 'system';
-                      
-                      return (
-                        <div key={index} className="flex gap-3 text-sm font-mono border-b border-slate-700/50 pb-1">
-                          <span className="text-muted-foreground whitespace-nowrap text-xs">
-                            {new Date(timestamp).toLocaleTimeString('vi-VN')}
-                          </span>
-                          <span className={`
-                            px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap
-                            ${level === 'error' ? 'bg-red-900/60 text-red-300 border border-red-700/50' : 
-                              level === 'warning' || level === 'warn' ? 'bg-yellow-900/60 text-yellow-300 border border-yellow-700/50' : 
-                              level === 'success' ? 'bg-green-900/60 text-green-300 border border-green-700/50' :
-                              'bg-blue-900/60 text-blue-300 border border-blue-700/50'}
-                          `}>
-                            {level.toUpperCase()}
-                          </span>
-                          {source && source !== 'system' && (
-                            <span className="text-xs text-purple-400 whitespace-nowrap">
-                              [{source}]
-                            </span>
-                          )}
-                          <span className="flex-1 break-words text-slate-200">{message}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Terminal className="h-8 w-8 mx-auto mb-2" />
-                    <p>Chưa có training logs</p>
-                    <p className="text-xs">Logs sẽ xuất hiện khi train model</p>
-                  </div>
+      <Dialog open={showLogs && !!selectedModel} onOpenChange={setShowLogs}>
+        <DialogContent className="max-w-4xl w-[90vw] max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Terminal className="h-5 w-5" />
+              Training Logs: {selectedModel?.name}
+              {isLoadingModelDetails && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Logs huấn luyện từ cột training_logs trong Supabase
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mb-4 justify-end">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => refreshModelDetails(selectedModel.id)}
+              disabled={isLoadingModelDetails}
+            >
+              <Activity className="h-4 w-4 mr-2" />
+              {isLoadingModelDetails ? 'Đang tải...' : 'Refresh'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowLogs(false)}>
+              <X className="h-4 w-4 mr-2" />
+              Đóng
+            </Button>
+          </div>
+          {/* Training Logs */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Terminal className="h-4 w-4" />
+                Training Logs
+                {selectedModel?.training_logs && selectedModel.training_logs.length > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {selectedModel.training_logs.length} entries
+                  </Badge>
                 )}
-                
-                {selectedModel.training_logs && selectedModel.training_logs.length > 0 && (
-                  <div className="mt-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded text-sm">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-blue-400" />
-                      <span className="text-blue-300">
-                        Latest: {new Date(selectedModel.training_logs[selectedModel.training_logs.length - 1]?.timestamp || Date.now()).toLocaleString('vi-VN')}
-                      </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedModel?.training_logs && selectedModel.training_logs.length > 0 ? (
+                <div className="space-y-1 max-h-[50vh] overflow-y-auto font-mono text-xs">
+                  {selectedModel.training_logs.map((log: any, idx: number) => (
+                    <div key={idx} className="whitespace-pre-wrap">
+                      <span className="text-gray-500">[{String(idx + 1).padStart(3, '0')}]</span> {typeof log === 'string' ? log : log.message}
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Actions */}
-            <div className="flex gap-3">
-              <Button 
-                onClick={() => trainModel(selectedModel.id)}
-                disabled={isTraining === selectedModel.id}
-              >
-                {isTraining === selectedModel.id ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Training...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    {selectedModel.status === 'completed' ? 'Retrain Model' : 'Train Model'}
-                  </>
-                )}
-              </Button>
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Export Logs
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => refreshModelDetails(selectedModel.id)}
-                disabled={isLoadingModelDetails}
-              >
-                <Activity className="h-4 w-4 mr-2" />
-                {isLoadingModelDetails ? 'Đang tải...' : 'Refresh Logs'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-500">
+                  {isLoadingModelDetails ? 'Đang tải training logs...' : 'Không có logs huấn luyện'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Model Form */}
-      {showCreateModel && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] max-h-[90vh] w-[90vw] max-w-4xl">
-          <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setShowCreateModel(false)}></div>
-          <CardHeader className="sticky top-0 bg-background border-b">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Brain className="h-5 w-5" />
-                  Tạo Model Mới
-                </CardTitle>
-                <CardDescription>
-                  Chọn thuật toán AI/ML và cấu hình parameters
-                </CardDescription>
-              </div>
-              <MacOSCloseButton 
-                onClick={() => setShowCreateModel(false)}
-                size="md"
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
+      <Dialog open={showCreateModel} onOpenChange={setShowCreateModel}>
+        <DialogContent className="max-w-4xl w-[90vw] max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5" />
+              Tạo Model Mới
+            </DialogTitle>
+            <DialogDescription>
+              Chọn thuật toán AI/ML và cấu hình parameters
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
             {/* Basic Info */}
             <Card>
               <CardHeader>
@@ -1498,7 +1275,6 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                     placeholder="Ví dụ: BTC Price Prediction v1"
                   />
                 </div>
-                
                 <div>
                   <Label htmlFor="model-category">Category</Label>
                   <Select 
@@ -1516,7 +1292,6 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="md:col-span-2">
                   <Label htmlFor="model-description">Mô tả (tùy chọn)</Label>
                   <Textarea
@@ -1529,7 +1304,6 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                 </div>
               </CardContent>
             </Card>
-
             {/* Algorithm Selection */}
             <Card>
               <CardHeader>
@@ -1595,7 +1369,6 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                 </div>
               </CardContent>
             </Card>
-
             {/* Algorithm Parameters */}
             {createForm.algorithm_type && (
               <Card>
@@ -1648,7 +1421,6 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                 </CardContent>
               </Card>
             )}
-
             {/* Actions */}
             <div className="flex gap-3 pt-4 border-t">
               <Button 
@@ -1676,51 +1448,25 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                 )}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Data Selector Modal */}
-      {showDataSelector && modelToTrain && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] max-h-[90vh] w-[90vw] max-w-4xl">
-          <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setShowDataSelector(false)}></div>
-          <CardHeader className="sticky top-0 bg-background border-b w-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  Chọn dữ liệu Training: {modelToTrain.name}
-                  {isLoadingData && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  Chọn dữ liệu từ bảng OHLCV_BTC_USDT_1m để train model
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => {
-                    console.log('🔄 [UI] Reload Data button clicked');
-                    fetchAvailableData();
-                  }}
-                  disabled={isLoadingData}
-                >
-                  <Activity className="h-4 w-4 mr-2" />
-                  {isLoadingData ? 'Đang tải...' : 'Reload Data'}
-                </Button>
-                <MacOSCloseButton 
-                  onClick={() => {
-                    setShowDataSelector(false);
-                    setModelToTrain(null);
-                  }}
-                  size="md"
-                />
-              </div>
-            </div>
-          </CardHeader>
+      <Dialog open={showDataSelector && !!modelToTrain} onOpenChange={setShowDataSelector}>
+        <DialogContent className="max-w-4xl w-[90vw] max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Chọn dữ liệu Training: {modelToTrain?.name}
+              {isLoadingData && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Chọn dữ liệu từ bảng OHLCV_BTC_USDT_1m để train model
+            </DialogDescription>
+          </DialogHeader>
           <CardContent className="space-y-6">
             {/* Data Overview */}
             <Card>
@@ -2074,8 +1820,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
               </Button>
             </div>
           </CardContent>
-        </Card>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
