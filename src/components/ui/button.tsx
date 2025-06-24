@@ -13,11 +13,11 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
-          "border border-white/20 bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 hover:shadow-lg transition-all duration-300 cream-theme:border-orange-200 cream-theme:bg-white/50 cream-theme:text-gray-800 cream-theme:hover:bg-white/70",
+          "border border-white/20 bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 hover:shadow-lg transition-all duration-300 cream-theme:border-orange-200 cream-theme:bg-white/50 cream-theme:text-gray-900 cream-theme:hover:bg-white/70 cream-theme:font-medium",
         secondary:
-          "bg-white/15 backdrop-blur-sm text-white border border-white/20 hover:bg-white/25 hover:shadow-lg transition-all duration-300 cream-theme:bg-orange-100/50 cream-theme:text-gray-800 cream-theme:border-orange-200/50 cream-theme:hover:bg-orange-100/70",
-        ghost: "hover:bg-white/10 hover:text-white text-white/80 transition-all duration-300 cream-theme:text-gray-700 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-white/15 backdrop-blur-sm text-white border border-white/20 hover:bg-white/25 hover:shadow-lg transition-all duration-300 cream-theme:bg-orange-100/50 cream-theme:text-gray-900 cream-theme:border-orange-200/50 cream-theme:hover:bg-orange-100/70 cream-theme:font-medium",
+        ghost: "hover:bg-white/10 hover:text-white text-white/80 transition-all duration-300 cream-theme:text-gray-900 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900 cream-theme:font-medium",
+        link: "text-primary underline-offset-4 hover:underline cream-theme:text-orange-600",
       },
       size: {
         default: "h-10 px-4 py-2",
