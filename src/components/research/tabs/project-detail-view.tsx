@@ -1928,6 +1928,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     status: '',
     type: '',
   });
+  // Thêm state cho backtests completed
+  const [backtests, setBacktests] = useState<any[]>([]);
 
   const handleBacktestConfigChange = (field: string, value: string | number) => {
     setBacktestConfig(prev => ({
@@ -2424,6 +2426,22 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       return true;
     });
   }, [experiments, filter]);
+
+  // Hàm lấy danh sách backtest completed
+  const fetchCompletedBacktests = async () => {
+    try {
+      const response = await fetch(`/api/research/experiments?project_id=${projectId}&type=backtest&status=completed`);
+      if (response.ok) {
+        const data = await response.json();
+        // Nếu API trả về mảng experiments
+        setBacktests(data.experiments || []);
+      } else {
+        setBacktests([]);
+      }
+    } catch (error) {
+      setBacktests([]);
+    }
+  };
 
   if (loading) {
     return (
@@ -4469,10 +4487,26 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
     description: '',
     objective: ''
   });
+  // Đảm bảo backtests và fetchCompletedBacktests nằm ở đây
+  const [backtests, setBacktests] = useState<any[]>([]);
+  const fetchCompletedBacktests = async () => {
+    try {
+      const response = await fetch(`/api/research/experiments?project_id=${projectId}&type=backtest&status=completed`);
+      if (response.ok) {
+        const data = await response.json();
+        setBacktests(data.experiments || []);
+      } else {
+        setBacktests([]);
+      }
+    } catch (error) {
+      setBacktests([]);
+    }
+  };
 
   useEffect(() => {
     fetchProjectDetails();
     fetchProjectModels();
+    fetchCompletedBacktests();
   }, [projectId]);
 
   const fetchProjectDetails = async () => {
@@ -4835,7 +4869,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         </TabsContent>
 
         <TabsContent value="bots" className="space-y-6">
-          <ProjectBotsTab projectId={projectId} models={models} />
+          <ProjectBotsTab projectId={projectId} backtests={backtests} />
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-6">
