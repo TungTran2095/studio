@@ -145,6 +145,26 @@ body {
     display: none;
   }
   
+  /* Ensure text is black in cream theme */
+  .cream-theme h1,
+  .cream-theme h2,
+  .cream-theme h3,
+  .cream-theme h4,
+  .cream-theme h5,
+  .cream-theme h6 {
+    @apply text-gray-900 font-bold;
+  }
+  
+  .cream-theme p,
+  .cream-theme span,
+  .cream-theme div {
+    @apply text-gray-900;
+  }
+  
+  .cream-theme .text-muted-foreground {
+    @apply text-gray-700;
+  }
+  
   /* Animated gradient background */
   body::before {
     content: '';

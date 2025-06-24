@@ -91,13 +91,15 @@ const Navbar: React.FC = () => {
                   className={`flex items-center w-full px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                     isActive(item.href)
                       ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm cream-theme:bg-orange-100/70 cream-theme:text-gray-900 cream-theme:shadow-orange-200/50'
-                      : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-700 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-900 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
                   }`}
                 >
-                  {item.icon}
+                  <div className="cream-theme:text-gray-900">
+                    {item.icon}
+                  </div>
                   <span className="flex-1">{item.title}</span>
                   <svg
-                    className={`w-4 h-4 transition-transform duration-300 ${
+                    className={`w-4 h-4 transition-transform duration-300 cream-theme:text-gray-900 ${
                       openSubmenu === item.href ? 'rotate-180' : ''
                     }`}
                     fill="none"
@@ -123,7 +125,7 @@ const Navbar: React.FC = () => {
                             ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm cream-theme:bg-orange-100/70 cream-theme:text-gray-900 cream-theme:shadow-orange-200/50'
                             : subItem.highlight 
                               ? 'text-blue-300 font-semibold hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-orange-600 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-orange-700'
-                              : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-700 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
+                              : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-900 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
                         }`}
                       >
                         {subItem.highlight && <span className="text-blue-400 mr-1 cream-theme:text-orange-500">→</span>}
@@ -139,10 +141,12 @@ const Navbar: React.FC = () => {
                 className={`flex items-center px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                   isActive(item.href)
                     ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm cream-theme:bg-orange-100/70 cream-theme:text-gray-900 cream-theme:shadow-orange-200/50'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-700 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
+                    : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-900 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
                 }`}
               >
-                {item.icon}
+                <div className="cream-theme:text-gray-900">
+                  {item.icon}
+                </div>
                 <span>{item.title}</span>
               </Link>
             )}
