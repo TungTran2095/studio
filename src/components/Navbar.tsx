@@ -71,10 +71,14 @@ const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="flex flex-col h-full bg-slate-900 text-white w-64 px-4 py-6">
+    <nav className="flex flex-col h-full glass-card text-white w-64 px-4 py-6 border-r border-white/20">
       <div className="flex items-center mb-8 px-2">
-        <TrendingUp className="w-6 h-6 mr-2 text-blue-400" />
-        <span className="text-xl font-bold">Quant Trading</span>
+        <div className="w-8 h-8 mr-3 rounded-lg bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+          <TrendingUp className="w-5 h-5 text-white" />
+        </div>
+        <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+          Quant Trading
+        </span>
       </div>
       
       <div className="flex-1 space-y-1">
@@ -84,16 +88,16 @@ const Navbar: React.FC = () => {
               <>
                 <button
                   onClick={() => toggleSubmenu(item.href)}
-                  className={`flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors ${
+                  className={`flex items-center w-full px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                     isActive(item.href)
-                      ? 'bg-slate-700 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md'
                   }`}
                 >
                   {item.icon}
                   <span className="flex-1">{item.title}</span>
                   <svg
-                    className={`w-4 h-4 transition-transform ${
+                    className={`w-4 h-4 transition-transform duration-300 ${
                       openSubmenu === item.href ? 'rotate-180' : ''
                     }`}
                     fill="none"
@@ -114,12 +118,12 @@ const Navbar: React.FC = () => {
                       <Link
                         key={subItem.href}
                         href={subItem.href}
-                        className={`block px-3 py-2 rounded-md text-sm transition-colors ${
+                        className={`block px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                           isActive(subItem.href)
-                            ? 'bg-slate-700 text-white'
+                            ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm'
                             : subItem.highlight 
-                              ? 'text-blue-300 font-semibold hover:bg-slate-800 hover:text-white'
-                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                              ? 'text-blue-300 font-semibold hover:bg-white/10 hover:text-white hover:shadow-md'
+                              : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md'
                         }`}
                       >
                         {subItem.highlight && <span className="text-blue-400 mr-1">→</span>}
@@ -132,10 +136,10 @@ const Navbar: React.FC = () => {
             ) : (
               <Link
                 href={item.href}
-                className={`flex items-center px-3 py-2 rounded-md text-sm transition-colors ${
+                className={`flex items-center px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                   isActive(item.href)
-                    ? 'bg-slate-700 text-white'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm'
+                    : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md'
                 }`}
               >
                 {item.icon}
@@ -146,8 +150,8 @@ const Navbar: React.FC = () => {
         ))}
       </div>
       
-      <div className="mt-auto pt-4 border-t border-slate-700">
-        <div className="px-3 py-2 text-xs text-slate-400">
+      <div className="mt-auto pt-4 border-t border-white/20">
+        <div className="px-3 py-2 text-xs text-white/60">
           <p>Quant Trading Platform</p>
           <p>Phiên bản 1.0.0</p>
         </div>

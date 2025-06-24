@@ -31,7 +31,7 @@ export default function RootLayout({
     <html lang="en">
       {/* Apply Roboto font variable and remove potentially conflicting dark class */}
       <body className={cn(roboto.variable, "font-sans antialiased")} suppressHydrationWarning={true}> {/* suppressHydrationWarning for theme */} 
-        <div className="relative min-h-screen flex flex-col"> {/* Use relative positioning for toggle */} 
+        <div className="relative min-h-screen flex flex-col glass"> {/* Apply glassmorphism effect */} 
           {children}
           {/* ThemeToggle removed from here */}
         </div>
