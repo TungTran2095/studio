@@ -45,7 +45,7 @@ export function CreateExperimentModal({ isOpen, onClose, onCreateExperiment }: C
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl animate-in zoom-in-95 duration-300 fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
+      <DialogContent className="glass-card max-w-2xl animate-in zoom-in-95 duration-300 fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
         <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={onClose}></div>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

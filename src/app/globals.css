@@ -296,3 +296,21 @@ body {
 
   /* Removed styling for react-resizable-panels handles */
 }
+
+.lucide {
+  stroke: black !important;
+}
+
+button, 
+button span, 
+button p, 
+button div {
+  color: black !important;
+}
+
+.cream-theme button, 
+.cream-theme button span, 
+.cream-theme button p, 
+.cream-theme button div {
+  color: black !important;
+}
