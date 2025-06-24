@@ -71,12 +71,12 @@ const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="flex flex-col h-full glass-card text-white w-64 px-4 py-6 border-r border-white/20">
+    <nav className="flex flex-col h-full glass-card text-white w-64 px-4 py-6 border-r border-white/20 cream-theme:glass-card-cream cream-theme:text-gray-800 cream-theme:border-orange-200/30">
       <div className="flex items-center mb-8 px-2">
-        <div className="w-8 h-8 mr-3 rounded-lg bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+        <div className="w-8 h-8 mr-3 rounded-lg bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center cream-theme:from-orange-400 cream-theme:to-red-500">
           <TrendingUp className="w-5 h-5 text-white" />
         </div>
-        <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+        <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent cream-theme:from-orange-500 cream-theme:to-red-600">
           Quant Trading
         </span>
       </div>
@@ -90,8 +90,8 @@ const Navbar: React.FC = () => {
                   onClick={() => toggleSubmenu(item.href)}
                   className={`flex items-center w-full px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                     isActive(item.href)
-                      ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm'
-                      : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md'
+                      ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm cream-theme:bg-orange-100/70 cream-theme:text-gray-900 cream-theme:shadow-orange-200/50'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-700 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
                   }`}
                 >
                   {item.icon}
@@ -120,13 +120,13 @@ const Navbar: React.FC = () => {
                         href={subItem.href}
                         className={`block px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                           isActive(subItem.href)
-                            ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm'
+                            ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm cream-theme:bg-orange-100/70 cream-theme:text-gray-900 cream-theme:shadow-orange-200/50'
                             : subItem.highlight 
-                              ? 'text-blue-300 font-semibold hover:bg-white/10 hover:text-white hover:shadow-md'
-                              : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md'
+                              ? 'text-blue-300 font-semibold hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-orange-600 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-orange-700'
+                              : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-700 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
                         }`}
                       >
-                        {subItem.highlight && <span className="text-blue-400 mr-1">→</span>}
+                        {subItem.highlight && <span className="text-blue-400 mr-1 cream-theme:text-orange-500">→</span>}
                         {subItem.title}
                       </Link>
                     ))}
@@ -138,8 +138,8 @@ const Navbar: React.FC = () => {
                 href={item.href}
                 className={`flex items-center px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
                   isActive(item.href)
-                    ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md'
+                    ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm cream-theme:bg-orange-100/70 cream-theme:text-gray-900 cream-theme:shadow-orange-200/50'
+                    : 'text-white/80 hover:bg-white/10 hover:text-white hover:shadow-md cream-theme:text-gray-700 cream-theme:hover:bg-orange-100/50 cream-theme:hover:text-gray-900'
                 }`}
               >
                 {item.icon}
@@ -150,8 +150,8 @@ const Navbar: React.FC = () => {
         ))}
       </div>
       
-      <div className="mt-auto pt-4 border-t border-white/20">
-        <div className="px-3 py-2 text-xs text-white/60">
+      <div className="mt-auto pt-4 border-t border-white/20 cream-theme:border-orange-200/30">
+        <div className="px-3 py-2 text-xs text-white/60 cream-theme:text-gray-600">
           <p>Quant Trading Platform</p>
           <p>Phiên bản 1.0.0</p>
         </div>

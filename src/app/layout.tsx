@@ -29,9 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* Apply Roboto font variable and remove potentially conflicting dark class */}
-      <body className={cn(roboto.variable, "font-sans antialiased")} suppressHydrationWarning={true}> {/* suppressHydrationWarning for theme */} 
-        <div className="relative min-h-screen flex flex-col glass"> {/* Apply glassmorphism effect */} 
+      {/* Apply Roboto font variable and cream theme */}
+      <body className={cn(roboto.variable, "font-sans antialiased cream-theme cream-bg")} suppressHydrationWarning={true}> {/* Apply cream theme and background */} 
+        <div className="relative min-h-screen flex flex-col glass-cream"> {/* Apply cream glassmorphism effect */} 
           {children}
           {/* ThemeToggle removed from here */}
         </div>

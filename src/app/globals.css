@@ -44,6 +44,43 @@ body {
     --sidebar-ring: 25 95% 53%; /* Match ring */
   }
 
+  /* Cream background theme */
+  .cream-theme {
+    --background: 30 100% 98%; /* #FFF7F3 - Cream color */
+    --foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --card: 30 100% 99%; /* Slightly lighter cream */
+    --card-foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --popover: 30 100% 99%; /* Slightly lighter cream */
+    --popover-foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --primary: 25 95% 53%; /* Vibrant Orange gradient base */
+    --primary-foreground: 222.2 84% 4.9%; /* Nearly Black text on primary */
+    --secondary: 30 50% 95%; /* Light cream grey */
+    --secondary-foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --muted: 30 50% 95%; /* Light cream grey */
+    --muted-foreground: 215.4 16.3% 46.9%; /* Medium Grey */
+    --accent: 30 50% 95%; /* Light cream grey */
+    --accent-foreground: 222.2 84% 4.9%; /* Nearly Black */
+    --destructive: 0 63% 51%; /* Red */
+    --destructive-foreground: 0 0% 98%; /* Light text on red */
+    --border: 30 30% 90%; /* Light cream border */
+    --input: 30 30% 90%; /* Light cream input BG */
+    --ring: 25 95% 53%; /* Vibrant Orange for focus rings */
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --radius: 0.5rem;
+    --sidebar-background: 30 100% 98%; /* Match background */
+    --sidebar-foreground: 222.2 84% 4.9%; /* Match foreground */
+    --sidebar-primary: 25 95% 53%; /* Match primary */
+    --sidebar-primary-foreground: 222.2 84% 4.9%; /* Match primary-foreground */
+    --sidebar-accent: 30 50% 95%; /* Match accent */
+    --sidebar-accent-foreground: 222.2 84% 4.9%; /* Match accent-foreground */
+    --sidebar-border: 30 30% 90%; /* Match border */
+    --sidebar-ring: 25 95% 53%; /* Match ring */
+  }
+
   .dark {
     /* Dark Mode */
     --background: 0 0% 6%; /* #0f0f0f */
@@ -95,6 +132,17 @@ body {
     background-size: 400% 400%;
     animation: gradientShift 15s ease infinite;
     position: relative;
+  }
+  
+  /* Cream background option */
+  body.cream-bg {
+    background: #FFF7F3;
+    animation: none;
+  }
+  
+  body.cream-bg::before,
+  body.cream-bg::after {
+    display: none;
   }
   
   /* Animated gradient background */
@@ -198,6 +246,23 @@ body {
     -webkit-backdrop-filter: blur(15px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  /* Cream theme glassmorphism */
+  .glass-cream {
+    background: rgba(255, 247, 243, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 247, 243, 0.3);
+    box-shadow: 0 8px 32px 0 rgba(255, 247, 243, 0.2);
+  }
+  
+  .glass-card-cream {
+    background: rgba(255, 247, 243, 0.9);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 247, 243, 0.4);
+    box-shadow: 0 8px 32px 0 rgba(255, 247, 243, 0.3);
   }
 
   /* Tooltip z-index fix */
