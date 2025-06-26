@@ -23,7 +23,7 @@ export function PriceChart({ symbol, timeframe, data }: PriceChartProps) {
   const options: Highcharts.Options = {
     chart: {
       type: 'line',
-      height: 400
+      height: 120
     },
     title: {
       text: `${symbol} ${timeframe}`
@@ -66,27 +66,12 @@ export function PriceChart({ symbol, timeframe, data }: PriceChartProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Biểu đồ giá</CardTitle>
-        <CardDescription>
-          Dữ liệu giá {symbol} {timeframe}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div id="price-chart">
-          <HighchartsReact
-            highcharts={Highcharts}
-            options={options}
-            ref={chartRef}
-          />
-        </div>
-        {data.length > 0 && (
-          <p className="text-sm text-muted-foreground mt-2">
-            Dữ liệu đã tải: {data.length} nến
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <div id="price-chart" style={{overflowX: 'auto', minWidth: 400, width: '100%'}}>
+      <HighchartsReact
+        highcharts={Highcharts}
+        options={options}
+        ref={chartRef}
+      />
+    </div>
   );
 } 

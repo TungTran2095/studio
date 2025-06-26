@@ -18,8 +18,7 @@ export const TradingViewWidget: React.FC = memo(() => {
     // Ensure container exists and script hasn't been added yet
     if (!container.current || scriptAdded.current) return;
 
-    // Determine the current theme from the document element class
-    // Default to light if no class or neither dark nor light is present (or just for safety)
+    // Lấy theme từ hệ thống (classList)
     const initialTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 
     // Configuration for the Advanced Real-Time Chart Widget
@@ -28,7 +27,7 @@ export const TradingViewWidget: React.FC = memo(() => {
       "symbol": "BINANCE:BTCUSDT",
       "interval": "D",
       "timezone": "Etc/UTC",
-      "theme": initialTheme, // Use the determined initial theme
+      "theme": initialTheme, // Luôn đồng bộ theme với hệ thống
       "style": "1",
       "locale": "en",
       "enable_publishing": false,

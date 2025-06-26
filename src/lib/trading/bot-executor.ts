@@ -35,42 +35,36 @@ export class BotExecutor {
 
   constructor(bot: TradingBot) {
     this.bot = bot;
+    // Initialize config directly from the bot object
+    this.config = {
+      // Assuming symbol and other params are part of the main bot config
+      // This might need adjustment based on the actual structure of bot.config
+      symbol: (this.bot.config as any).symbol || 'BTCUSDT', 
+      strategy: this.bot.config.strategy,
+      riskManagement: this.bot.config.riskManagement,
+    };
   }
 
   async initialize() {
     try {
-      // Lấy cấu hình backtest
-      const { data: experiment } = await supabase
-        .from('research_experiments')
-        .select('*')
-        .eq('id', this.bot.experiment_id)
-        .single();
-
-      if (!experiment) throw new Error('Không tìm thấy backtest');
-
-      // Khởi tạo cấu hình bot từ backtest
-      this.config = {
-        symbol: experiment.config.symbol,
-        strategy: experiment.config.strategy,
-        riskManagement: {
-          initialCapital: experiment.config.initialCapital,
-          positionSize: experiment.config.positionSize,
-          stopLoss: experiment.config.stopLoss,
-          takeProfit: experiment.config.takeProfit
-        }
-      };
-
-      // Kiểm tra kết nối bằng cách lấy thông tin tài khoản
+      // The config is already initialized in the constructor.
+      // We just need to check the API connection.
+      
+      // Check API connection by fetching account info
       const accountRes = await fetch('/api/trading/binance/account', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
         })
       });
 
-      if (!accountRes.ok) throw new Error('Không thể kết nối tới tài khoản');
+      if (!accountRes.ok) {
+        const errorText = await accountRes.text();
+        throw new Error(`Failed to connect to account: ${errorText}`);
+      }
       return true;
     } catch (error) {
       console.error('Error initializing bot:', error);
@@ -107,21 +101,33 @@ export class BotExecutor {
 
   private async executeStrategy() {
     try {
+      // Lấy symbol và interval hợp lệ
+      const symbol = this.config.symbol || 'BTCUSDT';
+      const interval = '1m';
+      if (!symbol) {
+        console.warn('BotExecutor: symbol bị thiếu, dùng mặc định BTCUSDT');
+      }
       // Lấy dữ liệu thị trường
       const candlesRes = await fetch('/api/trading/binance/candles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol: this.config.symbol,
-          interval: '1m',
+          symbol,
+          interval,
           limit: 100,
           apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
         })
       });
 
       if (!candlesRes.ok) throw new Error('Không thể lấy dữ liệu thị trường');
-      const candles = await candlesRes.json();
+      const res = await candlesRes.json();
+      const candles = res.candles;
+      if (!Array.isArray(candles)) {
+        console.error('API trả về dữ liệu nến không hợp lệ:', res);
+        throw new Error('Dữ liệu nến không hợp lệ');
+      }
 
       // Tính toán tín hiệu dựa trên loại chiến lược
       const signal = await this.calculateSignal(candles);
@@ -256,7 +262,8 @@ export class BotExecutor {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
         })
       });
 
@@ -277,7 +284,8 @@ export class BotExecutor {
           interval: '1m',
           limit: 1,
           apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
         })
       });
 
@@ -298,7 +306,8 @@ export class BotExecutor {
           type: 'MARKET',
           quantity: quantity.toFixed(6),
           apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
         })
       });
 
@@ -341,7 +350,8 @@ export class BotExecutor {
           interval: '1m',
           limit: 1,
           apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
         })
       });
 
@@ -383,7 +393,8 @@ export class BotExecutor {
             type: 'MARKET',
             quantity: this.currentPosition.quantity.toFixed(6),
             apiKey: this.bot.config.account.apiKey,
-            apiSecret: this.bot.config.account.apiSecret
+            apiSecret: this.bot.config.account.apiSecret,
+            isTestnet: this.bot.config.account.testnet,
           })
         });
 

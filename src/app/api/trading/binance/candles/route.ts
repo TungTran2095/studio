@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { symbol, interval, limit, apiKey, apiSecret, testnet } = await req.json();
+    let { symbol, interval, limit, apiKey, apiSecret, testnet } = await req.json();
+    if (!symbol) symbol = 'BTCUSDT';
+    if (!interval) interval = '1m';
     if (!symbol || !interval) {
       return NextResponse.json({ error: 'Thiếu symbol hoặc interval' }, { status: 400 });
     }

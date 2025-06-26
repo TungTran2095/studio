@@ -6,6 +6,7 @@ export interface TradingBotConfig {
   account: {
     apiKey: string;
     apiSecret: string;
+    testnet: boolean;
   };
   strategy: {
     type: string;
@@ -37,6 +38,7 @@ export interface TradingBot {
   last_error?: string;
   created_at: string;
   updated_at: string;
+  trades?: Trade[];
 }
 
 export interface TradingBotStats {
@@ -115,11 +117,24 @@ export interface CreateTradingBotInput {
   account: {
     apiKey: string;
     apiSecret: string;
+    testnet: boolean;
   };
+  config: any; // The full backtest config
 }
 
 export async function createTradingBot(projectId: string, input: CreateTradingBotInput): Promise<TradingBot | null> {
+  if (!supabase) throw new Error("Supabase client is not initialized.");
   try {
+    if (!input.config || !input.config.strategy || !input.config.riskManagement) {
+      throw new Error('The provided backtest configuration is incomplete.');
+    }
+
+    const fullConfig: TradingBotConfig = {
+      account: input.account,
+      strategy: input.config.strategy,
+      riskManagement: input.config.riskManagement,
+    };
+
     const { data, error } = await supabase
       .from('trading_bots')
       .insert([{
@@ -127,9 +142,7 @@ export async function createTradingBot(projectId: string, input: CreateTradingBo
         experiment_id: input.backtestId,
         name: input.name,
         status: 'stopped',
-        config: {
-          account: input.account
-        },
+        config: fullConfig,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }])
@@ -145,6 +158,7 @@ export async function createTradingBot(projectId: string, input: CreateTradingBo
 }
 
 export async function fetchTradingBots(projectId: string): Promise<TradingBot[]> {
+  if (!supabase) throw new Error("Supabase client is not initialized.");
   try {
     const { data, error } = await supabase
       .from('trading_bots')
@@ -161,6 +175,7 @@ export async function fetchTradingBots(projectId: string): Promise<TradingBot[]>
 }
 
 export async function updateTradingBotStatus(botId: string, status: TradingBot['status']): Promise<boolean> {
+  if (!supabase) throw new Error("Supabase client is not initialized.");
   try {
     const { error } = await supabase
       .from('trading_bots')
@@ -183,6 +198,7 @@ export async function updateTradingBotStats(
   botId: string, 
   stats: Pick<TradingBot, 'total_trades' | 'total_profit' | 'win_rate'>
 ): Promise<boolean> {
+  if (!supabase) throw new Error("Supabase client is not initialized.");
   try {
     const { error } = await supabase
       .from('trading_bots')
@@ -201,6 +217,7 @@ export async function updateTradingBotStats(
 }
 
 export async function deleteTradingBot(botId: string): Promise<boolean> {
+  if (!supabase) throw new Error("Supabase client is not initialized.");
   try {
     const { error } = await supabase
       .from('trading_bots')
