@@ -56,7 +56,7 @@ import { format } from 'date-fns';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase-client';
 import { ProjectBotsTab } from './project-bots';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface Project {
   id: string;
@@ -3262,7 +3262,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
               </Tabs>
             </div>
           </CardContent>
-          <CardFooter className="flex justify-end gap-2">
+          <DialogFooter className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowBacktestConfig(false)}>
               Hủy
             </Button>
@@ -3279,7 +3279,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                 </>
               )}
             </Button>
-          </CardFooter>
+          </DialogFooter>
         </Card>
       )}
 
