@@ -11,6 +11,7 @@ import {
   createTradingBot, 
   fetchTradingBots, 
   updateTradingBotStatus, 
+  deleteTradingBot,
   TradingBot 
 } from '@/lib/trading/trading-bot';
 import { BotExecutor } from '@/lib/trading/bot-executor';
@@ -20,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TradingViewWidget } from '@/components/chart/tradingview-widget';
 import { PriceChart } from '@/components/research/price-chart';
+import { supabase } from '@/lib/supabase-client';
 
 const createBotSchema = z.object({
   name: z.string().min(1, 'Tên bot là bắt buộc'),
@@ -172,6 +174,24 @@ function BacktestResultsDetails({ backtest }: { backtest: any }) {
   );
 }
 
+async function fetchBinanceAccounts() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('binance_account')
+    .select('*');
+  if (error) {
+    console.error('Lỗi khi lấy danh sách tài khoản Binance:', error);
+    return [];
+  }
+  return (data || []).map((item: any) => ({
+    id: item.id || item.Name || `acc-${Math.random()}`,
+    name: item.Name || 'Binance',
+    apiKey: item.config?.apiKey,
+    apiSecret: item.config?.apiSecret,
+    testnet: item.config?.isTestnet ?? false,
+  }));
+}
+
 export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
   const { toast } = useToast();
   const [bots, setBots] = useState<TradingBot[]>([]);
@@ -243,6 +263,13 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
         return;
       }
 
+      const backtestFullConfig = {
+        name: selectedBacktest.name,
+        type: selectedBacktest.type,
+        config: selectedBacktest.config,
+        results: selectedBacktest.results,
+      };
+
       const response = await fetch('/api/trading/run-bot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -255,7 +282,7 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
             apiSecret: accountObj.apiSecret,
             testnet: accountObj.testnet,
           },
-          config: selectedBacktest.config,
+          config: backtestFullConfig,
         }),
       });
 
@@ -379,6 +406,48 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
     fetchAssetData();
   }, [selectedBot]);
 
+  // Thêm useEffect để load tài khoản khi mở modal
+  useEffect(() => {
+    if (!showModal) return;
+    async function loadAccounts() {
+      const accs = await fetchBinanceAccounts();
+      setAccounts([
+        {
+          id: 'default',
+          name: 'Tài khoản mặc định (Binance)',
+          apiKey: 'UrsDp0aGxKhpBaR8ELTWyJaAMLMUlDXHk038kx2XeqVQYm7DBQh4zJHxR6Veuryw',
+          apiSecret: 'IqoUeRkJiUMkb4ly9VLXfzYsxaNOgvkV9CoxGJbByoyhehwKJ1CsI5EgA7ues937',
+          testnet: true
+        },
+        ...accs
+      ]);
+    }
+    loadAccounts();
+  }, [showModal]);
+
+  // Thêm hàm xử lý xóa bot
+  const handleDeleteBot = async (botId: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa bot này?')) return;
+    try {
+      const success = await deleteTradingBot(botId);
+      if (success) {
+        toast({
+          title: 'Thành công',
+          description: 'Đã xóa bot giao dịch',
+        });
+        loadBots();
+      } else {
+        throw new Error('Không thể xóa bot giao dịch');
+      }
+    } catch (error) {
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể xóa bot giao dịch: ' + (error as Error).message,
+        variant: 'destructive'
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -404,9 +473,9 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-2 gap-y-4 justify-start">
           {bots.map(bot => (
-            <Card key={bot.id}>
+            <Card key={bot.id} className="w-full">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">{bot.name}</CardTitle>
@@ -460,6 +529,10 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                       <Pause className="h-4 w-4 mr-2" />Stop
                     </Button>
                   )}
+                  {/* Nút xóa bot */}
+                  <Button variant="outline" className="w-full" onClick={() => handleDeleteBot(bot.id)}>
+                    Xóa
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -504,20 +577,19 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
             </div>
             
             <div className="space-y-2">
-              <Label>Tài khoản giao dịch</Label>
-              <div className="flex gap-2 items-center">
-                <Select value={form.account} onValueChange={val => handleFormChange('account', val)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn tài khoản" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map(acc => (
-                      <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" variant="outline" onClick={() => setShowAddAccount(true)}>+ Thêm tài khoản</Button>
-              </div>
+              <Label htmlFor="account">Tài khoản giao dịch</Label>
+              <Select value={form.account} onValueChange={val => handleFormChange('account', val)}>
+                <SelectTrigger id="account">
+                  <SelectValue placeholder="Chọn tài khoản giao dịch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map(acc => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.name || acc.apiKey}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Form thêm tài khoản mới */}
@@ -572,7 +644,7 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
             <DialogTitle>Chi tiết Trading Bot</DialogTitle>
           </DialogHeader>
           {selectedBot && (
-            <div className="flex flex-col gap-4 h-full">
+            <div className="flex flex-col gap-4 h-full overflow-y-auto">
               {/* Tổng tài sản BTC+USDT ở trên cùng */}
               <div className="border rounded bg-background p-2" style={{height: 180}}>
                 <div className="font-semibold mb-2 flex items-center gap-2">
@@ -589,7 +661,6 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                   <TabsList className="mb-4">
                     <TabsTrigger value="performance">Performance</TabsTrigger>
                     <TabsTrigger value="info">Thông tin chung</TabsTrigger>
-                    <TabsTrigger value="api">Thông tin API</TabsTrigger>
                   </TabsList>
                   <TabsContent value="performance">
                     <div className="grid grid-cols-2 gap-4 max-w-lg mb-4">
@@ -644,29 +715,41 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                     </div>
                   </TabsContent>
                   <TabsContent value="info">
-                    <div className="space-y-1 text-sm">
-                      <div><span className="text-muted-foreground">Tên:</span> {selectedBot.name}</div>
-                      <div><span className="text-muted-foreground">Trạng thái:</span> {selectedBot.status}</div>
-                      <div><span className="text-muted-foreground">Tài khoản:</span> Tài khoản</div>
-                      <div><span className="text-muted-foreground">Ngày tạo:</span> {new Date(selectedBot.created_at).toLocaleString('vi-VN')}</div>
-                      {selectedBot.last_run_at && (
-                        <div><span className="text-muted-foreground">Lần chạy cuối:</span> {new Date(selectedBot.last_run_at).toLocaleString('vi-VN')}</div>
+                    <div className="space-y-4">
+                      <div className="p-4 border rounded-md bg-muted/50">
+                        <h4 className="font-semibold text-foreground mb-3">Thông tin chung về Bot</h4>
+                        <div className="space-y-1 text-sm">
+                          <div><span className="text-muted-foreground">Tên:</span> {selectedBot.name}</div>
+                          <div><span className="text-muted-foreground">Trạng thái:</span> <Badge variant={selectedBot.status === 'running' ? 'default' : 'secondary'}>{selectedBot.status}</Badge></div>
+                          <div><span className="text-muted-foreground">Ngày tạo:</span> {new Date(selectedBot.created_at).toLocaleString('vi-VN')}</div>
+                          {selectedBot.last_run_at && (
+                            <div><span className="text-muted-foreground">Lần chạy cuối:</span> {new Date(selectedBot.last_run_at).toLocaleString('vi-VN')}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Backtest Info from Bot's Config */}
+                      {selectedBot.config && (
+                        <>
+                          <BacktestConfigDetails backtest={{ config: selectedBot.config.config }} />
+                          <BacktestResultsDetails backtest={{ results: selectedBot.config.results }} />
+                        </>
                       )}
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="api">
-                    <div className="p-3 border rounded bg-muted max-w-md">
-                      <div className="font-medium mb-2">Thông tin API</div>
-                      <div className="mb-1">
-                        <span className="text-muted-foreground">Trạng thái:</span> {selectedBot.config.account.testnet ? 'Testnet' : 'Live'}
-                      </div>
-                      <div className="mb-1">
-                        <span className="text-muted-foreground">API Key:</span> <span className="font-mono">{showApiKey ? selectedBot.config.account.apiKey : (selectedBot.config.account.apiKey ? selectedBot.config.account.apiKey.slice(0, 6) + '...' + selectedBot.config.account.apiKey.slice(-4) : '')}</span>
-                        <button type="button" className="ml-2 text-xs underline text-blue-600" onClick={() => setShowApiKey(v => !v)}>{showApiKey ? 'Ẩn' : 'Hiện'}</button>
-                      </div>
-                      <div className="mb-1">
-                        <span className="text-muted-foreground">API Secret:</span> <span className="font-mono">{showApiSecret ? selectedBot.config.account.apiSecret : (selectedBot.config.account.apiSecret ? selectedBot.config.account.apiSecret.slice(0, 6) + '...' + selectedBot.config.account.apiSecret.slice(-4) : '')}</span>
-                        <button type="button" className="ml-2 text-xs underline text-blue-600" onClick={() => setShowApiSecret(v => !v)}>{showApiSecret ? 'Ẩn' : 'Hiện'}</button>
+
+                      {/* Thông tin API */}
+                      <div className="p-3 border rounded bg-muted max-w-md">
+                        <div className="font-medium mb-2">Thông tin API</div>
+                        <div className="mb-1">
+                          <span className="text-muted-foreground">Trạng thái:</span> {selectedBot.config.account?.testnet ? 'Testnet' : 'Live'}
+                        </div>
+                        <div className="mb-1">
+                          <span className="text-muted-foreground">API Key:</span> <span className="font-mono">{showApiKey ? selectedBot.config.account?.apiKey : (selectedBot.config.account?.apiKey ? selectedBot.config.account.apiKey.slice(0, 6) + '...' + selectedBot.config.account.apiKey.slice(-4) : '')}</span>
+                          <button type="button" className="ml-2 text-xs underline text-blue-600" onClick={() => setShowApiKey(v => !v)}>{showApiKey ? 'Ẩn' : 'Hiện'}</button>
+                        </div>
+                        <div className="mb-1">
+                          <span className="text-muted-foreground">API Secret:</span> <span className="font-mono">{showApiSecret ? selectedBot.config.account?.apiSecret : (selectedBot.config.account?.apiSecret ? selectedBot.config.account.apiSecret.slice(0, 6) + '...' + selectedBot.config.account.apiSecret.slice(-4) : '')}</span>
+                          <button type="button" className="ml-2 text-xs underline text-blue-600" onClick={() => setShowApiSecret(v => !v)}>{showApiSecret ? 'Ẩn' : 'Hiện'}</button>
+                        </div>
                       </div>
                     </div>
                   </TabsContent>

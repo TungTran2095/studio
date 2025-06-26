@@ -68,15 +68,15 @@ function DashboardModule() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[600px]">
         {/* Chart Panel */}
         <div className="lg:col-span-2 flex flex-col">
-          <Card className="flex-1 min-h-[600px]">
+          <Card className="flex-1 flex flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
                 BTC/USDT Price Chart
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 p-0 h-[500px]">
-              <TradingViewWidget />
+            <CardContent className="flex-1 p-0 flex">
+              <TradingViewWidget className="h-full w-full flex-1" />
             </CardContent>
           </Card>
         </div>

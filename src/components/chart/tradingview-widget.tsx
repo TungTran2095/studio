@@ -9,7 +9,7 @@ declare global {
   }
 }
 
-export const TradingViewWidget: React.FC = memo(() => {
+export const TradingViewWidget: React.FC<{ className?: string }> = memo(({ className }) => {
   const container = useRef<HTMLDivElement>(null);
   const scriptAdded = useRef(false); // Ref to track if script has been added
   const widgetInstance = useRef<any>(null); // Ref to store the widget instance
@@ -151,7 +151,7 @@ export const TradingViewWidget: React.FC = memo(() => {
   }, []); // Empty dependency array ensures this runs only once on mount
 
    return (
-    <div className="middle-column h-full w-full">
+    <div className={className ? className : "middle-column h-full w-full"}>
         <div id="chart-container" className="h-full w-full">
             <div id="tradingview_btcusdt" className="tradingview-widget-container h-full w-full" ref={container}>
                 <div id="tradingview_chart_container" className="h-full w-full"></div>

@@ -42,7 +42,8 @@ import {
   Zap,
   Target,
   HelpCircle,
-  Bug
+  Bug,
+  Trash2
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Highcharts from 'highcharts';
@@ -57,6 +58,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase-client';
 import { ProjectBotsTab } from './project-bots';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Project {
   id: string;
@@ -251,6 +256,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
   });
   const [availableData, setAvailableData] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const { toast } = useToast();
   
   // Train/Test Split state
   const [trainTestSplit, setTrainTestSplit] = useState<{
@@ -914,66 +920,55 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
   };
 
   const viewLogs = async (model: any) => {
-    try {
-      setIsLoadingModelDetails(true);
-      console.log('🔍 Fetching model details from Supabase:', model.id);
-      
-      // Fetch latest model data from API including training_logs and performance_metrics
-      const response = await fetch(`/api/research/models?id=${model.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.models && data.models.length > 0) {
-          const latestModel = data.models[0];
-          
-          // Parse training_logs if it's a JSON string
-          if (latestModel.training_logs && typeof latestModel.training_logs === 'string') {
-            try {
-              latestModel.training_logs = JSON.parse(latestModel.training_logs);
-            } catch (e) {
-              console.warn('Failed to parse training_logs:', e);
-              latestModel.training_logs = [];
-            }
-          }
-          
-          // Ensure training_logs is an array
-          if (!Array.isArray(latestModel.training_logs)) {
-            latestModel.training_logs = [];
-          }
-          
-          // Parse performance_metrics if it's a JSON string
-          if (latestModel.performance_metrics && typeof latestModel.performance_metrics === 'string') {
-            try {
-              latestModel.performance_metrics = JSON.parse(latestModel.performance_metrics);
-            } catch (e) {
-              console.warn('Failed to parse performance_metrics:', e);
-              latestModel.performance_metrics = null;
-            }
-          }
-          
-          console.log('✅ Model details fetched:', {
-            id: latestModel.id,
-            name: latestModel.name,
-            training_logs_count: latestModel.training_logs?.length || 0,
-            has_performance_metrics: !!latestModel.performance_metrics
-          });
-          
-          setSelectedModel(latestModel);
-        } else {
-          console.warn('⚠️ Model not found in response');
-          setSelectedModel(model); // Fallback to original model data
-        }
-      } else {
-        console.error('❌ Failed to fetch model details:', response.status);
-        setSelectedModel(model); // Fallback to original model data
-      }
-    } catch (error) {
-      console.error('❌ Error fetching model details:', error);
-      setSelectedModel(model); // Fallback to original model data
-    } finally {
-      setIsLoadingModelDetails(false);
+    if (model.id === selectedModel?.id && showLogs) {
+      setShowLogs(false);
+      return;
     }
     
+    // Đảm bảo training_logs là một mảng
+    if (model.training_logs && typeof model.training_logs === 'string') {
+      try {
+        model.training_logs = JSON.parse(model.training_logs);
+      } catch (e) {
+        console.error("Lỗi parse training_logs:", e);
+        model.training_logs = [{ timestamp: new Date().toISOString(), message: "Lỗi hiển thị logs, dữ liệu không hợp lệ." }];
+      }
+    } else if (!Array.isArray(model.training_logs)) {
+      model.training_logs = [];
+    }
+
+    setSelectedModel(model);
     setShowLogs(true);
+  };
+
+  const handleDeleteModel = async (modelId: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa model này không? Hành động này không thể hoàn tác.')) {
+      return;
+    }
+
+    if (!supabase) {
+      toast({ title: 'Lỗi', description: 'Supabase client chưa được khởi tạo.', variant: 'destructive' });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('research_models')
+      .delete()
+      .eq('id', modelId);
+
+    if (error) {
+      toast({
+        title: 'Lỗi xóa model',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Xóa model thành công',
+        description: 'Model đã được xóa thành công.',
+      });
+      onRefresh();
+    }
   };
 
   if (!models || models.length === 0) {
@@ -1142,6 +1137,16 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
                 )}
               </div>
             </CardContent>
+            <CardFooter className="flex justify-end gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDeleteModel(model.id)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Xóa
+              </Button>
+            </CardFooter>
           </Card>
         ))}
       </div>

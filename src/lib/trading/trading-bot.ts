@@ -29,7 +29,7 @@ export interface TradingBot {
   experiment_id: string;
   name: string;
   description?: string;
-  config: TradingBotConfig;
+  config: Record<string, any>;
   status: TradingBotStatus;
   total_trades: number;
   total_profit: number;
@@ -125,14 +125,13 @@ export interface CreateTradingBotInput {
 export async function createTradingBot(projectId: string, input: CreateTradingBotInput): Promise<TradingBot | null> {
   if (!supabase) throw new Error("Supabase client is not initialized.");
   try {
-    if (!input.config || !input.config.strategy || !input.config.riskManagement) {
+    if (!input.config || !input.config.config || !input.config.config.strategy || !input.config.config.riskManagement) {
       throw new Error('The provided backtest configuration is incomplete.');
     }
 
-    const fullConfig: TradingBotConfig = {
+    const botConfigToSave = {
+      ...input.config,
       account: input.account,
-      strategy: input.config.strategy,
-      riskManagement: input.config.riskManagement,
     };
 
     const { data, error } = await supabase
@@ -142,7 +141,7 @@ export async function createTradingBot(projectId: string, input: CreateTradingBo
         experiment_id: input.backtestId,
         name: input.name,
         status: 'stopped',
-        config: fullConfig,
+        config: botConfigToSave,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }])
@@ -153,7 +152,7 @@ export async function createTradingBot(projectId: string, input: CreateTradingBo
     return data;
   } catch (error) {
     console.error('Error creating trading bot:', error);
-    return null;
+    throw error;
   }
 }
 
