@@ -2342,7 +2342,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   };
 
   const handleCreateExperiment = () => {
-    setShowExperimentTypeModal(true);
+    setShowBacktestConfig(true);
   };
 
   const handleSelectExperimentType = (type: 'backtest' | 'hypothesis_test') => {
