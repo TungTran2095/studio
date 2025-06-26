@@ -2884,11 +2884,9 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
             {/* Phần 2: Các tab */}
             <div className="space-y-4">
               <Tabs defaultValue="data" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="data">Cấu hình dữ liệu</TabsTrigger>
                   <TabsTrigger value="config">Cấu hình backtest</TabsTrigger>
-                  <TabsTrigger value="script">Python script</TabsTrigger>
-                  <TabsTrigger value="result">Backtest result</TabsTrigger>
                 </TabsList>
                 <TabsContent value="data" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -2899,11 +2897,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                           type="date"
                           value={backtestConfig.startDate}
                           onChange={(e) => handleBacktestConfigChange('startDate', e.target.value)}
+                          className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                         />
                         <Input 
                           type="time"
                           value={backtestConfig.startTime}
                           onChange={(e) => handleBacktestConfigChange('startTime', e.target.value)}
+                          className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                         />
                       </div>
                     </div>
@@ -2914,11 +2914,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                           type="date"
                           value={backtestConfig.endDate}
                           onChange={(e) => handleBacktestConfigChange('endDate', e.target.value)}
+                          className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                         />
                         <Input 
                           type="time"
                           value={backtestConfig.endTime}
                           onChange={(e) => handleBacktestConfigChange('endTime', e.target.value)}
+                          className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                         />
                       </div>
                     </div>
@@ -3179,6 +3181,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         type="number"
                         value={backtestConfig.initialCapital}
                         onChange={(e) => handleBacktestConfigChange('initialCapital', Number(e.target.value))}
+                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
                     </div>
                     <div className="space-y-2">
@@ -3187,6 +3190,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         type="number"
                         value={backtestConfig.positionSize}
                         onChange={(e) => handleBacktestConfigChange('positionSize', Number(e.target.value))}
+                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
                     </div>
                     <div className="space-y-2">
@@ -3195,6 +3199,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         type="number"
                         value={backtestConfig.stopLoss}
                         onChange={(e) => handleBacktestConfigChange('stopLoss', Number(e.target.value))}
+                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
                     </div>
                     <div className="space-y-2">
@@ -3203,6 +3208,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         type="number"
                         value={backtestConfig.takeProfit}
                         onChange={(e) => handleBacktestConfigChange('takeProfit', Number(e.target.value))}
+                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
                     </div>
                   </div>
