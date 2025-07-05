@@ -3,6 +3,7 @@ import { Roboto } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { cn } from '@/lib/utils';
+import '@/lib/trading/init-bot-manager';
 
 const roboto = Roboto({
   weight: ['400', '500', '700'],

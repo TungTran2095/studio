@@ -27,52 +27,104 @@ export class TimeSync {
 
       console.log('[TimeSync] Đang đồng bộ thời gian với Binance...');
       
-      // Gọi Binance API để lấy thời gian server
-      // Thêm tham số nocache để tránh cache và sử dụng địa chỉ API thay thế
-      const response = await fetch('https://api1.binance.com/api/v3/time?nocache=' + now, {
-        // Thêm timeout để tránh chờ quá lâu
-        signal: AbortSignal.timeout(5000), // 5 giây timeout
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      // Sử dụng nhiều endpoint thay thế và thêm error handling tốt hơn
+      const endpoints = [
+        'https://api.binance.com/api/v3/time',
+        'https://api1.binance.com/api/v3/time',
+        'https://api2.binance.com/api/v3/time',
+        'https://api3.binance.com/api/v3/time',
+        'https://testnet.binance.vision/api/v3/time' // Testnet endpoint
+      ];
+
+      let lastError: Error | null = null;
+      
+      for (const endpoint of endpoints) {
+        try {
+          // Không thêm parameter nào cho endpoint /time
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000), // Tăng timeout lên 5 giây
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'application/json',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+          }
+          
+          const data = await response.json();
+          
+          if (!data || typeof data.serverTime !== 'number') {
+            throw new Error('Phản hồi API không hợp lệ: thiếu serverTime');
+          }
+          
+          // Tính hiệu số giữa thời gian server và thời gian local
+          const serverTime = data.serverTime;
+          this.lastServerTime = serverTime;
+          const localTime = Date.now();
+          
+          // Điều chỉnh hiệu số: luôn đảm bảo timestamp sẽ sớm hơn 20000ms so với thời gian server
+          this.timeOffset = serverTime - localTime - 20000;
+          this.isSynced = true;
+          this.lastSyncTime = now;
+          this.retryCount = 0; // Reset số lần thử lại
+          
+          console.log(`[TimeSync] Đồng bộ thành công với ${endpoint}. Hiệu số: ${this.timeOffset}ms`);
+          return; // Thoát nếu thành công
+          
+        } catch (error) {
+          lastError = error as Error;
+          console.warn(`[TimeSync] Lỗi với ${endpoint}:`, error);
+          continue; // Thử endpoint tiếp theo
         }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Lỗi API: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json();
-      
-      if (!data || !data.serverTime) {
-        throw new Error('Phản hồi API không bao gồm serverTime');
+      // Nếu tất cả endpoints đều thất bại, thử sử dụng World Time API
+      try {
+        console.log('[TimeSync] Thử sử dụng World Time API làm fallback...');
+        const worldTimeResponse = await fetch('http://worldtimeapi.org/api/timezone/Etc/UTC', {
+          signal: AbortSignal.timeout(3000)
+        });
+        
+        if (worldTimeResponse.ok) {
+          const worldTimeData = await worldTimeResponse.json();
+          const worldTime = new Date(worldTimeData.datetime).getTime();
+          const localTime = Date.now();
+          
+          this.timeOffset = worldTime - localTime - 20000;
+          this.isSynced = true;
+          this.lastSyncTime = now;
+          this.retryCount = 0;
+          
+          console.log(`[TimeSync] Đồng bộ thành công với World Time API. Hiệu số: ${this.timeOffset}ms`);
+          return;
+        }
+      } catch (worldTimeError) {
+        console.warn('[TimeSync] World Time API cũng thất bại:', worldTimeError);
       }
       
-      // Tính hiệu số giữa thời gian server và thời gian local
-      const serverTime = data.serverTime;
-      this.lastServerTime = serverTime;
-      const localTime = Date.now();
+      // Nếu tất cả endpoints đều thất bại
+      throw lastError || new Error('Không thể kết nối với bất kỳ endpoint nào');
       
-      // Điều chỉnh hiệu số: luôn đảm bảo timestamp sẽ sớm hơn 20000ms so với thời gian server
-      this.timeOffset = serverTime - localTime - 20000; // Tăng từ 10000ms lên 20000ms
-      this.isSynced = true;
-      this.lastSyncTime = now;
-      this.retryCount = 0; // Reset số lần thử lại
-      
-      console.log(`[TimeSync] Đồng bộ thành công. Hiệu số: ${this.timeOffset}ms (đã trừ 20000ms dự phòng)`);
     } catch (error) {
       console.error('[TimeSync] Lỗi đồng bộ thời gian:', error);
       // Tăng số lần thử lại
       this.retryCount++;
       
       if (this.retryCount <= this.MAX_RETRY) {
-        // Tự động thử lại sau 1 giây
-        console.log(`[TimeSync] Thử lại lần ${this.retryCount}/${this.MAX_RETRY} sau 1 giây...`);
-        setTimeout(() => this.syncWithServer(), 1000);
+        // Tự động thử lại sau 2 giây
+        console.log(`[TimeSync] Thử lại lần ${this.retryCount}/${this.MAX_RETRY} sau 2 giây...`);
+        setTimeout(() => this.syncWithServer(), 2000);
       } else {
-        console.error(`[TimeSync] Đã thử lại ${this.MAX_RETRY} lần không thành công. Giữ nguyên offset hiện tại.`);
-        // Nếu không thể đồng bộ, giữ nguyên hiệu số hiện tại
-        // Giảm thêm offset để đảm bảo an toàn
-        this.adjustOffset(-10000); // Tăng từ -5000 lên -10000
+        console.error(`[TimeSync] Đã thử lại ${this.MAX_RETRY} lần không thành công. Sử dụng offset mặc định.`);
+        // Nếu không thể đồng bộ, sử dụng offset mặc định an toàn
+        this.timeOffset = -300000; // 5 phút trước
+        this.isSynced = false;
         this.retryCount = 0; // Reset counter
       }
     }
@@ -121,30 +173,70 @@ export class TimeSync {
    */
   static async getActualServerTime(): Promise<number> {
     try {
-      // Gọi API time một cách trực tiếp với timeout
-      const response = await fetch('https://api1.binance.com/api/v3/time?nocache=' + Date.now(), {
-        signal: AbortSignal.timeout(5000), // 5 giây timeout
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      // Sử dụng cùng logic với syncWithServer để có độ tin cậy cao hơn
+      const endpoints = [
+        'https://api.binance.com/api/v3/time',
+        'https://api1.binance.com/api/v3/time',
+        'https://api2.binance.com/api/v3/time',
+        'https://api3.binance.com/api/v3/time'
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          // Không thêm parameter nào cho endpoint /time
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000),
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'application/json',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+          }
+          
+          const data = await response.json();
+          
+          if (!data || typeof data.serverTime !== 'number') {
+            throw new Error('Phản hồi API không hợp lệ: thiếu serverTime');
+          }
+          
+          this.lastServerTime = data.serverTime;
+          return data.serverTime;
+          
+        } catch (error) {
+          console.warn(`[TimeSync] Lỗi với ${endpoint}:`, error);
+          continue;
         }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Lỗi API: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json();
-      
-      if (!data || !data.serverTime) {
-        throw new Error('Phản hồi API không bao gồm serverTime');
+      // Fallback to World Time API
+      try {
+        const worldTimeResponse = await fetch('http://worldtimeapi.org/api/timezone/Etc/UTC', {
+          signal: AbortSignal.timeout(3000)
+        });
+        
+        if (worldTimeResponse.ok) {
+          const worldTimeData = await worldTimeResponse.json();
+          const worldTime = new Date(worldTimeData.datetime).getTime();
+          this.lastServerTime = worldTime;
+          return worldTime;
+        }
+      } catch (worldTimeError) {
+        console.warn('[TimeSync] World Time API cũng thất bại:', worldTimeError);
       }
       
-      this.lastServerTime = data.serverTime;
-      return data.serverTime;
+      throw new Error('Không thể lấy thời gian server từ bất kỳ endpoint nào');
+      
     } catch (error) {
       console.error('[TimeSync] Lỗi khi lấy thời gian server:', error);
       // Nếu không thể lấy thời gian server, trả về thời gian ước tính
-      return this.lastServerTime > 0 ? this.lastServerTime : Date.now() - 240000; // Tăng từ 120000 lên 240000
+      return this.lastServerTime > 0 ? this.lastServerTime : Date.now() - 240000;
     }
   }
 

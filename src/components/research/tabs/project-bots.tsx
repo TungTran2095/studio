@@ -22,6 +22,16 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TradingViewWidget } from '@/components/chart/tradingview-widget';
 import { PriceChart } from '@/components/research/price-chart';
 import { supabase } from '@/lib/supabase-client';
+import {
+  LineChart as RechartsLineChart,
+  Line as RechartsLine,
+  XAxis as RechartsXAxis,
+  YAxis as RechartsYAxis,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer as RechartsResponsiveContainer
+} from 'recharts';
+import { BotDebugPanel } from './bot-debug-panel';
 
 const createBotSchema = z.object({
   name: z.string().min(1, 'Tên bot là bắt buộc'),
@@ -192,6 +202,150 @@ async function fetchBinanceAccounts() {
   }));
 }
 
+function parseIntervalToMs(interval: string) {
+  if (!interval) return 60000;
+  const match = interval.match(/^([0-9]+)([mhdw])$/i);
+  if (!match) return 60000;
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+  switch (unit) {
+    case 'm': return value * 60 * 1000;
+    case 'h': return value * 60 * 60 * 1000;
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+    default: return 60000;
+  }
+}
+
+function BotIndicatorChart({ botId }: { botId: string }) {
+  const [indicatorData, setIndicatorData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [timeframe, setTimeframe] = useState<string>('1m');
+  const [triggers, setTriggers] = useState<{overbought?: number, oversold?: number}>({});
+
+  // useEffect 1: fetch lần đầu khi botId đổi, lấy indicatorData và timeframe
+  useEffect(() => {
+    let stopped = false;
+    setLoading(true);
+    fetch(`/api/trading/bot/indicator-history?botId=${botId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!stopped && data) {
+          setIndicatorData(data);
+          setTimeframe(data.timeframe || '1m');
+          if (data.indicatorName === 'RSI') {
+            setTriggers({
+              overbought: data.triggerValue,
+              oversold: data.oversold || 30
+            });
+          } else {
+            setTriggers({ overbought: data.triggerValue });
+          }
+          setLoading(false);
+        }
+      })
+      .catch(() => setLoading(false));
+    return () => { stopped = true; };
+  }, [botId]);
+
+  // useEffect 2: khi đã có timeframe, setup interval fetch đúng ms
+  useEffect(() => {
+    if (!timeframe) return;
+    let intervalId: any;
+    let stopped = false;
+    const ms = parseIntervalToMs(timeframe);
+    intervalId = setInterval(() => {
+      if (stopped) return;
+      fetch(`/api/trading/bot/indicator-history?botId=${botId}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (!stopped && data) {
+            setIndicatorData(data);
+            if (data.indicatorName === 'RSI') {
+              setTriggers({
+                overbought: data.triggerValue,
+                oversold: data.oversold || 30
+              });
+            } else {
+              setTriggers({ overbought: data.triggerValue });
+            }
+          }
+        });
+    }, ms);
+    return () => {
+      stopped = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [botId, timeframe]);
+
+  if (loading && !indicatorData) return <div className="text-xs text-muted-foreground">Đang tải chỉ số...</div>;
+  if (!indicatorData) return <div className="text-xs text-muted-foreground">Không có dữ liệu chỉ số</div>;
+
+  // Lấy điểm cuối cùng
+  const last = indicatorData.history.length > 0 ? indicatorData.history[indicatorData.history.length-1] : null;
+  const formattedTime = last ? new Date(Number(last.time)).toLocaleString('vi-VN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }) : '';
+
+  // Xác định rule trục X theo timeframe
+  let xTickFormatter = (t: any) => new Date(Number(t)).toLocaleTimeString('vi-VN');
+  if (indicatorData && indicatorData.history.length > 1) {
+    const t0 = Number(indicatorData.history[0].time);
+    const t1 = Number(indicatorData.history[1].time);
+    const diff = t1 - t0;
+    if (diff >= 3600000) {
+      xTickFormatter = (t: any) => new Date(Number(t)).toLocaleDateString('vi-VN');
+    } else {
+      xTickFormatter = (t: any) => new Date(Number(t)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    }
+  }
+
+  // Chuẩn bị data cho chart với các trigger
+  const chartData = indicatorData.history.map((d: any) => ({
+    ...d,
+    trigger: triggers.overbought,
+    triggerLow: triggers.oversold
+  }));
+
+  return (
+    <div className="my-2">
+      <div className="mb-1 text-xs">
+        {last && <div>{formattedTime}</div>}
+        <b>Chỉ số {indicatorData.indicatorName} :</b> <span style={{color: 'blue'}}>{last ? last.value : 'N/A'}</span>
+        <br/>
+        {indicatorData.indicatorName === 'RSI' && (
+          <>
+            <b>Trigger trên (Overbought):</b> <span style={{color: 'red'}}>{triggers.overbought}</span>
+            <br/>
+            <b>Trigger dưới (Oversold):</b> <span style={{color: 'green'}}>{triggers.oversold}</span>
+          </>
+        )}
+        {indicatorData.indicatorName !== 'RSI' && (
+          <>
+            <b>Trigger :</b> <span style={{color: 'red'}}>{indicatorData.triggerValue}</span>
+          </>
+        )}
+      </div>
+      <div style={{ width: '100%', height: 220 }}>
+        <RechartsResponsiveContainer width="100%" height={220}>
+          <RechartsLineChart data={chartData}>
+            <RechartsXAxis dataKey="time" tickFormatter={xTickFormatter} />
+            <RechartsYAxis hide />
+            <RechartsTooltip labelFormatter={t => new Date(Number(t)).toLocaleString('vi-VN')} />
+            <RechartsLegend />
+            <RechartsLine type="monotone" dataKey="value" stroke="#8884d8" name={`Chỉ số ${indicatorData.indicatorName}`} dot={false} isAnimationActive={false} />
+            <RechartsLine type="monotone" dataKey="trigger" stroke="#ff0000" name="Trigger trên" dot={false} isAnimationActive={false} />
+            {indicatorData.indicatorName === 'RSI' && (
+              <RechartsLine type="monotone" dataKey="triggerLow" stroke="#00b300" name="Trigger dưới" dot={false} isAnimationActive={false} />
+            )}
+          </RechartsLineChart>
+        </RechartsResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
   const { toast } = useToast();
   const [bots, setBots] = useState<TradingBot[]>([]);
@@ -319,9 +473,27 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
   };
 
   // Xem chi tiết bot
-  const handleViewBot = (bot: TradingBot) => {
+  const handleViewBot = async (bot: TradingBot) => {
     setSelectedBot(bot);
     setShowDetailModal(true);
+    
+    // Fetch trades của bot này
+    setTradesLoading(true);
+    try {
+      const response = await fetch(`/api/trading/bot/logs?botId=${bot.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setBotTrades(data.trades || []);
+      } else {
+        console.error('Failed to fetch bot trades');
+        setBotTrades([]);
+      }
+    } catch (error) {
+      console.error('Error fetching bot trades:', error);
+      setBotTrades([]);
+    } finally {
+      setTradesLoading(false);
+    }
   };
 
   // Start/Stop bot
@@ -332,16 +504,28 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
     }
     try {
       if (bot.status === 'running') {
-        // Stop bot
-        await updateTradingBotStatus(bot.id, 'stopped');
+        // Stop bot bằng API backend
+        const res = await fetch('/api/trading/bot', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ botId: bot.id, action: 'stop' })
+        });
+        if (!res.ok) throw new Error('Không thể dừng bot trên server');
         toast({
           title: "Thành công",
           description: "Đã dừng bot giao dịch"
         });
       } else {
-        // Start bot
-        const executor = new BotExecutor(bot);
-        executor.start();
+        // Start bot bằng API backend
+        const res = await fetch('/api/trading/bot/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ botId: bot.id })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || 'Không thể khởi động bot trên server');
+        }
         toast({
           title: "Thành công",
           description: "Đã khởi động bot giao dịch"
@@ -363,6 +547,10 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
   // State cho data tổng tài sản và tổng hiện tại
   const [assetData, setAssetData] = useState<any[]>([]);
   const [totalAsset, setTotalAsset] = useState<number>(0);
+  
+  // State cho trades của bot được chọn
+  const [botTrades, setBotTrades] = useState<any[]>([]);
+  const [tradesLoading, setTradesLoading] = useState<boolean>(false);
 
   useEffect(() => {
     async function fetchAssetData() {
@@ -565,7 +753,7 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                 </SelectTrigger>
                 <SelectContent>
                   {completedBacktests.length === 0 && (
-                    <SelectItem value="" disabled>Không có backtest nào</SelectItem>
+                    <SelectItem value="no-backtests" disabled>Không có backtest nào</SelectItem>
                   )}
                   {completedBacktests.map((b: any) => (
                     <SelectItem key={b.id} value={b.id}>{b.name} ({b.strategy_config?.type || b.config?.strategy?.type})</SelectItem>
@@ -645,25 +833,29 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
           </DialogHeader>
           {selectedBot && (
             <div className="flex flex-col gap-4 h-full overflow-y-auto">
-              {/* Tổng tài sản BTC+USDT ở trên cùng */}
-              <div className="border rounded bg-background p-2" style={{height: 180}}>
-                <div className="font-semibold mb-2 flex items-center gap-2">
-                  Tổng tài sản BTC+USDT
-                  <span className="text-primary font-bold text-base">{totalAsset.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</span>
-                </div>
-                <div className="h-[120px]">
-                  <PriceChart symbol="Tổng tài sản" timeframe="1h" data={assetData.map(item => ({ timestamp: item.timestamp, open: item.value, high: item.value, low: item.value, close: item.value }))} />
-                </div>
-              </div>
-              {/* Tabs thông tin ở dưới cùng */}
+              {/* Tabs thông tin */}
               <div className="flex-1 flex flex-col">
                 <Tabs defaultValue="performance" className="w-full flex-1 flex flex-col">
                   <TabsList className="mb-4">
                     <TabsTrigger value="performance">Performance</TabsTrigger>
                     <TabsTrigger value="info">Thông tin chung</TabsTrigger>
+                    <TabsTrigger value="debug">Debug</TabsTrigger>
                   </TabsList>
                   <TabsContent value="performance">
-                    <div className="grid grid-cols-2 gap-4 max-w-lg mb-4">
+                    {/* Tổng tài sản BTC+USDT */}
+                    <div className="border rounded bg-background p-4 mb-4" style={{height: 180}}>
+                      <div className="font-semibold mb-2 flex items-center gap-2">
+                        Tổng tài sản BTC+USDT
+                        <span className="text-primary font-bold text-base">{totalAsset.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</span>
+                      </div>
+                      <div className="h-[120px]">
+                        <PriceChart symbol="Tổng tài sản" timeframe="1h" data={assetData.map(item => ({ timestamp: item.timestamp, open: item.value, high: item.value, low: item.value, close: item.value }))} />
+                      </div>
+                    </div>
+                    
+                    {/* Chart chỉ số indicator cho bot */}
+                    <BotIndicatorChart botId={selectedBot.id} />
+                    <div className="grid grid-cols-3 gap-4 max-w-lg mb-4">
                       <div className="p-3 border rounded">
                         <div className="text-muted-foreground text-sm">Tổng giao dịch</div>
                         <div className="text-2xl font-semibold">{selectedBot.total_trades}</div>
@@ -672,41 +864,82 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                         <div className="text-muted-foreground text-sm">Tỷ lệ thắng</div>
                         <div className="text-2xl font-semibold">{safeToFixed(selectedBot.win_rate, 1)}%</div>
                       </div>
-                      <div className="p-3 border rounded col-span-2">
+                      <div className="p-3 border rounded">
                         <div className="text-muted-foreground text-sm">Tổng lợi nhuận</div>
-                        <div className={`text-2xl font-semibold ${Number(selectedBot.total_profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {safeToFixed(selectedBot.total_profit, 2)} USDT
-                        </div>
+                        <div className={`text-2xl font-semibold ${Number(selectedBot.total_profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{safeToFixed(selectedBot.total_profit, 2)} USDT</div>
                       </div>
                     </div>
                     {/* Bảng danh sách giao dịch */}
                     <div className="mt-4">
-                      <div className="font-semibold mb-2">Danh sách giao dịch</div>
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="font-semibold">Danh sách giao dịch</div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (!selectedBot) return;
+                            setTradesLoading(true);
+                            try {
+                              const response = await fetch(`/api/trading/bot/logs?botId=${selectedBot.id}`);
+                              if (response.ok) {
+                                const data = await response.json();
+                                setBotTrades(data.trades || []);
+                              }
+                            } catch (error) {
+                              console.error('Error refreshing trades:', error);
+                            } finally {
+                              setTradesLoading(false);
+                            }
+                          }}
+                          disabled={tradesLoading}
+                        >
+                          {tradesLoading ? 'Đang tải...' : 'Làm mới'}
+                        </Button>
+                      </div>
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-xs border">
                           <thead className="bg-muted">
                             <tr>
                               <th className="p-2 text-left">Thời gian</th>
                               <th className="p-2 text-center">Loại</th>
+                              <th className="p-2 text-center">Trạng thái</th>
                               <th className="p-2 text-right">Giá</th>
                               <th className="p-2 text-right">Số lượng</th>
                               <th className="p-2 text-right">Lợi nhuận</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {selectedBot.trades && selectedBot.trades.length > 0 ? (
-                              selectedBot.trades.map((trade: any, idx: number) => (
-                                <tr key={idx} className="border-b">
+                            {tradesLoading ? (
+                              <tr>
+                                <td colSpan={6} className="p-4 text-center text-muted-foreground">Đang tải...</td>
+                              </tr>
+                            ) : botTrades.length > 0 ? (
+                              botTrades.map((trade: any, idx: number) => (
+                                <tr key={trade.id || idx} className="border-b">
                                   <td className="p-2">{new Date(trade.open_time).toLocaleString('vi-VN')}</td>
                                   <td className="p-2 text-center capitalize">{trade.side}</td>
-                                  <td className="p-2 text-right">{trade.entry_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                                  <td className="p-2 text-center">
+                                    <Badge variant={trade.status === 'closed' ? 'default' : 'secondary'} className="text-xs">
+                                      {trade.status === 'closed' ? 'Đã đóng' : 'Đang mở'}
+                                    </Badge>
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    {trade.status === 'closed' && trade.exit_price 
+                                      ? `${trade.entry_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })} → ${trade.exit_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+                                      : trade.entry_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })
+                                    }
+                                  </td>
                                   <td className="p-2 text-right">{trade.quantity}</td>
-                                  <td className="p-2 text-right text-green-600">{trade.pnl !== undefined ? trade.pnl.toFixed(2) : '-'}</td>
+                                  <td className="p-2 text-right">
+                                    <span className={trade.pnl !== undefined && trade.pnl !== null ? (trade.pnl >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-500'}>
+                                      {trade.pnl !== undefined && trade.pnl !== null ? trade.pnl.toFixed(2) : '-'}
+                                    </span>
+                                  </td>
                                 </tr>
                               ))
                             ) : (
                               <tr>
-                                <td colSpan={5} className="p-4 text-center text-muted-foreground">Chưa có giao dịch nào</td>
+                                <td colSpan={6} className="p-4 text-center text-muted-foreground">Chưa có giao dịch nào</td>
                               </tr>
                             )}
                           </tbody>
@@ -752,6 +985,9 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                         </div>
                       </div>
                     </div>
+                  </TabsContent>
+                  <TabsContent value="debug">
+                    <BotDebugPanel botId={selectedBot.id} />
                   </TabsContent>
                 </Tabs>
               </div>

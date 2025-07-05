@@ -45,8 +45,7 @@ const initializeBinanceClient = async (apiKey: string, apiSecret: string, isTest
             console.log('[initializeBinanceClient] Đã đồng bộ thời gian với Binance');
         } catch (syncError) {
             console.error('[initializeBinanceClient] Lỗi đồng bộ thời gian:', syncError);
-            // Tiếp tục nhưng điều chỉnh offset thấp hơn nữa
-            TimeSync.adjustOffset(-20000); // Tăng từ -10000 lên -20000
+            TimeSync.adjustOffset(-20000);
         }
         
         // Làm sạch API key
@@ -69,7 +68,7 @@ const initializeBinanceClient = async (apiKey: string, apiSecret: string, isTest
             // Tắt kết nối lại tự động
             reconnect: false,
             // Tăng timeout
-            timeout: 30000, // Giảm từ 60000 xuống 30000 để phát hiện lỗi sớm hơn
+            timeout: 15000, // Giảm timeout xuống 15 giây
             // Thêm useServerTime để Binance tự đồng bộ thời gian
             useServerTime: true,
             // Thêm các options quan trọng khác
@@ -89,7 +88,7 @@ const initializeBinanceClient = async (apiKey: string, apiSecret: string, isTest
         }
         
         const binance = new Binance().options(options);
-        console.log("[initializeBinanceClient] Binance client đã khởi tạo với timestamp siêu an toàn (-200000ms) và recvWindow=45000ms");
+        console.log("[initializeBinanceClient] Binance client đã khởi tạo");
         return binance;
     } catch (initError: any) {
         console.error("[initializeBinanceClient] Failed to initialize Binance client:", initError);
@@ -124,7 +123,7 @@ const placeOrder = async (input: PlaceOrderInput, side: 'BUY' | 'SELL'): Promise
         // Thêm cơ chế retry tự động cho các giao dịch BUY/SELL
         let orderResult: any;
         let attempt = 0;
-        const maxAttempts = 5; // Tăng từ 3 lên 5 lần thử
+        const maxAttempts = 3; // Giảm số lần retry
         
         while (attempt < maxAttempts) {
             try {
@@ -226,6 +225,12 @@ const placeOrder = async (input: PlaceOrderInput, side: 'BUY' | 'SELL'): Promise
                      errorMessage = `Filter failure (e.g., price/quantity precision or limits): ${parsedBody?.msg}`;
                 } else if (parsedBody?.code === -2015) {
                     errorMessage = 'API key của bạn không đúng, không có quyền truy cập, hoặc IP của bạn không được phép sử dụng API key này.';
+                } else if (parsedBody?.code === -2011) {
+                    errorMessage = 'Lỗi xác thực. Vui lòng kiểm tra API key và secret.';
+                } else if (parsedBody?.code === -2013) {
+                    errorMessage = 'Lệnh không tồn tại hoặc đã bị hủy.';
+                } else if (parsedBody?.code === -2014) {
+                    errorMessage = 'API key không có quyền giao dịch.';
                 }
             } else if (error.message) {
                 errorMessage = error.message;

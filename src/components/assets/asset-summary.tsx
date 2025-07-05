@@ -143,7 +143,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
       let assets = assetRes.success ? assetRes.data : [];
       let ownedSymbols = assetRes.ownedSymbols || ['BTC', 'USDT'];
       // Lấy lịch sử giao dịch (chỉ lấy BTCUSDT, ETHUSDT, ...)
-      const tradeRes = await fetchBinanceTradeHistory({ apiKey: acc.apiKey, apiSecret: acc.apiSecret, isTestnet: acc.isTestnet, symbols: ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'USDTBTC'], limit: 100 });
+      const tradeRes = await fetchBinanceTradeHistory({ apiKey: acc.apiKey, apiSecret: acc.apiSecret, isTestnet: acc.isTestnet, symbols: ['BTCUSDT', 'ETHUSDT', 'BNBUSDT'], limit: 100 });
       let trades = tradeRes.success ? tradeRes.data : [];
       updateAccount(acc.id, { assets, trades, ownedSymbols });
     } catch (err) {
@@ -162,6 +162,60 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     });
     // eslint-disable-next-line
   }, [accounts.length]);
+
+  // Tự động fetch lại tài sản và lịch sử giao dịch mỗi 5 giây
+  useEffect(() => {
+    if (accounts.length === 0) return;
+    const interval = setInterval(() => {
+      accounts.forEach(acc => {
+        fetchAccountData(acc);
+      });
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [accounts]);
+
+  // Hàm fetch danh sách tài khoản từ Supabase
+  const fetchAccountsFromSupabase = async () => {
+    if (!supabaseClient) return [];
+    const { data, error } = await supabaseClient
+      .from('binance_account')
+      .select('*');
+    if (error) {
+      toast({ title: 'Lỗi khi lấy tài khoản', description: getErrorMessage(error), variant: 'destructive' });
+      return [];
+    }
+    // Map dữ liệu từ Supabase về đúng format của store
+    return (data || []).map((item: any) => ({
+      id: item.id || item.Name || `acc-${Math.random()}`,
+      name: item.Name || 'Binance',
+      apiKey: item.config?.apiKey,
+      apiSecret: item.config?.apiSecret,
+      isTestnet: item.config?.isTestnet ?? false,
+      assets: [],
+      trades: [],
+      isLoadingAssets: false,
+      isLoadingTrades: false,
+      isConnected: false,
+      ownedSymbols: [],
+    }));
+  };
+
+  // useEffect fetch tài khoản từ Supabase khi mount (chỉ khi chưa có account trong store)
+  useEffect(() => {
+    if (accounts.length === 0) {
+      fetchAccountsFromSupabase().then(accs => {
+        accs.forEach(acc => {
+          addAccount({
+            name: acc.name,
+            apiKey: acc.apiKey,
+            apiSecret: acc.apiSecret,
+            isTestnet: acc.isTestnet,
+          });
+        });
+      });
+    }
+    // eslint-disable-next-line
+  }, []);
 
   // UI danh sách tài khoản
   return (

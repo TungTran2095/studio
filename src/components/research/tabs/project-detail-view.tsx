@@ -62,6 +62,15 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  LineChart as RechartsLineChart,
+  Line as RechartsLine,
+  XAxis as RechartsXAxis,
+  YAxis as RechartsYAxis,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer as RechartsResponsiveContainer
+} from 'recharts';
 
 interface Project {
   id: string;
@@ -1899,7 +1908,21 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     initialCapital: 10000,
     positionSize: 1,
     stopLoss: 2,
-    takeProfit: 4
+    takeProfit: 4,
+    strategyType: '',
+    aiRule: '',
+    fastPeriod: 10,
+    slowPeriod: 20,
+    rsiPeriod: 14,
+    overbought: 70,
+    oversold: 30,
+    fastEMA: 12,
+    slowEMA: 26,
+    signalPeriod: 9,
+    bbPeriod: 20,
+    bbStdDev: 2,
+    channelPeriod: 20,
+    multiplier: 2
   });
   const [chartData, setChartData] = useState<OHLCV[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -2096,11 +2119,24 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         endTime: '23:59',
         symbol: 'BTCUSDT',
         timeframe: '1h',
-        strategyType: 'ma_crossover',
+        strategyType: '',
         initialCapital: 10000,
         positionSize: 1,
         stopLoss: 2,
-        takeProfit: 4
+        takeProfit: 4,
+        aiRule: '',
+        fastPeriod: 10,
+        slowPeriod: 20,
+        rsiPeriod: 14,
+        overbought: 70,
+        oversold: 30,
+        fastEMA: 12,
+        slowEMA: 26,
+        signalPeriod: 9,
+        bbPeriod: 20,
+        bbStdDev: 2,
+        channelPeriod: 20,
+        multiplier: 2
       });
 
       toast({
@@ -2994,6 +3030,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         placeholder="Nhập tên thí nghiệm" 
                         value={backtestConfig.name}
                         onChange={(e) => handleBacktestConfigChange('name', e.target.value)}
+                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
                     </div>
                     <div className="space-y-2">
@@ -3002,6 +3039,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         placeholder="Nhập mô tả" 
                         value={backtestConfig.description}
                         onChange={(e) => handleBacktestConfigChange('description', e.target.value)}
+                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
                     </div>
                     {/* BỎ 2 mục ngày bắt đầu, ngày kết thúc ở đây */}
@@ -3041,6 +3079,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.fastPeriod || 10}
                             onChange={(e) => handleBacktestConfigChange('fastPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                         <div className="space-y-2">
@@ -3050,6 +3089,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.slowPeriod || 20}
                             onChange={(e) => handleBacktestConfigChange('slowPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                       </div>
@@ -3064,6 +3104,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.rsiPeriod || 14}
                             onChange={(e) => handleBacktestConfigChange('rsiPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                         <div className="space-y-2">
@@ -3074,6 +3115,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             max="100"
                             value={backtestConfig.overbought || 70}
                             onChange={(e) => handleBacktestConfigChange('overbought', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                         <div className="space-y-2">
@@ -3084,6 +3126,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             max="100"
                             value={backtestConfig.oversold || 30}
                             onChange={(e) => handleBacktestConfigChange('oversold', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                       </div>
@@ -3098,6 +3141,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.fastEMA || 12}
                             onChange={(e) => handleBacktestConfigChange('fastEMA', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                         <div className="space-y-2">
@@ -3107,6 +3151,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.slowEMA || 26}
                             onChange={(e) => handleBacktestConfigChange('slowEMA', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                         <div className="space-y-2">
@@ -3116,6 +3161,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.signalPeriod || 9}
                             onChange={(e) => handleBacktestConfigChange('signalPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                       </div>
@@ -3130,6 +3176,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.bbPeriod || 20}
                             onChange={(e) => handleBacktestConfigChange('bbPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                         <div className="space-y-2">
@@ -3140,6 +3187,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             step="0.1"
                             value={backtestConfig.bbStdDev || 2}
                             onChange={(e) => handleBacktestConfigChange('bbStdDev', parseFloat(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                       </div>
@@ -3154,6 +3202,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             min="1"
                             value={backtestConfig.channelPeriod || 20}
                             onChange={(e) => handleBacktestConfigChange('channelPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                         <div className="space-y-2">
@@ -3164,6 +3213,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             step="0.1"
                             value={backtestConfig.multiplier || 2}
                             onChange={(e) => handleBacktestConfigChange('multiplier', parseFloat(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
                       </div>
@@ -3176,6 +3226,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                           placeholder="Nhập rule giao dịch cho AI model (ví dụ: Mua khi dự báo tăng > 0.7, bán khi dự báo giảm > 0.7)"
                           value={backtestConfig.aiRule || ''}
                           onChange={e => handleBacktestConfigChange('aiRule', e.target.value)}
+                          className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                         />
                       </div>
                     )}
@@ -4618,6 +4669,19 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
     }
   };
 
+  // Thêm state cho indicator
+  const [indicatorData, setIndicatorData] = useState<any>(null);
+  useEffect(() => {
+    async function fetchIndicator() {
+      const res = await fetch(`/api/trading/bot/indicator-history?botId=${projectId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setIndicatorData(data);
+      }
+    }
+    fetchIndicator();
+  }, [projectId]);
+
   if (!project) {
     return (
       <div className="text-center p-8">
@@ -4880,6 +4944,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         </TabsContent>
 
         <TabsContent value="bots" className="space-y-6">
+          {/* Xoá Card chỉ số indicator & trigger ở đây */}
           <ProjectBotsTab projectId={projectId} backtests={backtests} />
         </TabsContent>
 

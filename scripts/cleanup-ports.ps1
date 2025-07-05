@@ -3,29 +3,51 @@
 
 Write-Host "🧹 Dọn dẹp ports cho Urus Studio..." -ForegroundColor Green
 
-# Kiểm tra và dừng port 9002 (Next.js dev server)
-$port9002 = netstat -ano | findstr :9002
-if ($port9002) {
-    Write-Host "🔍 Tìm thấy process đang sử dụng port 9002" -ForegroundColor Yellow
-    $pid = ($port9002[0] -split '\s+')[4]
-    Write-Host "🛑 Dừng process PID: $pid" -ForegroundColor Red
-    taskkill /F /PID $pid
-    Write-Host "✅ Port 9002 đã được giải phóng" -ForegroundColor Green
+# Script tự động cleanup port 9002
+# Chạy script này trước khi khởi động server để tránh lỗi EADDRINUSE
+
+Write-Host "Đang kiểm tra và cleanup port 9002..." -ForegroundColor Yellow
+
+# Tìm process đang sử dụng port 9002
+$processes = netstat -ano | findstr :9002
+
+if ($processes) {
+    Write-Host "Tìm thấy process đang sử dụng port 9002:" -ForegroundColor Red
+    $processes | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+    
+    # Lấy PID từ output
+    $pids = $processes | ForEach-Object {
+        $parts = $_ -split '\s+'
+        $parts[-1]  # Lấy phần tử cuối cùng (PID)
+    } | Sort-Object -Unique
+    
+    foreach ($pid in $pids) {
+        try {
+            Write-Host "Đang kill process PID: $pid" -ForegroundColor Yellow
+            taskkill /PID $pid /F
+            Write-Host "Đã kill thành công process PID: $pid" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "Không thể kill process PID: $pid - $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+    
+    # Đợi một chút để port được giải phóng
+    Start-Sleep -Seconds 2
+    
+    # Kiểm tra lại
+    $remaining = netstat -ano | findstr :9002
+    if ($remaining) {
+        Write-Host "Vẫn còn process sử dụng port 9002:" -ForegroundColor Red
+        $remaining | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+    } else {
+        Write-Host "Port 9002 đã được giải phóng thành công!" -ForegroundColor Green
+    }
 } else {
-    Write-Host "✅ Port 9002 đang trống" -ForegroundColor Green
+    Write-Host "Port 9002 không bị sử dụng." -ForegroundColor Green
 }
 
-# Kiểm tra và dừng port 3000 (backup port)
-$port3000 = netstat -ano | findstr :3000
-if ($port3000) {
-    Write-Host "🔍 Tìm thấy process đang sử dụng port 3000" -ForegroundColor Yellow
-    $pid = ($port3000[0] -split '\s+')[4]
-    Write-Host "🛑 Dừng process PID: $pid" -ForegroundColor Red
-    taskkill /F /PID $pid
-    Write-Host "✅ Port 3000 đã được giải phóng" -ForegroundColor Green
-} else {
-    Write-Host "✅ Port 3000 đang trống" -ForegroundColor Green
-}
+Write-Host "Cleanup hoàn tất!" -ForegroundColor Green
 
 Write-Host "🎉 Hoàn thành dọn dẹp ports!" -ForegroundColor Green
 Write-Host "💡 Bây giờ bạn có thể chạy: npm run dev" -ForegroundColor Cyan 

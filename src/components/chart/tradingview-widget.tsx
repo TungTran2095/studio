@@ -23,22 +23,33 @@ export const TradingViewWidget: React.FC<{ className?: string }> = memo(({ class
 
     // Configuration for the Advanced Real-Time Chart Widget
     const widgetConfig = {
-      "autosize": true,
-      "symbol": "BINANCE:BTCUSDT",
-      "interval": "D",
-      "timezone": "Etc/UTC",
-      "theme": initialTheme, // Luôn đồng bộ theme với hệ thống
-      "style": "1",
-      "locale": "en",
-      "enable_publishing": false,
-      "allow_symbol_change": true,
-      "withdateranges": true,
-      "hide_side_toolbar": false,
-      "hide_top_toolbar": false,
-      "studies": [
+      autosize: true,
+      symbol: "BINANCE:BTCUSDT",
+      interval: "D",
+      timezone: "Etc/UTC",
+      theme: initialTheme, // Luôn đồng bộ theme với hệ thống
+      style: "1",
+      locale: "en",
+      enable_publishing: false,
+      allow_symbol_change: true,
+      withdateranges: true,
+      hide_side_toolbar: false,
+      hide_top_toolbar: false,
+      studies: [
         "IchimokuCloud@tv-basicstudies"
       ],
-      "container_id": "tradingview_chart_container",
+      container_id: "tradingview_chart_container",
+      overrides: {
+        "paneProperties.background": initialTheme === 'dark' ? 'rgba(0,0,0,0)' : '#FFF7F3',
+        "paneProperties.backgroundType": 'solid',
+        "paneProperties.vertGridProperties.color": initialTheme === 'dark' ? "#2226" : "#eee6",
+        "paneProperties.horzGridProperties.color": initialTheme === 'dark' ? "#2226" : "#eee6",
+        "scalesProperties.backgroundColor": initialTheme === 'dark' ? 'rgba(0,0,0,0)' : '#FFF7F3',
+      },
+      studies_overrides: {
+        "volume.volume.color.0": "#00ff00",
+        "volume.volume.color.1": "#ff0000"
+      }
     };
 
     const script = document.createElement("script");

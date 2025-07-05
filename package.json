@@ -6,6 +6,8 @@
     "dev": "next dev -p 9002",
     "safe-dev": "node killport.js && next dev -p 9002",
     "super-safe-dev": "node scripts/safe-start.js",
+    "cleanup-port": "powershell -ExecutionPolicy Bypass -File scripts/cleanup-ports.ps1",
+    "dev-clean": "npm run cleanup-port && npm run dev",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",

@@ -13,6 +13,26 @@ interface BotExecutorConfig {
     stopLoss: number;
     takeProfit: number;
   };
+  timeframe: string;
+}
+
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:9002';
+
+// Helper function để chuyển đổi timeframe thành milliseconds
+function timeframeToMs(timeframe: string): number {
+  const match = timeframe.match(/^([0-9]+)([mhdw])$/i);
+  if (!match) return 60000; // Default 1m
+  
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+  
+  switch (unit) {
+    case 'm': return value * 60 * 1000;
+    case 'h': return value * 60 * 60 * 1000;
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+    default: return 60000;
+  }
 }
 
 export class BotExecutor {
@@ -28,21 +48,51 @@ export class BotExecutor {
       positionSize: 0,
       stopLoss: 0,
       takeProfit: 0
-    }
+    },
+    timeframe: '1m'
   };
   private isRunning: boolean = false;
   private currentPosition: any = null;
+  private lastExecutionTime: number = 0;
 
   constructor(bot: TradingBot) {
     this.bot = bot;
-    // Initialize config directly from the bot object
+    // Lấy đúng các trường từ cấu trúc config lồng
+    const config = (this.bot.config as any);
+    
+    // Sửa logic lấy account - kiểm tra cả 2 vị trí có thể
+    if (config.account) {
+      this.bot.config.account = config.account;
+    } else if (config.config?.account) {
+      this.bot.config.account = config.config.account;
+    }
+    
+    // Đảm bảo testnet được set đúng
+    if (this.bot.config.account.testnet === undefined) {
+      this.bot.config.account.testnet = false;
+    }
+    
     this.config = {
-      // Assuming symbol and other params are part of the main bot config
-      // This might need adjustment based on the actual structure of bot.config
-      symbol: (this.bot.config as any).symbol || 'BTCUSDT', 
-      strategy: this.bot.config.strategy,
-      riskManagement: this.bot.config.riskManagement,
+      symbol: config.config?.trading?.symbol || 'BTCUSDT',
+      strategy: config.config?.strategy,
+      riskManagement: {
+        initialCapital: config.config?.trading?.initialCapital,
+        positionSize: config.config?.trading?.positionSize,
+        stopLoss: config.config?.riskManagement?.stopLoss,
+        takeProfit: config.config?.riskManagement?.takeProfit
+      },
+      timeframe: config.config?.trading?.timeframe || '1m'
     };
+    
+    // Log để debug account config
+    console.log('[BotExecutor] Raw bot config:', JSON.stringify(this.bot.config, null, 2));
+    
+    // Thêm log để kiểm tra
+    console.log('BotExecutor config:', this.config);
+    console.log('[BotExecutor] Account config:', {
+      apiKey: this.bot.config.account.apiKey ? `${this.bot.config.account.apiKey.slice(0, 6)}...${this.bot.config.account.apiKey.slice(-4)}` : 'undefined',
+      testnet: this.bot.config.account.testnet
+    });
   }
 
   async initialize() {
@@ -50,8 +100,12 @@ export class BotExecutor {
       // The config is already initialized in the constructor.
       // We just need to check the API connection.
       
+      // Reset current position khi khởi tạo bot
+      this.currentPosition = null;
+      console.log('[BotExecutor] Reset current position to null');
+      
       // Check API connection by fetching account info
-      const accountRes = await fetch('/api/trading/binance/account', {
+      const accountRes = await fetch(`${API_BASE_URL}/api/trading/binance/account`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,20 +130,28 @@ export class BotExecutor {
   async start() {
     try {
       if (this.isRunning) return;
-      
+      console.log('[BotExecutor] Bắt đầu start() cho bot:', this.bot?.name);
+      console.log('[BotExecutor] Timeframe:', this.config.timeframe);
       const initialized = await this.initialize();
       if (!initialized) return;
 
       this.isRunning = true;
       await this.updateBotStatus('running');
 
+      // Tính toán interval dựa trên timeframe
+      const intervalMs = timeframeToMs(this.config.timeframe);
+      console.log(`[BotExecutor] Chạy với interval: ${intervalMs}ms (${this.config.timeframe})`);
+
       // Bắt đầu vòng lặp chính
       while (this.isRunning) {
+        console.log('[BotExecutor] Vòng lặp chính executeStrategy()...');
         await this.executeStrategy();
-        await new Promise(resolve => setTimeout(resolve, 10000)); // Đợi 10s giữa mỗi lần check
+        
+        // Đợi theo đúng timeframe thay vì cố định 10s
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
       }
     } catch (error) {
-      console.error('Error running bot:', error);
+      console.error('[BotExecutor] Error running bot:', error);
       await this.handleError(error);
     }
   }
@@ -101,19 +163,15 @@ export class BotExecutor {
 
   private async executeStrategy() {
     try {
-      // Lấy symbol và interval hợp lệ
-      const symbol = this.config.symbol || 'BTCUSDT';
-      const interval = '1m';
-      if (!symbol) {
-        console.warn('BotExecutor: symbol bị thiếu, dùng mặc định BTCUSDT');
-      }
-      // Lấy dữ liệu thị trường
-      const candlesRes = await fetch('/api/trading/binance/candles', {
+      console.log('[BotExecutor] Executing strategy...');
+      
+      // Lấy dữ liệu candles
+      const candlesRes = await fetch(`${API_BASE_URL}/api/trading/binance/candles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol,
-          interval,
+          symbol: this.config.symbol,
+          interval: this.config.timeframe,
           limit: 100,
           apiKey: this.bot.config.account.apiKey,
           apiSecret: this.bot.config.account.apiSecret,
@@ -121,86 +179,192 @@ export class BotExecutor {
         })
       });
 
-      if (!candlesRes.ok) throw new Error('Không thể lấy dữ liệu thị trường');
-      const res = await candlesRes.json();
-      const candles = res.candles;
-      if (!Array.isArray(candles)) {
-        console.error('API trả về dữ liệu nến không hợp lệ:', res);
-        throw new Error('Dữ liệu nến không hợp lệ');
+      if (!candlesRes.ok) {
+        const errorText = await candlesRes.text();
+        console.error('[BotExecutor] Error fetching candles:', errorText);
+        throw new Error(`Không thể lấy dữ liệu candles: ${candlesRes.status}`);
       }
 
-      // Tính toán tín hiệu dựa trên loại chiến lược
-      const signal = await this.calculateSignal(candles);
-
-      // Thực hiện giao dịch nếu có tín hiệu
-      if (signal) {
-        await this.executeTrade(signal);
+      const candlesData = await candlesRes.json();
+      
+      // Kiểm tra format dữ liệu trả về
+      if (!candlesData.candles || !Array.isArray(candlesData.candles) || candlesData.candles.length === 0) {
+        throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
       }
 
-      // Kiểm tra và quản lý vị thế hiện tại
-      if (this.currentPosition) {
+      console.log(`[BotExecutor] Fetched ${candlesData.candles.length} candles`);
+
+      // Format dữ liệu candles từ Binance API
+      const formattedCandles = candlesData.candles.map((candle: any[]) => ({
+        openTime: candle[0],
+        open: parseFloat(candle[1]),
+        high: parseFloat(candle[2]),
+        low: parseFloat(candle[3]),
+        close: parseFloat(candle[4]),
+        volume: parseFloat(candle[5]),
+        closeTime: candle[6]
+      }));
+
+      // Tính toán signal
+      const signal = await this.calculateSignal(formattedCandles);
+      console.log('[BotExecutor] Calculated signal:', signal);
+      console.log('[BotExecutor] Current position:', this.currentPosition);
+
+      // Kiểm tra position thực tế từ Binance
+      const hasRealPosition = await this.checkRealPosition();
+      console.log('[BotExecutor] Has real position from Binance:', hasRealPosition);
+
+      // Clear currentPosition nếu không có position thực tế trên Binance
+      if (this.currentPosition && !hasRealPosition) {
+        console.log('[BotExecutor] Clearing currentPosition because no real position exists');
+        this.currentPosition = null;
+      }
+
+      if (signal === 'buy' && !this.currentPosition && !hasRealPosition) {
+        console.log('[BotExecutor] Executing BUY signal');
+        await this.executeTrade('buy');
+      } else if (signal === 'sell' && !this.currentPosition && !hasRealPosition) {
+        console.log('[BotExecutor] Executing SELL signal');
+        await this.executeTrade('sell');
+      } else if (this.currentPosition || hasRealPosition) {
+        console.log('[BotExecutor] Managing existing position');
         await this.managePosition();
+      } else {
+        console.log('[BotExecutor] No action needed');
       }
+
+      // Cập nhật thời gian thực thi cuối
+      this.lastExecutionTime = Date.now();
+
     } catch (error) {
-      console.error('Error executing strategy:', error);
+      console.error('[BotExecutor] Error executing strategy:', error);
       await this.handleError(error);
     }
   }
 
-  private async calculateSignal(candles: any[]) {
-    const closes = candles.map(c => parseFloat(c.close));
-    const strategy = this.config.strategy;
+  private async calculateSignal(candles: any[]): Promise<'buy' | 'sell' | null> {
+    try {
+      console.log('[BotExecutor] Calculate Signal Debug - Starting signal calculation');
+      console.log('[BotExecutor] Calculate Signal Debug - Candles length:', candles.length);
+      
+      if (candles.length < 50) {
+        console.log('[BotExecutor] Calculate Signal Debug - Not enough data for signal calculation');
+        return null;
+      }
 
-    switch (strategy.type) {
-      case 'ma_crossover':
-        return this.calculateMACrossoverSignal(closes, strategy.parameters);
-      case 'rsi':
-        return this.calculateRSISignal(closes, strategy.parameters);
-      case 'bollinger_bands':
-        return this.calculateBollingerBandsSignal(closes, strategy.parameters);
-      default:
-        throw new Error(`Chiến lược không được hỗ trợ: ${strategy.type}`);
+      const closes = candles.map(c => c.close);
+      console.log('[BotExecutor] Calculate Signal Debug - Extracted closes length:', closes.length);
+      console.log('[BotExecutor] Calculate Signal Debug - First 5 closes:', closes.slice(0, 5));
+      console.log('[BotExecutor] Calculate Signal Debug - Last 5 closes:', closes.slice(-5));
+      
+      const strategy = this.config.strategy;
+      console.log('[BotExecutor] Calculate Signal Debug - Strategy:', strategy);
+
+      switch (strategy.type.toLowerCase()) {
+        case 'ma_crossover':
+        case 'ma_cross':
+          console.log('[BotExecutor] Calculate Signal Debug - Using MA_CROSSOVER strategy');
+          return this.calculateMACrossoverSignal(closes, strategy.parameters);
+        case 'rsi':
+          console.log('[BotExecutor] Calculate Signal Debug - Using RSI strategy');
+          return this.calculateRSISignal(closes, strategy.parameters);
+        case 'bollinger_bands':
+        case 'bollinger':
+        case 'bb':
+          console.log('[BotExecutor] Calculate Signal Debug - Using BOLLINGER_BANDS strategy');
+          return this.calculateBollingerBandsSignal(closes, strategy.parameters);
+        default:
+          console.warn('[BotExecutor] Calculate Signal Debug - Unknown strategy type:', strategy.type);
+          console.log('[BotExecutor] Calculate Signal Debug - Supported types: ma_crossover, rsi, bollinger_bands');
+          return null;
+      }
+    } catch (error) {
+      console.error('[BotExecutor] Calculate Signal Debug - Error calculating signal:', error);
+      return null;
     }
   }
 
-  private calculateMACrossoverSignal(closes: number[], params: any) {
-    const fastMA = this.calculateSMA(closes, params.fastPeriod);
-    const slowMA = this.calculateSMA(closes, params.slowPeriod);
+  private calculateMACrossoverSignal(closes: number[], params: any): 'buy' | 'sell' | null {
+    const fastPeriod = params.fastPeriod || 10;
+    const slowPeriod = params.slowPeriod || 20;
     
-    if (fastMA[fastMA.length - 2] <= slowMA[slowMA.length - 2] && 
-        fastMA[fastMA.length - 1] > slowMA[slowMA.length - 1]) {
+    const fastMA = this.calculateSMA(closes, fastPeriod);
+    const slowMA = this.calculateSMA(closes, slowPeriod);
+    
+    if (fastMA.length < 2 || slowMA.length < 2) return null;
+    
+    const currentFast = fastMA[fastMA.length - 1];
+    const previousFast = fastMA[fastMA.length - 2];
+    const currentSlow = slowMA[slowMA.length - 1];
+    const previousSlow = slowMA[slowMA.length - 2];
+    
+    // Golden cross: fast MA crosses above slow MA
+    if (previousFast <= previousSlow && currentFast > currentSlow) {
       return 'buy';
     }
     
-    if (fastMA[fastMA.length - 2] >= slowMA[slowMA.length - 2] && 
-        fastMA[fastMA.length - 1] < slowMA[slowMA.length - 1]) {
+    // Death cross: fast MA crosses below slow MA
+    if (previousFast >= previousSlow && currentFast < currentSlow) {
       return 'sell';
     }
-
+    
     return null;
   }
 
-  private calculateRSISignal(closes: number[], params: any) {
-    const rsi = this.calculateRSI(closes, params.period);
-    const lastRSI = rsi[rsi.length - 1];
-
-    if (lastRSI <= params.oversold) return 'buy';
-    if (lastRSI >= params.overbought) return 'sell';
-    return null;
+  private calculateRSISignal(closes: number[], params: any): 'buy' | 'sell' | null {
+    console.log('[BotExecutor] RSI Signal Debug - Starting calculation');
+    console.log('[BotExecutor] RSI Signal Debug - Parameters:', params);
+    console.log('[BotExecutor] RSI Signal Debug - Closes length:', closes.length);
+    
+    const period = params.period || 14;
+    const oversold = params.oversold || 30;
+    const overbought = params.overbought || 70;
+    
+    console.log(`[BotExecutor] RSI Signal Debug - Using period: ${period}, oversold: ${oversold}, overbought: ${overbought}`);
+    
+    const rsi = this.calculateRSI(closes, period);
+    console.log('[BotExecutor] RSI Signal Debug - RSI calculation result length:', rsi.length);
+    
+    if (rsi.length === 0) {
+      console.log('[BotExecutor] RSI Signal Debug - No RSI values calculated, returning null');
+      return null;
+    }
+    
+    const currentRSI = rsi[rsi.length - 1];
+    console.log(`[BotExecutor] RSI Signal Debug - Current RSI: ${currentRSI}`);
+    
+    if (currentRSI < oversold) {
+      console.log(`[BotExecutor] RSI Signal Debug - RSI ${currentRSI} < ${oversold}, returning BUY signal`);
+      return 'buy';
+    } else if (currentRSI > overbought) {
+      console.log(`[BotExecutor] RSI Signal Debug - RSI ${currentRSI} > ${overbought}, returning SELL signal`);
+      return 'sell';
+    } else {
+      console.log(`[BotExecutor] RSI Signal Debug - RSI ${currentRSI} in neutral range, returning null`);
+      return null;
+    }
   }
 
-  private calculateBollingerBandsSignal(closes: number[], params: any) {
+  private calculateBollingerBandsSignal(closes: number[], params: any): 'buy' | 'sell' | null {
     const period = params.period || 20;
     const stdDev = params.stdDev || 2;
+    
+    if (closes.length < period) return null;
+    
     const sma = this.calculateSMA(closes, period);
     const middle = sma[sma.length - 1];
     const std = this.calculateStdDev(closes.slice(-period));
     const upper = middle + (std * stdDev);
     const lower = middle - (std * stdDev);
-    const lastClose = closes[closes.length - 1];
-
-    if (lastClose <= lower) return 'buy';
-    if (lastClose >= upper) return 'sell';
+    
+    const currentPrice = closes[closes.length - 1];
+    
+    if (currentPrice <= lower) {
+      return 'buy';
+    } else if (currentPrice >= upper) {
+      return 'sell';
+    }
+    
     return null;
   }
 
@@ -214,34 +378,80 @@ export class BotExecutor {
   }
 
   private calculateRSI(data: number[], period: number): number[] {
+    console.log(`[BotExecutor] RSI Debug - Input data length: ${data.length}, period: ${period}`);
+    console.log(`[BotExecutor] RSI Debug - First 5 prices:`, data.slice(0, 5));
+    console.log(`[BotExecutor] RSI Debug - Last 5 prices:`, data.slice(-5));
+    
+    if (data.length < period + 1) {
+      console.error(`[BotExecutor] RSI Error - Not enough data. Need ${period + 1}, got ${data.length}`);
+      return [];
+    }
+
+    // Kiểm tra dữ liệu đầu vào
+    if (data.some(price => isNaN(price) || price <= 0)) {
+      console.error('[BotExecutor] RSI Error - Invalid price data detected');
+      return [];
+    }
+
     const rsi = [];
     let gains = 0;
     let losses = 0;
 
-    // Tính toán giá trị đầu tiên
-    for (let i = 1; i < period; i++) {
+    // Tính toán giá trị đầu tiên - sửa logic
+    for (let i = 1; i <= period; i++) {
       const diff = data[i] - data[i - 1];
-      if (diff >= 0) gains += diff;
-      else losses -= diff;
+      if (diff >= 0) {
+        gains += diff;
+      } else {
+        losses += Math.abs(diff);
+      }
     }
+
+    console.log(`[BotExecutor] RSI Debug - Initial gains: ${gains}, losses: ${losses}`);
 
     let avgGain = gains / period;
     let avgLoss = losses / period;
 
-    for (let i = period; i < data.length; i++) {
+    console.log(`[BotExecutor] RSI Debug - Initial avgGain: ${avgGain}, avgLoss: ${avgLoss}`);
+
+    // Tính RSI cho các giá trị tiếp theo
+    for (let i = period + 1; i < data.length; i++) {
       const diff = data[i] - data[i - 1];
+      
       if (diff >= 0) {
         avgGain = (avgGain * (period - 1) + diff) / period;
         avgLoss = (avgLoss * (period - 1)) / period;
       } else {
         avgGain = (avgGain * (period - 1)) / period;
-        avgLoss = (avgLoss * (period - 1) - diff) / period;
+        avgLoss = (avgLoss * (period - 1) + Math.abs(diff)) / period;
       }
 
-      const rs = avgGain / avgLoss;
-      rsi.push(100 - (100 / (1 + rs)));
+      // Xử lý trường hợp avgLoss = 0 để tránh NaN
+      let rs;
+      if (avgLoss === 0) {
+        rs = avgGain > 0 ? 100 : 0; // Nếu không có loss, RSI = 100 hoặc 0
+      } else {
+        rs = avgGain / avgLoss;
+      }
+
+      const rsiValue = 100 - (100 / (1 + rs));
+      
+      // Kiểm tra giá trị RSI hợp lệ
+      if (isNaN(rsiValue) || !isFinite(rsiValue)) {
+        console.error(`[BotExecutor] RSI Error - Invalid RSI value: ${rsiValue} at index ${i}`);
+        rsi.push(50); // Giá trị mặc định
+      } else {
+        rsi.push(rsiValue);
+      }
     }
 
+    console.log(`[BotExecutor] RSI Debug - Final avgGain: ${avgGain}, avgLoss: ${avgLoss}`);
+    console.log(`[BotExecutor] RSI Debug - RSI array length: ${rsi.length}`);
+    if (rsi.length > 0) {
+      console.log(`[BotExecutor] RSI Debug - Last RSI: ${rsi[rsi.length - 1]}`);
+      console.log(`[BotExecutor] RSI Debug - Last 5 RSI values:`, rsi.slice(-5));
+    }
+    
     return rsi;
   }
 
@@ -254,11 +464,9 @@ export class BotExecutor {
 
   private async executeTrade(signal: 'buy' | 'sell') {
     try {
-      if (this.currentPosition) return; // Không mở vị thế mới nếu đang có vị thế
-
-      // Lấy thông tin tài khoản
-      const accountRes = await fetch('/api/trading/binance/account', {
-        method: 'PATCH',
+      // Lấy số dư USDT
+      const balanceRes = await fetch(`${API_BASE_URL}/api/trading/binance/balance`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: this.bot.config.account.apiKey,
@@ -267,16 +475,18 @@ export class BotExecutor {
         })
       });
 
-      if (!accountRes.ok) throw new Error('Không thể lấy thông tin tài khoản');
-      const accountInfo = await accountRes.json();
-      const balance = parseFloat(accountInfo.balances.find((b: any) => b.asset === 'USDT')?.free || '0');
-      
-      if (balance < this.config.riskManagement.initialCapital) {
-        throw new Error('Không đủ số dư để giao dịch');
+      if (!balanceRes.ok) throw new Error('Không thể lấy số dư');
+      const balanceData = await balanceRes.json();
+      const balance = parseFloat(balanceData.USDT || '0');
+      console.log('[BotExecutor] USDT Balance:', balance);
+
+      if (balance < 10) {
+        console.log('[BotExecutor] Insufficient balance for trading');
+        return;
       }
 
       // Lấy giá hiện tại
-      const candlesRes = await fetch('/api/trading/binance/candles', {
+      const candlesRes = await fetch(`${API_BASE_URL}/api/trading/binance/candles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -290,14 +500,34 @@ export class BotExecutor {
       });
 
       if (!candlesRes.ok) throw new Error('Không thể lấy giá hiện tại');
-      const candles = await candlesRes.json();
-      const currentPrice = parseFloat(candles[0].close);
+      const candlesData = await candlesRes.json();
+      
+      // Kiểm tra format dữ liệu trả về
+      if (!candlesData.candles || !Array.isArray(candlesData.candles) || candlesData.candles.length === 0) {
+        throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
+      }
+      
+      // Format dữ liệu candles từ Binance API
+      // Binance API trả về: [openTime, open, high, low, close, volume, closeTime, ...]
+      const candle = candlesData.candles[0];
+      if (!Array.isArray(candle) || candle.length < 5) {
+        throw new Error('Format dữ liệu candle không hợp lệ');
+      }
+      
+      const currentPrice = parseFloat(candle[4]); // close price ở index 4
+      console.log('[BotExecutor] Current price:', currentPrice);
       
       const positionSize = (balance * this.config.riskManagement.positionSize) / 100;
-      const quantity = positionSize / currentPrice;
+      let quantity = positionSize / currentPrice;
+      
+      // Đảm bảo quantity tối thiểu (ít nhất 10 USDT)
+      const minPositionSize = 10; // 10 USDT tối thiểu
+      if (positionSize < minPositionSize) {
+        quantity = minPositionSize / currentPrice;
+      }
 
       // Tạo lệnh market
-      const orderRes = await fetch('/api/trading/binance/order', {
+      const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -311,8 +541,12 @@ export class BotExecutor {
         })
       });
 
-      if (!orderRes.ok) throw new Error('Không thể tạo lệnh giao dịch');
-      const order = await orderRes.json();
+      console.log('[BotExecutor] Order API response status:', orderRes.status);
+      const orderBody = await orderRes.text();
+      console.log('[BotExecutor] Order API response body:', orderBody);
+
+      if (!orderRes.ok) throw new Error('Không thể tạo lệnh giao dịch: ' + orderBody);
+      const order = JSON.parse(orderBody);
 
       this.currentPosition = {
         entryPrice: parseFloat(order.fills[0].price),
@@ -325,6 +559,19 @@ export class BotExecutor {
           ? currentPrice * (1 + this.config.riskManagement.takeProfit / 100)
           : currentPrice * (1 - this.config.riskManagement.takeProfit / 100)
       };
+
+      // Lưu giao dịch vào database
+      await this.saveTrade({
+        symbol: this.config.symbol,
+        side: signal,
+        type: 'market',
+        quantity: quantity,
+        entry_price: parseFloat(order.fills[0].price),
+        stop_loss: this.currentPosition.stopLoss,
+        take_profit: this.currentPosition.takeProfit,
+        status: 'open',
+        open_time: new Date().toISOString()
+      });
 
       // Cập nhật thống kê
       await this.updateBotStats({
@@ -342,7 +589,7 @@ export class BotExecutor {
   private async managePosition() {
     try {
       // Lấy giá hiện tại
-      const candlesRes = await fetch('/api/trading/binance/candles', {
+      const candlesRes = await fetch(`${API_BASE_URL}/api/trading/binance/candles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -356,10 +603,33 @@ export class BotExecutor {
       });
 
       if (!candlesRes.ok) throw new Error('Không thể lấy giá hiện tại');
-      const candles = await candlesRes.json();
-      const currentPrice = parseFloat(candles[0].close);
+      const candlesData = await candlesRes.json();
+      
+      // Kiểm tra format dữ liệu trả về
+      if (!candlesData.candles || !Array.isArray(candlesData.candles) || candlesData.candles.length === 0) {
+        throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
+      }
+      
+      // Format dữ liệu candles từ Binance API
+      const candle = candlesData.candles[0];
+      if (!Array.isArray(candle) || candle.length < 5) {
+        throw new Error('Format dữ liệu candle không hợp lệ');
+      }
+      
+      const currentPrice = parseFloat(candle[4]); // close price ở index 4
 
-      if (!this.currentPosition) return;
+      if (!this.currentPosition) {
+        console.log('[BotExecutor] No current position to manage');
+        return;
+      }
+
+      // Kiểm tra position thực tế trước khi manage
+      const hasRealPosition = await this.checkRealPosition();
+      if (!hasRealPosition) {
+        console.log('[BotExecutor] No real position exists, clearing currentPosition');
+        this.currentPosition = null;
+        return;
+      }
 
       let shouldClose = false;
       let profit = 0;
@@ -384,7 +654,7 @@ export class BotExecutor {
 
       if (shouldClose) {
         // Đóng vị thế
-        const orderRes = await fetch('/api/trading/binance/order', {
+        const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -399,6 +669,17 @@ export class BotExecutor {
         });
 
         if (!orderRes.ok) throw new Error('Không thể đóng vị thế');
+
+        const closeOrder = JSON.parse(await orderRes.text());
+        const exitPrice = parseFloat(closeOrder.fills[0].price);
+
+        // Cập nhật giao dịch đã đóng
+        await this.updateLastTrade({
+          exit_price: exitPrice,
+          status: 'closed',
+          close_time: new Date().toISOString(),
+          pnl: profit
+        });
 
         // Cập nhật thống kê
         const newTotalProfit = this.bot.total_profit + profit;
@@ -425,6 +706,11 @@ export class BotExecutor {
         console.error('Supabase client not initialized');
         return;
       }
+      if (!this.bot.id) {
+        console.error('Bot id is undefined, cannot update status');
+        return;
+      }
+      console.log('Update bot status:', { id: this.bot.id, status });
       const { error } = await supabase
         .from('trading_bots')
         .update({ 
@@ -434,7 +720,10 @@ export class BotExecutor {
         })
         .eq('id', this.bot.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase update error:', error);
+        throw error;
+      }
     } catch (error) {
       console.error('Error updating bot status:', error);
     }
@@ -446,15 +735,40 @@ export class BotExecutor {
         console.error('Supabase client not initialized');
         return;
       }
+      
+      // Chỉ update các trường cơ bản để tránh lỗi schema
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      };
+      
+      // Chỉ thêm các trường nếu chúng tồn tại
+      if (stats.total_trades !== undefined) {
+        updateData.total_trades = stats.total_trades;
+      }
+      if (stats.total_profit !== undefined) {
+        updateData.total_profit = stats.total_profit;
+      }
+      if (stats.win_rate !== undefined) {
+        updateData.win_rate = stats.win_rate;
+      }
+      
       const { error } = await supabase
         .from('trading_bots')
-        .update({
-          ...stats,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', this.bot.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase update error:', error);
+        // Nếu lỗi schema, chỉ update status
+        await supabase
+          .from('trading_bots')
+          .update({ 
+            status: this.bot.status,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', this.bot.id);
+        return;
+      }
 
       // Cập nhật thông tin local
       this.bot = {
@@ -482,6 +796,143 @@ export class BotExecutor {
         .eq('id', this.bot.id);
     } catch (dbError) {
       console.error('Error handling bot error:', dbError);
+    }
+  }
+
+  private async saveTrade(tradeData: {
+    symbol: string;
+    side: string;
+    type: string;
+    quantity: number;
+    entry_price: number;
+    stop_loss: number;
+    take_profit: number;
+    status: string;
+    open_time: string;
+  }) {
+    try {
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
+      }
+      
+      console.log('[BotExecutor] Saving trade to database:', tradeData);
+      
+      const { data, error } = await supabase
+        .from('trades')
+        .insert({
+          bot_id: this.bot.id,
+          ...tradeData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[BotExecutor] Error saving trade:', error);
+      } else {
+        console.log('[BotExecutor] Trade saved successfully:', data);
+      }
+    } catch (error) {
+      console.error('[BotExecutor] Error saving trade:', error);
+    }
+  }
+
+  private async updateLastTrade(updateData: {
+    exit_price?: number;
+    status: string;
+    close_time?: string;
+    pnl?: number;
+  }) {
+    try {
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
+      }
+      
+      console.log('[BotExecutor] Updating last trade:', updateData);
+      
+      // Tìm giao dịch mở cuối cùng của bot này
+      const { data: lastTrade, error: fetchError } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('bot_id', this.bot.id)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (fetchError || !lastTrade) {
+        console.error('[BotExecutor] No open trade found to update:', fetchError);
+        return;
+      }
+
+      // Cập nhật giao dịch
+      const { error: updateError } = await supabase
+        .from('trades')
+        .update({
+          ...updateData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', lastTrade.id);
+
+      if (updateError) {
+        console.error('[BotExecutor] Error updating trade:', updateError);
+      } else {
+        console.log('[BotExecutor] Trade updated successfully');
+      }
+    } catch (error) {
+      console.error('[BotExecutor] Error updating trade:', error);
+    }
+  }
+
+  private async checkRealPosition(): Promise<boolean> {
+    try {
+      // Lấy thông tin position từ Binance
+      const balanceRes = await fetch(`${API_BASE_URL}/api/trading/binance/balance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: this.bot.config.account.apiKey,
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
+        })
+      });
+
+      if (!balanceRes.ok) return false;
+      
+      const balanceData = await balanceRes.json();
+      const btcBalance = parseFloat(balanceData.BTC || '0');
+      
+      console.log('[BotExecutor] BTC balance from Binance:', btcBalance);
+      return btcBalance > 0.0001; // Có position nếu BTC > 0.0001
+      
+    } catch (error) {
+      console.error('[BotExecutor] Error checking real position:', error);
+      return false;
+    }
+  }
+
+  // Thêm hàm log indicator
+  private async logIndicator(indicator: string, value: number) {
+    if (!this.bot?.id) return;
+    try {
+      console.log('[BotExecutor] Ghi log indicator:', indicator, value);
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
+      }
+      await supabase
+        .from('bot_indicator_logs')
+        .insert({
+          bot_id: this.bot.id,
+          indicator,
+          value,
+          time: new Date().toISOString()
+        });
+    } catch (err) {
+      console.error('[BotExecutor] Lỗi ghi log indicator:', err);
     }
   }
 } 
