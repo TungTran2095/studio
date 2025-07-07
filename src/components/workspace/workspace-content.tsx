@@ -29,9 +29,20 @@ import {
   Activity
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle'; // Import ThemeToggle
+import { TotalAssetsCard } from "@/components/trading/total-assets-card";
+import { useEffect, useState } from 'react';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
+import { supabase } from '@/lib/supabase-client';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 
 interface WorkspaceContentProps {
   activeModule: ModuleId;
+}
+
+interface NewsArticle {
+  id: string;
+  title: string;
+  url: string;
 }
 
 const iconMap = {
@@ -45,6 +56,290 @@ const iconMap = {
   BookOpen
 };
 
+// NewsTicker: bảng chạy tin tức ngang
+function NewsTicker() {
+  const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchNews = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch('/api/market-data/news?action=all_sources&limit=10');
+        const result = await response.json();
+        if (result.success) {
+          setArticles(result.data);
+        }
+      } catch (error) {
+        // ignore
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchNews();
+    // Cập nhật mỗi 2 phút
+    const interval = setInterval(fetchNews, 120000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (isLoading && articles.length === 0) return null;
+  if (!articles || articles.length === 0) return null;
+
+  return (
+    <div
+      className="w-full bg-card border border-primary/30 rounded-lg mb-2 flex items-center h-12 px-2 overflow-x-hidden"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
+      <span className="font-semibold text-primary mr-4 flex-shrink-0">📰 Tin mới:</span>
+      <div
+        className="flex animate-marquee"
+        style={{ gap: 0, minWidth: '100%', overflow: 'hidden' }}
+      >
+        {articles.map((article, idx) => (
+          <a
+            key={article.id}
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-700 hover:underline flex-shrink-0 px-2"
+            title={article.title}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {article.title}
+            {idx !== articles.length - 1 && <span className="mx-2 text-muted-foreground">|</span>}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Thêm hàm renderJsonField để phân giải jsonb
+function renderJsonField(value: any) {
+  if (typeof value === 'object' && value !== null) {
+    if (Array.isArray(value)) {
+      return (
+        <ul className="list-disc pl-4">
+          {value.map((item, idx) => (
+            <li key={idx}>{renderJsonField(item)}</li>
+          ))}
+        </ul>
+      );
+    } else {
+      return (
+        <table className="w-full text-xs border border-muted-foreground/10 mb-2">
+          <tbody>
+            {Object.entries(value).map(([k, v]) => (
+              <tr key={k}>
+                <td className="font-semibold pr-2 text-muted-foreground whitespace-nowrap align-top">{k}</td>
+                <td className="break-all">{renderJsonField(v)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
+  }
+  return <span>{String(value)}</span>;
+}
+
+// Hàm forward mở modal
+function handleForward(type: string, data: any) {
+  setModalData({ type, data });
+  setModalOpen(true);
+}
+
+// Modal chi tiết
+function DetailModal({ open, onClose, type, data }: { open: boolean, onClose: () => void, type: string, data: any }) {
+  const jsonFields = ['metrics', 'config', 'params', 'result', 'extra', 'details'];
+  if (!data) return null;
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl relative">
+        {/* Nút đóng X debug - màu đỏ, border đen, font trắng, z rất cao */}
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 z-[99999] text-2xl font-bold text-white bg-red-600 rounded-full hover:bg-red-700 focus:outline-none border-2 border-black"
+          aria-label="Đóng"
+          type="button"
+          style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          ×
+        </button>
+        <DialogHeader>
+          <DialogTitle>
+            Chi tiết {type === 'model' ? 'Mô hình' : type === 'experiment' ? 'Thí nghiệm' : 'Bot'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="overflow-auto max-h-[60vh]">
+          <table className="w-full text-sm mb-2">
+            <tbody>
+              {Object.entries(data).map(([key, value]) => (
+                <tr key={key}>
+                  <td className="font-semibold pr-2 text-muted-foreground whitespace-nowrap align-top">{key}</td>
+                  <td className="break-all">
+                    {jsonFields.includes(key) && typeof value === 'object' && value !== null
+                      ? renderJsonField(value)
+                      : String(value)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Component TreeView cho Nghiên cứu Định lượng & Phát triển Mô hình
+function ResearchTreeView() {
+  const [treeData, setTreeData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDetail, setSelectedDetail] = useState<{type: string, data: any} | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalData, setModalData] = useState<{type: string, data: any} | null>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      if (!supabase) { setTreeData([]); setLoading(false); return; }
+      const { data: projects } = await supabase.from('research_projects').select('*');
+      const { data: models } = await supabase.from('research_models').select('*');
+      const { data: experiments } = await supabase.from('research_experiments').select('*');
+      let bots: any[] = [];
+      try {
+        const botsRes = await supabase.from('trading_bots').select('*');
+        bots = botsRes.data || [];
+      } catch { bots = []; }
+      const tree = (projects || []).map((project: any) => ({
+        ...project,
+        models: (models || []).filter((m: any) => m.project_id === project.id),
+        experiments: (experiments || []).filter((e: any) => e.project_id === project.id),
+        bots: (bots || []).filter((b: any) => b.project_id === project.id),
+      }));
+      setTreeData(tree);
+      setLoading(false);
+    }
+    fetchData();
+  }, []);
+
+  function renderDetail() {
+    if (!selectedDetail) return null;
+    const { type, data } = selectedDetail;
+    // Các trường jsonb phổ biến
+    const jsonFields = ['metrics', 'config', 'params', 'result', 'extra', 'details'];
+    return (
+      <Card className="mt-4 border border-primary/30">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Chi tiết {type === 'model' ? 'Mô hình' : type === 'experiment' ? 'Thí nghiệm' : 'Bot'}
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-2"
+              onClick={() => handleForward(type, data)}
+            >
+              Xem chi tiết
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm mb-2">
+            <tbody>
+              {Object.entries(data).map(([key, value]) => (
+                <tr key={key}>
+                  <td className="font-semibold pr-2 text-muted-foreground whitespace-nowrap align-top">{key}</td>
+                  <td className="break-all">
+                    {jsonFields.includes(key) && typeof value === 'object' && value !== null
+                      ? renderJsonField(value)
+                      : String(value)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (loading) return <Card className="flex-1 min-w-[320px] flex items-center justify-center"><span>Đang tải dữ liệu...</span></Card>;
+
+  return (
+    <>
+      <Card className="flex-1 min-w-[320px]">
+        <CardHeader>
+          <CardTitle className="text-base">Nghiên cứu & Mô hình</CardTitle>
+          <CardDescription>Danh sách dự án, mô hình, thí nghiệm, bot</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Accordion type="multiple" className="w-full">
+            {treeData.map(project => (
+              <AccordionItem value={project.id} key={project.id}>
+                <AccordionTrigger>{project.name}</AccordionTrigger>
+                <AccordionContent>
+                  {/* Cây con cho Mô hình */}
+                  <Accordion type="single" collapsible className="mb-2">
+                    <AccordionItem value="models">
+                      <AccordionTrigger>Mô hình ({project.models.length})</AccordionTrigger>
+                      <AccordionContent>
+                        <ul className="pl-4 space-y-1">
+                          {project.models.length === 0 && <li className="text-xs text-muted-foreground">Chưa có mô hình</li>}
+                          {project.models.map((model: any) => (
+                            <li key={model.id} className="flex items-center gap-2 text-sm cursor-pointer hover:underline" onClick={() => setSelectedDetail({type: 'model', data: model})}>
+                              <span className="text-blue-600">{model.name}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                  {/* Cây con cho Thí nghiệm */}
+                  <Accordion type="single" collapsible className="mb-2">
+                    <AccordionItem value="experiments">
+                      <AccordionTrigger>Thí nghiệm ({project.experiments.length})</AccordionTrigger>
+                      <AccordionContent>
+                        <ul className="pl-4 space-y-1">
+                          {project.experiments.length === 0 && <li className="text-xs text-muted-foreground">Chưa có thí nghiệm</li>}
+                          {project.experiments.map((exp: any) => (
+                            <li key={exp.id} className="flex items-center gap-2 text-sm cursor-pointer hover:underline" onClick={() => setSelectedDetail({type: 'experiment', data: exp})}>
+                              <span className="text-green-600">{exp.name || exp.title}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                  {/* Cây con cho Bot */}
+                  <Accordion type="single" collapsible>
+                    <AccordionItem value="bots">
+                      <AccordionTrigger>Bot ({project.bots.length})</AccordionTrigger>
+                      <AccordionContent>
+                        <ul className="pl-4 space-y-1">
+                          {project.bots.length === 0 && <li className="text-xs text-muted-foreground">Chưa có bot</li>}
+                          {project.bots.map((bot: any) => (
+                            <li key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer hover:underline" onClick={() => setSelectedDetail({type: 'bot', data: bot})}>
+                              <span className="text-yellow-600">{bot.name || bot.title}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+          {renderDetail()}
+        </CardContent>
+      </Card>
+      {/* Modal chi tiết */}
+      <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} type={modalData?.type || ''} data={modalData?.data} />
+    </>
+  );
+}
+
 // Component cho Dashboard chung (module hiện tại)
 function DashboardModule() {
   return (
@@ -56,7 +351,7 @@ function DashboardModule() {
             <h1 className="text-2xl font-bold">Dashboard Chung</h1>
             <p className="text-muted-foreground">Tổng quan thị trường và tài sản</p>
           </div>
-          <ThemeToggle /> {/* Add ThemeToggle here */}
+          <ThemeToggle />
         </div>
         <Badge variant="secondary" className="flex items-center gap-1">
           <Activity className="h-3 w-3" />
@@ -64,10 +359,44 @@ function DashboardModule() {
         </Badge>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[600px]">
+      {/* News Ticker ở trên dãy card */}
+      <NewsTicker />
+
+      {/* Dãy card nhỏ: Tổng tài sản + placeholder */}
+      <div className="flex flex-row gap-4 mb-2 w-full">
+        <div className="w-1/5 min-w-[160px]">
+          <TotalAssetsCard />
+        </div>
+        <div className="w-1/5 min-w-[160px]">
+          <Card className="p-2 flex flex-col items-start justify-center shadow-sm border border-primary/30">
+            <CardContent className="p-2 flex flex-col gap-1">
+              <div className="text-xs font-semibold text-muted-foreground mb-1">Lợi nhuận</div>
+              <div className="text-sm font-bold text-muted">--</div>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="w-1/5 min-w-[160px]">
+          <Card className="p-2 flex flex-col items-start justify-center shadow-sm border border-primary/30">
+            <CardContent className="p-2 flex flex-col gap-1">
+              <div className="text-xs font-semibold text-muted-foreground mb-1">Đòn bẩy</div>
+              <div className="text-sm font-bold text-muted">--</div>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="w-1/5 min-w-[160px]">
+          <Card className="p-2 flex flex-col items-start justify-center shadow-sm border border-primary/30">
+            <CardContent className="p-2 flex flex-col gap-1">
+              <div className="text-xs font-semibold text-muted-foreground mb-1">Tài sản khác</div>
+              <div className="text-sm font-bold text-muted">--</div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Main Content: Chart và Quản lý tài khoản cùng hàng */}
+      <div className="flex flex-row gap-4 min-h-[400px] w-full">
         {/* Chart Panel */}
-        <div className="lg:col-span-2 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
           <Card className="flex-1 flex flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -79,19 +408,22 @@ function DashboardModule() {
               <TradingViewWidget className="h-full w-full flex-1" />
             </CardContent>
           </Card>
+          {/* Thêm TreeView bên dưới Chart */}
+          <div className="mt-4">
+            <ResearchTreeView />
+          </div>
         </div>
-
-        {/* Side Panel */}
-        <div className="flex flex-col gap-4">
-          {/* Asset Summary */}
+        {/* Asset Summary Panel */}
+        <div className="w-1/3 min-w-[320px] flex flex-col">
           <Card className="flex-1">
             <AssetSummary isExpanded={true} onToggle={() => {}} />
           </Card>
-
-          {/* Trading Panel */}
-          <Card className="flex-1">
-            <TradingPanel />
-          </Card>
+          {/* Panel Giao dịch */}
+          <div className="mt-4">
+            <Card className="flex-1">
+              <TradingPanel />
+            </Card>
+          </div>
         </div>
       </div>
     </div>

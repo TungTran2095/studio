@@ -25,6 +25,7 @@ import {
   Play,
   Pause
 } from 'lucide-react';
+import { TotalAssetsCard } from '@/components/trading/total-assets-card';
 
 interface EnhancedMarketData {
   symbol: string;
@@ -341,6 +342,9 @@ export function RealTimeDataMonitor() {
               {!isMonitoring && ' • Monitoring paused'}
             </AlertDescription>
           </Alert>
+
+          {/* Tổng tài sản */}
+          <TotalAssetsCard />
 
           {/* Market Data Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

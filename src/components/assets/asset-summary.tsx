@@ -280,42 +280,60 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {accounts.length > 0 ? accounts.map(acc => {
-                    // Tính tổng BTC, tổng USDT, tổng tài sản quy đổi
-                    const btcAsset = acc.assets.find(a => a.symbol === 'BTC');
-                    const usdtAsset = acc.assets.find(a => a.symbol === 'USDT');
-                    const btc = btcAsset ? btcAsset.quantity : 0;
-                    const btcValue = btcAsset ? btcAsset.totalValue : 0;
-                    const usdt = usdtAsset ? usdtAsset.quantity : 0;
-                    // Tổng tài sản quy đổi: BTC (theo USDT) + USDT
-                    const total = btcValue + usdt;
-                    return (
-                      <TableRow key={acc.id}>
-                        <TableCell>{acc.name || 'Binance'}</TableCell>
-                        <TableCell className="text-right">{btc.toFixed(8)} ({btcValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT)</TableCell>
-                        <TableCell className="text-right">{usdt.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
-                        <TableCell className="text-right">{total.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT</TableCell>
-                        <TableCell className="text-right">
-                          <Button 
-                            size="sm" 
-                            variant="destructive"
-                            onClick={async () => {
-                              const { error } = await deleteBinanceAccount(acc.name || '', acc.apiKey);
-                              if (error) {
-                                toast({ title: 'Lỗi khi xóa database', description: getErrorMessage(error), variant: 'destructive' });
-                                return;
-                              }
-                              removeAccount(acc.id);
-                              toast({ title: 'Đã xóa tài khoản', description: 'Tài khoản đã được xóa thành công', variant: 'default' });
-                            }}
-                          >
-                            Xóa
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }) : (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Chưa có tài khoản nào</TableCell></TableRow>
+                  {accounts.length > 0 ? (
+                    <>
+                      {accounts.map(acc => {
+                        // Tính tổng BTC, tổng USDT, tổng tài sản quy đổi
+                        const btcAsset = acc.assets.find(a => a.symbol === 'BTC');
+                        const usdtAsset = acc.assets.find(a => a.symbol === 'USDT');
+                        const btc = btcAsset ? btcAsset.quantity : 0;
+                        const btcValue = btcAsset ? btcAsset.totalValue : 0;
+                        const usdt = usdtAsset ? usdtAsset.quantity : 0;
+                        // Tổng tài sản quy đổi: BTC (theo USDT) + USDT
+                        const total = btcValue + usdt;
+                        return (
+                          <TableRow key={acc.id}>
+                            <TableCell>{acc.name || 'Binance'}</TableCell>
+                            <TableCell className="text-right">{btc.toFixed(8)} ({btcValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT)</TableCell>
+                            <TableCell className="text-right">{usdt.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                            <TableCell className="text-right">{total.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT</TableCell>
+                            <TableCell className="text-right">
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                onClick={async () => {
+                                  const { error } = await deleteBinanceAccount(acc.name || '', acc.apiKey);
+                                  if (error) {
+                                    toast({ title: 'Lỗi khi xóa database', description: getErrorMessage(error), variant: 'destructive' });
+                                    return;
+                                  }
+                                  removeAccount(acc.id);
+                                  toast({ title: 'Đã xóa tài khoản', description: 'Tài khoản đã được xóa thành công', variant: 'default' });
+                                }}
+                              >
+                                Xóa
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {/* Thêm dòng trống nếu thiếu */}
+                      {Array.from({ length: 10 - accounts.length }).map((_, idx) => (
+                        <TableRow key={`empty-${idx}`}>
+                          <TableCell colSpan={5} className="h-8 bg-muted/10" />
+                        </TableRow>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Chưa có tài khoản nào</TableCell></TableRow>
+                      {/* Nếu chưa có tài khoản, vẫn render 9 dòng trống */}
+                      {Array.from({ length: 9 }).map((_, idx) => (
+                        <TableRow key={`empty-init-${idx}`}>
+                          <TableCell colSpan={5} className="h-8 bg-muted/10" />
+                        </TableRow>
+                      ))}
+                    </>
                   )}
                 </TableBody>
               </Table>
