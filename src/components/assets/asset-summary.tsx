@@ -89,6 +89,9 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     isTestnet: false,
   });
   const [loadingAccounts, setLoadingAccounts] = useState<string[]>([]); // Danh sách accountId đang loading
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   const activeAccount = accounts.find(acc => acc.id === activeAccountId) || null;
 
@@ -217,6 +220,17 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
     // eslint-disable-next-line
   }, []);
 
+  // Lấy danh sách giao dịch đã lọc
+  const filteredTrades = accounts.length > 0 ? accounts
+    .filter(acc => selectedAccountId === "all" || acc.id === selectedAccountId)
+    .flatMap(acc => acc.trades)
+    .filter(trade => {
+      let valid = true;
+      if (dateFrom) valid = valid && new Date(trade.time) >= new Date(dateFrom);
+      if (dateTo) valid = valid && new Date(trade.time) <= new Date(dateTo);
+      return valid;
+    }) : [];
+
   // UI danh sách tài khoản
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
@@ -309,7 +323,41 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
           </TabsContent>
           {/* Tab lịch sử giao dịch */}
           <TabsContent value="history" className="flex-1 flex flex-col">
-            <ScrollArea className="flex-1">
+            {/* Filter UI */}
+            <div className="flex flex-wrap gap-2 mb-2 items-end">
+              <div>
+                <label className="block text-xs font-medium mb-1">Tài khoản</label>
+                <select
+                  className="border rounded px-2 py-1 text-xs"
+                  value={selectedAccountId}
+                  onChange={e => setSelectedAccountId(e.target.value)}
+                >
+                  <option value="all">Tất cả</option>
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.name || 'Binance'}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Từ ngày</label>
+                <input
+                  type="date"
+                  className="border rounded px-2 py-1 text-xs"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Đến ngày</label>
+                <input
+                  type="date"
+                  className="border rounded px-2 py-1 text-xs"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex-1 max-h-[400px] overflow-y-auto">
               <Table className="w-full text-xs">
                 <TableHeader>
                   <TableRow>
@@ -322,21 +370,25 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {accounts.length > 0 && accounts.some(acc => acc.trades.length > 0) ? accounts.flatMap(acc => acc.trades.map(trade => (
-                    <TableRow key={acc.id + '-' + trade.id}>
-                      <TableCell>{acc.name || 'Binance'}</TableCell>
-                      <TableCell>{trade.symbol}</TableCell>
-                      <TableCell>{trade.isBuyer ? 'BUY' : 'SELL'}</TableCell>
-                      <TableCell className="text-right">{trade.price}</TableCell>
-                      <TableCell className="text-right">{trade.qty}</TableCell>
-                      <TableCell className="text-right">{new Date(trade.time).toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))) : (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Không có lịch sử giao dịch</TableCell></TableRow>
-                  )}
+                  {filteredTrades.length > 0 ?
+                    filteredTrades.map(trade => {
+                      const acc = accounts.find(a => a.trades.some(t => t.id === trade.id));
+                      return (
+                        <TableRow key={(acc?.id || "") + '-' + trade.id}>
+                          <TableCell>{acc?.name || 'Binance'}</TableCell>
+                          <TableCell>{trade.symbol}</TableCell>
+                          <TableCell>{trade.isBuyer ? 'BUY' : 'SELL'}</TableCell>
+                          <TableCell className="text-right">{trade.price}</TableCell>
+                          <TableCell className="text-right">{trade.qty}</TableCell>
+                          <TableCell className="text-right">{new Date(trade.time).toLocaleString()}</TableCell>
+                        </TableRow>
+                      );
+                    }) : (
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Không có lịch sử giao dịch</TableCell></TableRow>
+                    )}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>
