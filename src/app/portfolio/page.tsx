@@ -44,7 +44,7 @@ export default function PortfolioPage() {
 
   // Tính tổng giá trị và cập nhật các giá trị chính
   useEffect(() => {
-    if (assets.length > 0) {
+    if ((assets || []).length > 0) {
       // Tính tổng giá trị danh mục
       const totalValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
       setPortfolioValue(totalValue);
@@ -112,7 +112,7 @@ export default function PortfolioPage() {
 
   // Hàm tính lợi nhuận từ lịch sử giao dịch
   const calculateTradingPerformance = () => {
-    if (!trades || trades.length === 0) {
+    if (!trades || (trades || []).length === 0) {
       return { profitLoss: 0, profitLossPercent: 0, tradesCount: 0, winRate: 0 };
     }
 
@@ -282,7 +282,7 @@ export default function PortfolioPage() {
               <CardDescription>Phân bổ tài sản của bạn theo giá trị USD</CardDescription>
             </CardHeader>
             <CardContent>
-              {assets.length > 0 ? (
+              {(assets || []).length > 0 ? (
                 <div className="space-y-4">
                   {assets.slice(0, 5).map((asset) => (
                     <div key={asset.symbol} className="flex items-center justify-between">
@@ -363,7 +363,7 @@ export default function PortfolioPage() {
             <CardContent>
               <ScrollArea className="h-[400px]">
                 <div className="space-y-4">
-                  {assets.length > 0 ? (
+                  {(assets || []).length > 0 ? (
                     assets.map((asset) => (
                       <div key={asset.symbol} className="flex items-center justify-between p-3 hover:bg-muted rounded-lg">
                         <div className="flex items-center gap-2">
@@ -408,7 +408,7 @@ export default function PortfolioPage() {
             <CardContent>
               <ScrollArea className="h-[400px]">
                 <div className="space-y-4">
-                  {trades.length > 0 ? (
+                  {(trades || []).length > 0 ? (
                     trades.map((trade) => (
                       <div key={trade.id} className="flex items-center justify-between p-3 hover:bg-muted rounded-lg">
                         <div className="flex items-center gap-2">
