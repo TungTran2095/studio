@@ -161,7 +161,7 @@ export const TradingPanel: FC = () => {
         apiSecret,
         isTestnet,
         symbol: symbolUppercase,
-        quantity: values.quantity,
+        quantity: Number(values.quantity), // Đảm bảo luôn là number
         orderType: values.orderType,
         price: values.price,
       };
@@ -188,7 +188,8 @@ export const TradingPanel: FC = () => {
           description: result.message || `Đã đặt lệnh ${side} thành công.`,
         });
         form.reset();
-        setActiveTab("history");
+        // XÓA dòng này để không chuyển tab
+        // setActiveTab("history");
       } else {
         toast({
           title: `Đặt lệnh thất bại (${side})`,
