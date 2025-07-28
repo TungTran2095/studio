@@ -145,6 +145,27 @@ export class BotExecutor {
       // Bắt đầu vòng lặp chính
       while (this.isRunning) {
         console.log('[BotExecutor] Vòng lặp chính executeStrategy()...');
+        
+        // Kiểm tra thêm status từ database trước mỗi vòng lặp
+        try {
+          if (supabase) {
+            const { data: botStatus } = await supabase
+              .from('trading_bots')
+              .select('status')
+              .eq('id', this.bot.id)
+              .single();
+            
+            if (botStatus && botStatus.status !== 'running') {
+              console.log(`[BotExecutor] 🛑 Bot status changed to ${botStatus.status} during loop, STOPPING`);
+              this.isRunning = false;
+              await this.updateBotStatus('stopped');
+              break;
+            }
+          }
+        } catch (error) {
+          console.error('[BotExecutor] Error checking status in main loop:', error);
+        }
+        
         await this.executeStrategy();
         
         // Đợi theo đúng timeframe thay vì cố định 10s
@@ -157,12 +178,78 @@ export class BotExecutor {
   }
 
   async stop() {
+    console.log('[BotExecutor] 🛑 Stopping bot:', this.bot?.name);
+    
+    // Set flag để dừng vòng lặp
     this.isRunning = false;
+    
+    // Cập nhật status trong database ngay lập tức
     await this.updateBotStatus('stopped');
+    
+    // Đợi một chút để vòng lặp hiện tại kết thúc
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Clear current position để tránh "ghost trading"
+    this.currentPosition = null;
+    
+    // Đảm bảo status đã được cập nhật trong database
+    try {
+      if (supabase) {
+        const { data: botStatus } = await supabase
+          .from('trading_bots')
+          .select('status')
+          .eq('id', this.bot.id)
+          .single();
+        
+        if (botStatus && botStatus.status !== 'stopped') {
+          console.log('[BotExecutor] ⚠️ Bot status not properly updated, forcing stop');
+          await this.updateBotStatus('stopped');
+        }
+      }
+    } catch (error) {
+      console.error('[BotExecutor] Error verifying bot stop status:', error);
+    }
+    
+    console.log('[BotExecutor] ✅ Bot stopped successfully:', this.bot?.name);
   }
 
   private async executeStrategy() {
     try {
+      // Kiểm tra xem bot có đang chạy không - kiểm tra cả isRunning và status từ database
+      if (!this.isRunning) {
+        console.log('[BotExecutor] Bot is stopped (isRunning=false), skipping strategy execution');
+        return;
+      }
+
+      // Kiểm tra thêm status từ database để đảm bảo - KIỂM TRA MẠNH MẼ HƠN
+      try {
+        if (!supabase) {
+          console.error('[BotExecutor] Supabase client not available for status check');
+          this.isRunning = false;
+          return;
+        }
+        
+        const { data: botStatus } = await supabase
+          .from('trading_bots')
+          .select('status')
+          .eq('id', this.bot.id)
+          .single();
+        
+        if (botStatus && botStatus.status !== 'running') {
+          console.log(`[BotExecutor] 🛑 Bot status in database is ${botStatus.status}, FORCING STOP`);
+          this.isRunning = false;
+          // Cập nhật lại status để đảm bảo
+          await this.updateBotStatus('stopped');
+          return;
+        }
+      } catch (error) {
+        console.error('[BotExecutor] Error checking bot status from database:', error);
+        // Nếu không thể kiểm tra database, dừng bot để an toàn
+        console.log('[BotExecutor] 🛑 Cannot check database status, stopping bot for safety');
+        this.isRunning = false;
+        return;
+      }
+      
       console.log('[BotExecutor] Executing strategy...');
       
       // Lấy dữ liệu candles
@@ -218,6 +305,34 @@ export class BotExecutor {
       if (this.currentPosition && !hasRealPosition) {
         console.log('[BotExecutor] Clearing currentPosition because no real position exists');
         this.currentPosition = null;
+      }
+
+      // Kiểm tra lại isRunning trước khi thực hiện giao dịch
+      if (!this.isRunning) {
+        console.log('[BotExecutor] Bot was stopped during execution, skipping trades');
+        return;
+      }
+
+      // Kiểm tra thêm một lần nữa status từ database trước khi thực hiện giao dịch
+      try {
+        if (!supabase) {
+          console.error('[BotExecutor] Supabase client not available for status check before trade');
+          return;
+        }
+        
+        const { data: botStatus } = await supabase
+          .from('trading_bots')
+          .select('status')
+          .eq('id', this.bot.id)
+          .single();
+        
+        if (botStatus && botStatus.status !== 'running') {
+          console.log(`[BotExecutor] Bot status changed to ${botStatus.status} before trade execution, stopping`);
+          this.isRunning = false;
+          return;
+        }
+      } catch (error) {
+        console.error('[BotExecutor] Error checking bot status before trade:', error);
       }
 
       if (signal === 'buy' && !this.currentPosition && !hasRealPosition) {
@@ -464,71 +579,89 @@ export class BotExecutor {
 
   private async executeTrade(signal: 'buy' | 'sell') {
     try {
-      // Lấy số dư USDT
-      const balanceRes = await fetch(`${API_BASE_URL}/api/trading/binance/balance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret,
-          isTestnet: this.bot.config.account.testnet,
-        })
-      });
-
-      if (!balanceRes.ok) throw new Error('Không thể lấy số dư');
-      const balanceData = await balanceRes.json();
-      const balance = parseFloat(balanceData.USDT || '0');
-      console.log('[BotExecutor] USDT Balance:', balance);
-
-      if (balance < 10) {
-        console.log('[BotExecutor] Insufficient balance for trading');
+      // Kiểm tra xem bot có đang chạy không
+      if (!this.isRunning) {
+        console.log('[BotExecutor] Bot is stopped, skipping trade execution');
         return;
       }
 
+      // Kiểm tra thêm status từ database
+      try {
+        if (!supabase) {
+          console.error('[BotExecutor] Supabase client not available for trade execution check');
+          return;
+        }
+        
+        const { data: botStatus } = await supabase
+          .from('trading_bots')
+          .select('status')
+          .eq('id', this.bot.id)
+          .single();
+        
+        if (botStatus && botStatus.status !== 'running') {
+          console.log(`[BotExecutor] Bot status is ${botStatus.status}, cancelling trade execution`);
+          this.isRunning = false;
+          return;
+        }
+      } catch (error) {
+        console.error('[BotExecutor] Error checking bot status for trade execution:', error);
+      }
+
+      console.log(`[BotExecutor] Executing ${signal.toUpperCase()} trade...`);
+
       // Lấy giá hiện tại
-      const candlesRes = await fetch(`${API_BASE_URL}/api/trading/binance/candles`, {
+      const priceRes = await fetch(`${API_BASE_URL}/api/trading/binance/price`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           symbol: this.config.symbol,
-          interval: '1m',
-          limit: 1,
           apiKey: this.bot.config.account.apiKey,
           apiSecret: this.bot.config.account.apiSecret,
           isTestnet: this.bot.config.account.testnet,
         })
       });
 
-      if (!candlesRes.ok) throw new Error('Không thể lấy giá hiện tại');
-      const candlesData = await candlesRes.json();
-      
-      // Kiểm tra format dữ liệu trả về
-      if (!candlesData.candles || !Array.isArray(candlesData.candles) || candlesData.candles.length === 0) {
-        throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
-      }
-      
-      // Format dữ liệu candles từ Binance API
-      // Binance API trả về: [openTime, open, high, low, close, volume, closeTime, ...]
-      const candle = candlesData.candles[0];
-      if (!Array.isArray(candle) || candle.length < 5) {
-        throw new Error('Format dữ liệu candle không hợp lệ');
-      }
-      
-      const currentPrice = parseFloat(candle[4]); // close price ở index 4
-      console.log('[BotExecutor] Current price:', currentPrice);
-      
-      const positionSize = (balance * this.config.riskManagement.positionSize) / 100;
-      let quantity = positionSize / currentPrice;
-      
-      // Đảm bảo quantity tối thiểu (ít nhất 10 USDT)
-      const minPositionSize = 10; // 10 USDT tối thiểu
-      if (positionSize < minPositionSize) {
-        quantity = minPositionSize / currentPrice;
+      if (!priceRes.ok) {
+        throw new Error('Không thể lấy giá hiện tại');
       }
 
-      // Tạo lệnh market
+      const priceData = await priceRes.json();
+      const currentPrice = parseFloat(priceData.price);
+
+      // Tính toán số lượng
+      const quantity = (this.config.riskManagement.positionSize / 100) * this.config.riskManagement.initialCapital / currentPrice;
+
+      // Kiểm tra lại isRunning trước khi thực hiện order
+      if (!this.isRunning) {
+        console.log('[BotExecutor] Bot was stopped before placing order, cancelling trade');
+        return;
+      }
+
+      // Kiểm tra thêm một lần nữa status từ database trước khi đặt order
+      try {
+        if (!supabase) {
+          console.error('[BotExecutor] Supabase client not available for order placement check');
+          return;
+        }
+        
+        const { data: botStatus } = await supabase
+          .from('trading_bots')
+          .select('status')
+          .eq('id', this.bot.id)
+          .single();
+        
+        if (botStatus && botStatus.status !== 'running') {
+          console.log(`[BotExecutor] Bot status changed to ${botStatus.status} before order placement, cancelling`);
+          this.isRunning = false;
+          return;
+        }
+      } catch (error) {
+        console.error('[BotExecutor] Error checking bot status before order placement:', error);
+      }
+
+      // Thực hiện order
       const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           symbol: this.config.symbol,
@@ -541,12 +674,19 @@ export class BotExecutor {
         })
       });
 
-      console.log('[BotExecutor] Order API response status:', orderRes.status);
-      const orderBody = await orderRes.text();
-      console.log('[BotExecutor] Order API response body:', orderBody);
+      if (!orderRes.ok) {
+        const errorText = await orderRes.text();
+        throw new Error(`Không thể thực hiện order: ${errorText}`);
+      }
 
-      if (!orderRes.ok) throw new Error('Không thể tạo lệnh giao dịch: ' + orderBody);
-      const order = JSON.parse(orderBody);
+      const order = await orderRes.json();
+      console.log(`[BotExecutor] Order executed:`, order);
+
+      // Kiểm tra lại isRunning trước khi cập nhật position
+      if (!this.isRunning) {
+        console.log('[BotExecutor] Bot was stopped after order, but position was opened');
+        return;
+      }
 
       this.currentPosition = {
         entryPrice: parseFloat(order.fills[0].price),
@@ -588,48 +728,35 @@ export class BotExecutor {
 
   private async managePosition() {
     try {
-      // Lấy giá hiện tại
-      const candlesRes = await fetch(`${API_BASE_URL}/api/trading/binance/candles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: this.config.symbol,
-          interval: '1m',
-          limit: 1,
-          apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret,
-          isTestnet: this.bot.config.account.testnet,
-        })
-      });
-
-      if (!candlesRes.ok) throw new Error('Không thể lấy giá hiện tại');
-      const candlesData = await candlesRes.json();
-      
-      // Kiểm tra format dữ liệu trả về
-      if (!candlesData.candles || !Array.isArray(candlesData.candles) || candlesData.candles.length === 0) {
-        throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
+      // Kiểm tra xem bot có đang chạy không
+      if (!this.isRunning) {
+        console.log('[BotExecutor] Bot is stopped, skipping position management');
+        return;
       }
-      
-      // Format dữ liệu candles từ Binance API
-      const candle = candlesData.candles[0];
-      if (!Array.isArray(candle) || candle.length < 5) {
-        throw new Error('Format dữ liệu candle không hợp lệ');
-      }
-      
-      const currentPrice = parseFloat(candle[4]); // close price ở index 4
 
       if (!this.currentPosition) {
         console.log('[BotExecutor] No current position to manage');
         return;
       }
 
-      // Kiểm tra position thực tế trước khi manage
-      const hasRealPosition = await this.checkRealPosition();
-      if (!hasRealPosition) {
-        console.log('[BotExecutor] No real position exists, clearing currentPosition');
-        this.currentPosition = null;
-        return;
+      // Lấy giá hiện tại
+      const priceRes = await fetch(`${API_BASE_URL}/api/trading/binance/price`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: this.config.symbol,
+          apiKey: this.bot.config.account.apiKey,
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
+        })
+      });
+
+      if (!priceRes.ok) {
+        throw new Error('Không thể lấy giá hiện tại');
       }
+
+      const priceData = await priceRes.json();
+      const currentPrice = parseFloat(priceData.price);
 
       let shouldClose = false;
       let profit = 0;
@@ -653,6 +780,12 @@ export class BotExecutor {
       }
 
       if (shouldClose) {
+        // Kiểm tra lại isRunning trước khi đóng vị thế
+        if (!this.isRunning) {
+          console.log('[BotExecutor] Bot was stopped before closing position');
+          return;
+        }
+
         // Đóng vị thế
         const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
           method: 'PUT',

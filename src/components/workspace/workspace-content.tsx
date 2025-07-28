@@ -26,14 +26,17 @@ import {
   Plus,
   Zap,
   TrendingUp,
-  Activity
+  Activity,
+  Pause,
+  Play,
+  Eye
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle'; // Import ThemeToggle
 import { TotalAssetsCard } from "@/components/trading/total-assets-card";
 import { useEffect, useState } from 'react';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { supabase } from '@/lib/supabase-client';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface WorkspaceContentProps {
   activeModule: ModuleId;
@@ -143,10 +146,10 @@ function renderJsonField(value: any) {
   return <span>{String(value)}</span>;
 }
 
-// Hàm forward mở modal
+// Hàm forward mở modal (đã được thay thế bằng TradingBotsList)
 function handleForward(type: string, data: any) {
-  setModalData({ type, data });
-  setModalOpen(true);
+  // Đã được thay thế bằng TradingBotsList component
+  console.log('handleForward called:', type, data);
 }
 
 // Modal chi tiết
@@ -192,150 +195,312 @@ function DetailModal({ open, onClose, type, data }: { open: boolean, onClose: ()
   );
 }
 
-// Component TreeView cho Nghiên cứu Định lượng & Phát triển Mô hình
-function ResearchTreeView() {
-  const [treeData, setTreeData] = useState<any[]>([]);
+// Component danh sách Trading Bots thay thế cho ResearchTreeView
+function TradingBotsList() {
+  const [bots, setBots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDetail, setSelectedDetail] = useState<{type: string, data: any} | null>(null);
+  const [selectedBot, setSelectedBot] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalData, setModalData] = useState<{type: string, data: any} | null>(null);
 
   useEffect(() => {
-    async function fetchData() {
+    async function fetchBots() {
       setLoading(true);
-      if (!supabase) { setTreeData([]); setLoading(false); return; }
-      const { data: projects } = await supabase.from('research_projects').select('*');
-      const { data: models } = await supabase.from('research_models').select('*');
-      const { data: experiments } = await supabase.from('research_experiments').select('*');
-      let bots: any[] = [];
+      if (!supabase) { 
+        console.log('Supabase not initialized');
+        setBots([]); 
+        setLoading(false); 
+        return; 
+      }
+      
       try {
-        const botsRes = await supabase.from('trading_bots').select('*');
-        bots = botsRes.data || [];
-      } catch { bots = []; }
-      const tree = (projects || []).map((project: any) => ({
-        ...project,
-        models: (models || []).filter((m: any) => m.project_id === project.id),
-        experiments: (experiments || []).filter((e: any) => e.project_id === project.id),
-        bots: (bots || []).filter((b: any) => b.project_id === project.id),
-      }));
-      setTreeData(tree);
+        console.log('Fetching trading bots...');
+        
+        // Thử lấy từ bảng trading_bots trước
+        let { data: botsData, error } = await supabase
+          .from('trading_bots')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.log('trading_bots table error:', error);
+          // Thử với bảng khác nếu có
+          const { data: altBotsData, error: altError } = await supabase
+            .from('research_experiments')
+            .select('*')
+            .eq('type', 'backtest')
+            .order('created_at', { ascending: false });
+          
+          if (altError) {
+            console.error('Both tables failed:', altError);
+            setBots([]);
+          } else {
+            console.log('Using research_experiments as bots:', altBotsData);
+            setBots(altBotsData || []);
+          }
+        } else {
+          console.log('Fetched bots from trading_bots:', botsData);
+          setBots(botsData || []);
+        }
+      } catch (error) {
+        console.error('Error fetching bots:', error);
+        setBots([]);
+      }
+      
       setLoading(false);
     }
-    fetchData();
+    fetchBots();
   }, []);
 
-  function renderDetail() {
-    if (!selectedDetail) return null;
-    const { type, data } = selectedDetail;
-    // Các trường jsonb phổ biến
-    const jsonFields = ['metrics', 'config', 'params', 'result', 'extra', 'details'];
-    return (
-      <Card className="mt-4 border border-primary/30">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            Chi tiết {type === 'model' ? 'Mô hình' : type === 'experiment' ? 'Thí nghiệm' : 'Bot'}
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-2"
-              onClick={() => handleForward(type, data)}
-            >
-              Xem chi tiết
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <table className="w-full text-sm mb-2">
-            <tbody>
-              {Object.entries(data).map(([key, value]) => (
-                <tr key={key}>
-                  <td className="font-semibold pr-2 text-muted-foreground whitespace-nowrap align-top">{key}</td>
-                  <td className="break-all">
-                    {jsonFields.includes(key) && typeof value === 'object' && value !== null
-                      ? renderJsonField(value)
-                      : String(value)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-    );
-  }
+  const handleBotAction = async (botId: string, action: 'start' | 'stop') => {
+    try {
+      const response = await fetch(`/api/trading/bot/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botId })
+      });
 
-  if (loading) return <Card className="flex-1 min-w-[320px] flex items-center justify-center"><span>Đang tải dữ liệu...</span></Card>;
+             if (response.ok && supabase) {
+         // Refresh danh sách bots
+         const { data: botsData } = await supabase
+           .from('trading_bots')
+           .select('*')
+           .order('created_at', { ascending: false });
+         
+         setBots(botsData || []);
+       }
+    } catch (error) {
+      console.error(`Error ${action}ing bot:`, error);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'running': return 'text-green-600 bg-green-100';
+      case 'stopped': return 'text-red-600 bg-red-100';
+      case 'idle': return 'text-yellow-600 bg-yellow-100';
+      case 'error': return 'text-red-600 bg-red-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'running': return 'Đang chạy';
+      case 'stopped': return 'Đã dừng';
+      case 'idle': return 'Chờ';
+      case 'error': return 'Lỗi';
+      default: return status;
+    }
+  };
+
+  if (loading) return <Card className="flex-1 min-w-[320px] flex items-center justify-center"><span>Đang tải danh sách bot...</span></Card>;
 
   return (
     <>
       <Card className="flex-1 min-w-[320px]">
         <CardHeader>
-          <CardTitle className="text-base">Nghiên cứu & Mô hình</CardTitle>
-          <CardDescription>Danh sách dự án, mô hình, thí nghiệm, bot</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Trading Bots</CardTitle>
+              <CardDescription>Danh sách các bot giao dịch từ các dự án</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/debug/trading-bots');
+                    const data = await response.json();
+                    console.log('Debug data:', data);
+                    alert(`Debug: trading_bots=${data.trading_bots.count}, experiments=${data.research_experiments.count}, projects=${data.research_projects.count}`);
+                  } catch (error) {
+                    console.error('Debug error:', error);
+                  }
+                }}
+              >
+                Debug
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/debug/create-sample-bot', { method: 'POST' });
+                    const data = await response.json();
+                    console.log('Create sample bot result:', data);
+                    if (data.success) {
+                      alert('Đã tạo sample bot thành công!');
+                      // Refresh danh sách
+                      window.location.reload();
+                    } else {
+                      alert('Lỗi tạo sample bot: ' + data.error);
+                    }
+                  } catch (error) {
+                    console.error('Create sample bot error:', error);
+                  }
+                }}
+              >
+                Tạo Sample
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <Accordion type="multiple" className="w-full">
-            {treeData.map(project => (
-              <AccordionItem value={project.id} key={project.id}>
-                <AccordionTrigger>{project.name}</AccordionTrigger>
-                <AccordionContent>
-                  {/* Cây con cho Mô hình */}
-                  <Accordion type="single" collapsible className="mb-2">
-                    <AccordionItem value="models">
-                      <AccordionTrigger>Mô hình ({project.models.length})</AccordionTrigger>
-                      <AccordionContent>
-                        <ul className="pl-4 space-y-1">
-                          {project.models.length === 0 && <li className="text-xs text-muted-foreground">Chưa có mô hình</li>}
-                          {project.models.map((model: any) => (
-                            <li key={model.id} className="flex items-center gap-2 text-sm cursor-pointer hover:underline" onClick={() => setSelectedDetail({type: 'model', data: model})}>
-                              <span className="text-blue-600">{model.name}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                  {/* Cây con cho Thí nghiệm */}
-                  <Accordion type="single" collapsible className="mb-2">
-                    <AccordionItem value="experiments">
-                      <AccordionTrigger>Thí nghiệm ({project.experiments.length})</AccordionTrigger>
-                      <AccordionContent>
-                        <ul className="pl-4 space-y-1">
-                          {project.experiments.length === 0 && <li className="text-xs text-muted-foreground">Chưa có thí nghiệm</li>}
-                          {project.experiments.map((exp: any) => (
-                            <li key={exp.id} className="flex items-center gap-2 text-sm cursor-pointer hover:underline" onClick={() => setSelectedDetail({type: 'experiment', data: exp})}>
-                              <span className="text-green-600">{exp.name || exp.title}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                  {/* Cây con cho Bot */}
-                  <Accordion type="single" collapsible>
-                    <AccordionItem value="bots">
-                      <AccordionTrigger>Bot ({project.bots.length})</AccordionTrigger>
-                      <AccordionContent>
-                        <ul className="pl-4 space-y-1">
-                          {project.bots.length === 0 && <li className="text-xs text-muted-foreground">Chưa có bot</li>}
-                          {project.bots.map((bot: any) => (
-                            <li key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer hover:underline" onClick={() => setSelectedDetail({type: 'bot', data: bot})}>
-                              <span className="text-yellow-600">{bot.name || bot.title}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-          {renderDetail()}
+          <div className="space-y-3">
+            {bots.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Zap className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>Chưa có trading bot nào</p>
+                <p className="text-sm">Tạo bot từ các backtest đã hoàn thành</p>
+              </div>
+            ) : (
+              bots.map((bot) => (
+                <div key={bot.id} className="border rounded-lg p-3 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                                         <div className="flex-1">
+                       <h4 className="font-medium text-sm">{bot.name}</h4>
+                       <p className="text-xs text-muted-foreground">
+                         Dự án ID: {bot.project_id || 'Không xác định'}
+                       </p>
+                     </div>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${getStatusColor(bot.status)}`}
+                    >
+                      {getStatusText(bot.status)}
+                    </Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-2 text-xs mb-3">
+                    <div>
+                      <span className="text-muted-foreground">Giao dịch:</span>
+                      <div className="font-medium">{bot.total_trades || 0}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Lợi nhuận:</span>
+                      <div className={`font-medium ${(bot.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ${(bot.total_profit || 0).toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Win Rate:</span>
+                      <div className="font-medium">{(bot.win_rate || 0).toFixed(1)}%</div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {bot.status === 'running' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => handleBotAction(bot.id, 'stop')}
+                      >
+                        <Pause className="h-3 w-3 mr-1" />
+                        Dừng
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => handleBotAction(bot.id, 'start')}
+                        disabled={bot.status === 'error'}
+                      >
+                        <Play className="h-3 w-3 mr-1" />
+                        Chạy
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedBot(bot);
+                        setModalOpen(true);
+                      }}
+                    >
+                      <Eye className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  {bot.last_error && (
+                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                      <strong>Lỗi:</strong> {bot.last_error}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
-      {/* Modal chi tiết */}
-      <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} type={modalData?.type || ''} data={modalData?.data} />
+
+      {/* Modal chi tiết bot */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Chi tiết Trading Bot</DialogTitle>
+          </DialogHeader>
+          {selectedBot && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Tên bot</label>
+                  <p className="text-sm">{selectedBot.name}</p>
+                </div>
+                                 <div>
+                   <label className="text-sm font-medium text-muted-foreground">Dự án ID</label>
+                   <p className="text-sm">{selectedBot.project_id || 'Không xác định'}</p>
+                 </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Trạng thái</label>
+                  <Badge className={getStatusColor(selectedBot.status)}>
+                    {getStatusText(selectedBot.status)}
+                  </Badge>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Tổng giao dịch</label>
+                  <p className="text-sm">{selectedBot.total_trades || 0}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Tổng lợi nhuận</label>
+                  <p className={`text-sm ${(selectedBot.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    ${(selectedBot.total_profit || 0).toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Win Rate</label>
+                  <p className="text-sm">{(selectedBot.win_rate || 0).toFixed(1)}%</p>
+                </div>
+              </div>
+              
+              {selectedBot.description && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Mô tả</label>
+                  <p className="text-sm">{selectedBot.description}</p>
+                </div>
+              )}
+
+              {selectedBot.last_run_at && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Lần chạy cuối</label>
+                  <p className="text-sm">{new Date(selectedBot.last_run_at).toLocaleString('vi-VN')}</p>
+                </div>
+              )}
+
+              {selectedBot.config && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Cấu hình</label>
+                  <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-32">
+                    {JSON.stringify(selectedBot.config, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -410,7 +575,7 @@ function DashboardModule() {
           </Card>
           {/* Thêm TreeView bên dưới Chart */}
           <div className="mt-4">
-            <ResearchTreeView />
+            <TradingBotsList />
           </div>
         </div>
         {/* Asset Summary Panel */}

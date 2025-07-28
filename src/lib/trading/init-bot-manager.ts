@@ -1,22 +1,24 @@
 import { botManager } from './bot-manager';
 
-let isInitialized = false;
-
+// Khởi tạo BotManager khi server start
 export async function initializeBotManager() {
-  if (isInitialized) return;
-  
   try {
-    console.log('[Init] Khởi tạo BotManager...');
+    console.log('🚀 Initializing BotManager...');
+    
+    // Khởi tạo BotManager
     await botManager.initialize();
-    isInitialized = true;
-    console.log('[Init] BotManager đã được khởi tạo thành công');
+    
+    console.log('✅ BotManager initialized successfully');
+    console.log('📊 Current running bots:', botManager.getRunningBotsCount());
+    
+    // KHÔNG khôi phục bot từ database để tránh "ghost trading"
+    console.log('⚠️ Skipping bot restoration from database to prevent ghost trading');
+    
   } catch (error) {
-    console.error('[Init] Lỗi khi khởi tạo BotManager:', error);
+    console.error('❌ Failed to initialize BotManager:', error);
+    throw error;
   }
 }
 
-// Khởi tạo ngay khi module được load
-if (typeof window === 'undefined') {
-  // Chỉ chạy trên server side
-  initializeBotManager().catch(console.error);
-} 
+// Export để có thể gọi từ các nơi khác
+export { botManager }; 

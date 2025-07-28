@@ -24,7 +24,17 @@ function roundQuantityToLotSize(quantity: number, lotSizeFilter: any): number {
   return parseFloat(rounded.toFixed(precision));
 }
 
+// POST method - tương thích với BotExecutor
+export async function POST(req: NextRequest) {
+  return await handleOrder(req);
+}
+
+// PUT method - tương thích với managePosition
 export async function PUT(req: NextRequest) {
+  return await handleOrder(req);
+}
+
+async function handleOrder(req: NextRequest) {
   try {
     const { symbol, side, type, quantity, price, apiKey, apiSecret, isTestnet } = await req.json();
 

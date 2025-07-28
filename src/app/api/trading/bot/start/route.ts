@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { BotExecutor } from '@/lib/trading/bot-executor';
+import { botManager } from '@/lib/trading/bot-manager';
 import { supabase } from '@/lib/supabase-client';
+import { TradingBot } from '@/lib/trading/trading-bot';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,9 @@ export async function POST(req: NextRequest) {
     if (!supabase) {
       return NextResponse.json({ error: 'Database connection not available' }, { status: 500 });
     }
+
+    // Đảm bảo BotManager đã được khởi tạo
+    await botManager.initialize();
 
     // Lấy thông tin bot từ database
     const { data: bot, error: botError } = await supabase
@@ -30,25 +34,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Bot is already running' }, { status: 400 });
     }
 
-    // Tạo bot executor
-    const executor = new BotExecutor(bot);
-    await executor.initialize();
+    // Sử dụng BotManager để start bot
+    const success = await botManager.startBot(bot as TradingBot);
 
-    // Start bot
-    await executor.start();
-
-    // Cập nhật trạng thái bot trong database
-    const { error: updateError } = await supabase
-      .from('trading_bots')
-      .update({ 
-        status: 'running',
-        updated_at: new Date().toISOString(),
-        last_run_at: new Date().toISOString()
-      })
-      .eq('id', botId);
-
-    if (updateError) {
-      console.error('Error updating bot status:', updateError);
+    if (!success) {
+      return NextResponse.json({ error: 'Failed to start bot' }, { status: 500 });
     }
 
     return NextResponse.json({ 

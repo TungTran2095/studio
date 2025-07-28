@@ -1,11 +1,22 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 import { TradingBot } from '@/lib/trading/trading-bot';
-import { BotExecutor } from '@/lib/trading/bot-executor';
+import { botManager } from '@/lib/trading/bot-manager';
+import { initializeBotManager } from '@/lib/trading/init-bot-manager';
+
+// Khởi tạo BotManager khi module được load
+if (typeof window === 'undefined') {
+  // Chỉ chạy trên server side
+  initializeBotManager().catch(console.error);
+}
 
 // GET /api/trading/bot - Lấy danh sách bot
 export async function GET(request: Request) {
   try {
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('projectId');
 
@@ -30,6 +41,10 @@ export async function GET(request: Request) {
 // POST /api/trading/bot - Tạo bot mới
 export async function POST(request: Request) {
   try {
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+
     const body = await request.json();
     const { projectId, experimentId, name, description, config } = body;
 
@@ -83,6 +98,12 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Đảm bảo BotManager và supabase đã được khởi tạo
+    await botManager.initialize();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+
     // Lấy thông tin bot
     const { data: bot } = await supabase
       .from('trading_bots')
@@ -94,17 +115,22 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
     }
 
-    const executor = new BotExecutor(bot as TradingBot);
-
+    // Sử dụng BotManager thay vì tạo BotExecutor mới
+    let success = false;
+    
     switch (action) {
       case 'start':
-        await executor.start();
+        success = await botManager.startBot(bot as TradingBot);
         break;
       case 'stop':
-        await executor.stop();
+        success = await botManager.stopBot(botId);
         break;
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+
+    if (!success) {
+      return NextResponse.json({ error: `Failed to ${action} bot` }, { status: 500 });
     }
 
     // Lấy thông tin bot sau khi cập nhật
@@ -124,6 +150,10 @@ export async function PUT(request: Request) {
 // DELETE /api/trading/bot/:id - Xóa bot
 export async function DELETE(request: Request) {
   try {
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+
     const { searchParams } = new URL(request.url);
     const botId = searchParams.get('botId');
 
