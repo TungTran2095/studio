@@ -1,0 +1,13 @@
+{
+  "strategy": {
+    "type": "rsi",
+    "parameters": {
+      "period": 14,
+      "overbought": 70,
+      "oversold": 30
+    }
+  },
+  "trading": {
+    "initialCapital": 10000
+  }
+} 

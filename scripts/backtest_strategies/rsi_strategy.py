@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from backtest_strategies.base_strategy import BaseStrategy
+from .base_strategy import BaseStrategy
 
 class RSIStrategy(BaseStrategy):
     def __init__(self, config):
@@ -22,9 +22,13 @@ class RSIStrategy(BaseStrategy):
         # Calculate RSI
         df['rsi'] = self.calculate_rsi(df['close'])
         
-        # Generate signals
+        # Generate signals - chỉ tạo signal khi có sự thay đổi trạng thái
         df['signal'] = 0
-        df.loc[df['rsi'] < self.oversold, 'signal'] = 1  # Buy signal when oversold
-        df.loc[df['rsi'] > self.overbought, 'signal'] = -1  # Sell signal when overbought
+        
+        # Buy signal khi RSI từ trên oversold xuống dưới oversold
+        df.loc[(df['rsi'] < self.oversold) & (df['rsi'].shift(1) >= self.oversold), 'signal'] = 1
+        
+        # Sell signal khi RSI từ dưới overbought lên trên overbought
+        df.loc[(df['rsi'] > self.overbought) & (df['rsi'].shift(1) <= self.overbought), 'signal'] = -1
         
         return df 

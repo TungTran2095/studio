@@ -36,6 +36,71 @@ ChartJS.register(
   ChartLegend
 );
 
+// Helper functions để tạo text signal cho backtest
+function getBacktestBuySignalText(config: any, trade: any): string {
+  if (!config?.strategyType) {
+    return (trade as any).entry_reason || (trade as any).buy_signal || (trade as any).signal || '-';
+  }
+
+  const strategyType = config.strategyType;
+
+  switch (strategyType) {
+    case 'rsi':
+      // Lấy giá trị RSI thực tế tại thời điểm mua
+      const buyRsiValue = (trade as any).entry_rsi || (trade as any).rsi_value || (trade as any).indicator_value;
+      if (buyRsiValue !== undefined && buyRsiValue !== null) {
+        return `RSI = ${buyRsiValue.toFixed(2)} (Quá bán)`;
+      }
+      return `RSI < ${config.oversold || 30} (Quá bán)`;
+    case 'macd':
+      return `MACD cắt lên Signal`;
+    case 'ma_crossover':
+      return `MA${config.fastPeriod || 10} cắt lên MA${config.slowPeriod || 20}`;
+    case 'bollinger_bands':
+      return `Giá chạm dải dưới BB`;
+    case 'moving_average':
+      return `Giá > MA${config.period || 20}`;
+    case 'momentum':
+      return `Momentum tăng > 2%`;
+    case 'mean_reversion':
+      return `Giá < SMA${config.period || 20} - 3%`;
+    default:
+      return (trade as any).entry_reason || (trade as any).buy_signal || (trade as any).signal || '-';
+  }
+}
+
+function getBacktestSellSignalText(config: any, trade: any): string {
+  if (!config?.strategyType) {
+    return (trade as any).exit_reason || (trade as any).sell_signal || '-';
+  }
+
+  const strategyType = config.strategyType;
+
+  switch (strategyType) {
+    case 'rsi':
+      // Lấy giá trị RSI thực tế tại thời điểm bán
+      const sellRsiValue = (trade as any).exit_rsi || (trade as any).rsi_value || (trade as any).indicator_value;
+      if (sellRsiValue !== undefined && sellRsiValue !== null) {
+        return `RSI = ${sellRsiValue.toFixed(2)} (Quá mua)`;
+      }
+      return `RSI > ${config.overbought || 70} (Quá mua)`;
+    case 'macd':
+      return `MACD cắt xuống Signal`;
+    case 'ma_crossover':
+      return `MA${config.fastPeriod || 10} cắt xuống MA${config.slowPeriod || 20}`;
+    case 'bollinger_bands':
+      return `Giá chạm dải trên BB`;
+    case 'moving_average':
+      return `Giá < MA${config.period || 20}`;
+    case 'momentum':
+      return `Momentum giảm > 1%`;
+    case 'mean_reversion':
+      return `Giá > SMA${config.period || 20}`;
+    default:
+      return (trade as any).exit_reason || (trade as any).sell_signal || '-';
+  }
+}
+
 export default function BacktestingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -198,7 +263,7 @@ export default function BacktestingPage() {
         addLog(`  Giá: $${trade.price.toFixed(2)}`);
         addLog(`  Số lượng: ${trade.quantity}`);
         addLog(`  Giá trị: $${Math.abs(trade.value).toFixed(2)}`);
-        addLog(`  Lãi/Lỗ: $${trade.profitLoss.toFixed(2)} (${trade.profitLossPercentage.toFixed(2)}%)`);
+        addLog(`  Lãi/Lỗ: $${(trade.profitLoss || 0).toFixed(2)} (${(trade.profitLossPercentage || 0).toFixed(2)}%)`);
         addLog(`  Lý do: ${trade.reason}`);
         addLog('');
       });
@@ -580,6 +645,8 @@ export default function BacktestingPage() {
                         <th className="h-12 px-4 text-left align-middle font-medium">Thời gian</th>
                         <th className="h-12 px-4 text-left align-middle font-medium">Loại</th>
                         <th className="h-12 px-4 text-left align-middle font-medium">Giá</th>
+                        <th className="h-12 px-4 text-center align-middle font-medium">Signal mua</th>
+                        <th className="h-12 px-4 text-center align-middle font-medium">Signal bán</th>
                         <th className="h-12 px-4 text-left align-middle font-medium">Số lượng</th>
                         <th className="h-12 px-4 text-left align-middle font-medium">Giá trị</th>
                         <th className="h-12 px-4 text-left align-middle font-medium">Tổng tài sản</th>
@@ -643,16 +710,22 @@ export default function BacktestingPage() {
                               </span>
                             </td>
                             <td className="p-4">${(trade.price || 0).toFixed(2)}</td>
+                            <td className="p-4 text-center text-xs">
+                              {getBacktestBuySignalText(formData, trade)}
+                            </td>
+                            <td className="p-4 text-center text-xs">
+                              {getBacktestSellSignalText(formData, trade)}
+                            </td>
                             <td className="p-4">{trade.quantity || 0}</td>
                             <td className="p-4">${tradeValue.toFixed(2)}</td>
                             <td className="p-4">${currentEquity.toFixed(2)}</td>
                             <td className="p-4">
                               <span className={`${
-                                tradeProfitLoss >= 0 
+                                (tradeProfitLoss || 0) >= 0 
                                   ? 'text-green-600' 
                                   : 'text-red-600'
                               }`}>
-                                {trade.type === 'SELL' ? `$${tradeProfitLoss.toFixed(2)} (${tradeProfitLossPercentage.toFixed(2)}%)` : '-'}
+                                {trade.type === 'SELL' ? `$${(tradeProfitLoss || 0).toFixed(2)} (${(tradeProfitLossPercentage || 0).toFixed(2)}%)` : '-'}
                               </span>
                             </td>
                             <td className="p-4">{trade.reason || 'Không có lý do'}</td>

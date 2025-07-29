@@ -42,11 +42,13 @@ export async function POST(req: Request) {
       const currentMACD = macd[i];
       const currentSignal = signal[i];
 
-      // Logic giao dịch dựa trên chiến lược
+      // Logic giao dịch dựa trên chiến lược - Mua khi có signal mua, bán khi có signal bán
       if (config.strategy.type === 'moving_average') {
+        // Tín hiệu mua: giá hiện tại > MA và chưa có vị thế
         if (currentPrice > currentMA && position <= 0) {
           // Tín hiệu mua
-          const size = (capital * config.positionSize) / 100;
+          const positionSizePercent = config.positionSize || 1;
+          const size = (capital * positionSizePercent) / 100;
           position = size / currentPrice;
           trades.push({
             type: 'buy',
@@ -54,7 +56,9 @@ export async function POST(req: Request) {
             size: position,
             timestamp: ohlcvData[i].open_time
           });
-        } else if (currentPrice < currentMA && position >= 0) {
+        } 
+        // Tín hiệu bán: giá hiện tại < MA và đang có vị thế mua
+        else if (currentPrice < currentMA && position > 0) {
           // Tín hiệu bán
           trades.push({
             type: 'sell',
@@ -72,7 +76,8 @@ export async function POST(req: Request) {
     }
 
     // Tính toán các chỉ số hiệu suất
-    const returns = calculateReturns(equity);
+    const totalReturn = calculateReturns(equity);
+    const returns = equity.slice(1).map((value, index) => (value - equity[index]) / equity[index]);
     const sharpeRatio = calculateSharpeRatio(returns);
     const maxDrawdown = calculateMaxDrawdown(equity);
     const totalTrades = trades.length;
@@ -88,7 +93,7 @@ export async function POST(req: Request) {
           trades,
           equity,
           performance: {
-            totalReturn: ((equity[equity.length - 1] - config.initialCapital) / config.initialCapital) * 100,
+            totalReturn: totalReturn * 100,
             sharpeRatio,
             maxDrawdown,
             totalTrades,
@@ -108,7 +113,7 @@ export async function POST(req: Request) {
         trades,
         equity,
         performance: {
-          totalReturn: ((equity[equity.length - 1] - config.initialCapital) / config.initialCapital) * 100,
+          totalReturn: totalReturn * 100,
           sharpeRatio,
           maxDrawdown,
           totalTrades,

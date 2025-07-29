@@ -1,6 +1,103 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+
+// Helper functions để tạo text signal dựa trên chiến lược
+function getBuySignalText(experiment: any, trade: any): string {
+  if (!experiment?.config?.strategy?.type) {
+    return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
+  }
+
+  const strategyType = experiment.config.strategy.type;
+  const params = experiment.config.strategy.parameters || {};
+
+  switch (strategyType) {
+    case 'rsi':
+      // Lấy giá trị RSI thực tế tại thời điểm mua
+      const buyRsiValue = trade.entry_rsi || trade.rsi_value || trade.indicator_value;
+      if (buyRsiValue !== undefined && buyRsiValue !== null) {
+        return `RSI = ${buyRsiValue.toFixed(2)} (Quá bán)`;
+      }
+      return `RSI < ${params.oversold || 30} (Quá bán)`;
+    case 'macd':
+      return `MACD cắt lên Signal`;
+    case 'ma_crossover':
+      return `MA${params.fastPeriod || 10} cắt lên MA${params.slowPeriod || 20}`;
+    case 'bollinger_bands':
+      return `Giá chạm dải dưới BB`;
+    case 'moving_average':
+      return `Giá > MA${params.period || 20}`;
+    case 'momentum':
+      return `Momentum tăng > 2%`;
+    case 'mean_reversion':
+      return `Giá < SMA${params.period || 20} - 3%`;
+    default:
+      return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
+  }
+}
+
+function getSellSignalText(experiment: any, trade: any): string {
+  if (!experiment?.config?.strategy?.type) {
+    return trade.exit_reason || trade.sell_signal || '-';
+  }
+
+  const strategyType = experiment.config.strategy.type;
+  const params = experiment.config.strategy.parameters || {};
+
+  switch (strategyType) {
+    case 'rsi':
+      // Lấy giá trị RSI thực tế tại thời điểm bán
+      const sellRsiValue = trade.exit_rsi || trade.rsi_value || trade.indicator_value;
+      if (sellRsiValue !== undefined && sellRsiValue !== null) {
+        return `RSI = ${sellRsiValue.toFixed(2)} (Quá mua)`;
+      }
+      return `RSI > ${params.overbought || 70} (Quá mua)`;
+    case 'macd':
+      return `MACD cắt xuống Signal`;
+    case 'ma_crossover':
+      return `MA${params.fastPeriod || 10} cắt xuống MA${params.slowPeriod || 20}`;
+    case 'bollinger_bands':
+      return `Giá chạm dải trên BB`;
+    case 'moving_average':
+      return `Giá < MA${params.period || 20}`;
+    case 'momentum':
+      return `Momentum giảm > 1%`;
+    case 'mean_reversion':
+      return `Giá > SMA${params.period || 20}`;
+    default:
+      return trade.exit_reason || trade.sell_signal || '-';
+  }
+}
+
+// Helper function để format thời gian giao dịch
+function formatTradeTime(timeValue: any): string {
+  if (!timeValue) return '-';
+  
+  try {
+    // Nếu là timestamp (số), chuyển thành Date
+    if (typeof timeValue === 'number') {
+      return new Date(timeValue).toLocaleString('vi-VN');
+    }
+    
+    // Nếu là string, thử parse
+    if (typeof timeValue === 'string') {
+      const date = new Date(timeValue);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleString('vi-VN');
+      }
+    }
+    
+    // Nếu là Date object
+    if (timeValue instanceof Date) {
+      return timeValue.toLocaleString('vi-VN');
+    }
+    
+    return '-';
+  } catch (error) {
+    console.error('Error formatting trade time:', error, timeValue);
+    return '-';
+  }
+}
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1877,6 +1974,8 @@ interface BacktestConfig {
   bbStdDev?: number;
   multiplier?: number;
   channelPeriod?: number;
+  maker_fee?: number;
+  taker_fee?: number;
 }
 
 interface OHLCV {
@@ -1922,7 +2021,9 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     bbPeriod: 20,
     bbStdDev: 2,
     channelPeriod: 20,
-    multiplier: 2
+    multiplier: 2,
+    maker_fee: 0.1,
+    taker_fee: 0.1,
   });
   const [chartData, setChartData] = useState<OHLCV[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -1958,6 +2059,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   });
   // Thêm state cho backtests completed
   const [backtests, setBacktests] = useState<any[]>([]);
+  const [useDefaultFee, setUseDefaultFee] = useState(true);
 
   const handleBacktestConfigChange = (field: string, value: string | number) => {
     setBacktestConfig(prev => ({
@@ -1970,6 +2072,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     setHypothesisConfig(prev => ({
       ...prev,
       [field]: value
+    }));
+  };
+
+  const handleFeeChange = (field: 'maker_fee' | 'taker_fee', value: string) => {
+    setBacktestConfig(prev => ({
+      ...prev,
+      [field]: parseFloat(value)
     }));
   };
 
@@ -2059,6 +2168,10 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           maxDrawdown: backtestConfig.maxDrawdown || 10,
           trailingStop: backtestConfig.trailingStop || true,
           trailingStopDistance: backtestConfig.trailingStopDistance || 1
+        },
+        transaction_costs: {
+          maker_fee: backtestConfig.maker_fee ?? 0.1,
+          taker_fee: backtestConfig.taker_fee ?? 0.1
         }
       };
 
@@ -2136,7 +2249,9 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         bbPeriod: 20,
         bbStdDev: 2,
         channelPeriod: 20,
-        multiplier: 2
+        multiplier: 2,
+        maker_fee: 0.1,
+        taker_fee: 0.1,
       });
 
       toast({
@@ -3267,6 +3382,50 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
                     </div>
+                    <div className="col-span-2 space-y-2">
+                      <Label>
+                        <input
+                          type="checkbox"
+                          checked={useDefaultFee}
+                          onChange={e => {
+                            setUseDefaultFee(e.target.checked);
+                            setBacktestConfig(prev => ({
+                              ...prev,
+                              maker_fee: e.target.checked ? 0.1 : prev.maker_fee,
+                              taker_fee: e.target.checked ? 0.1 : prev.taker_fee
+                            }));
+                          }}
+                          className="mr-2"
+                        />
+                        Sử dụng phí giao dịch mặc định (Maker/Taker: 0.1%)
+                      </Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Maker fee (%)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            value={backtestConfig.maker_fee}
+                            disabled={useDefaultFee}
+                            onChange={e => handleFeeChange('maker_fee', e.target.value)}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Taker fee (%)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            value={backtestConfig.taker_fee}
+                            disabled={useDefaultFee}
+                            onChange={e => handleFeeChange('taker_fee', e.target.value)}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
                 <TabsContent value="script" className="space-y-4">
@@ -4345,9 +4504,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                             <th className="p-2 text-left">Thời gian ra</th>
                                             <th className="p-2 text-center">Loại</th>
                                             <th className="p-2 text-right">Giá vào</th>
+                                            <th className="p-2 text-center">Signal mua</th>
                                             <th className="p-2 text-right">Giá ra</th>
+                                            <th className="p-2 text-center">Signal bán</th>
                                             <th className="p-2 text-right">Khối lượng</th>
-                                            <th className="p-2 text-right">Lợi nhuận</th>
+                                            <th className="p-2 text-right">Lợi nhuận (Gross)</th>
+                                            <th className="p-2 text-right">Phí giao dịch</th>
+                                            <th className="p-2 text-right">Lợi nhuận (Net)</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -4355,35 +4518,65 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                             const entry = Number(trade.entry_price);
                                             const exit = Number(trade.exit_price);
                                             const size = Number(trade.size);
-                                            const profit = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                            const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                            const fee = (trade.entry_fee || 0) + (trade.exit_fee || 0);
+                                            const net = gross - fee;
                                             return (
                                               <tr key={idx} className="border-b hover:bg-muted/30">
-                                                <td className="p-2">{trade.entry_time ? new Date(trade.entry_time).toLocaleString('vi-VN') : '-'}</td>
-                                                <td className="p-2">{trade.exit_time ? new Date(trade.exit_time).toLocaleString('vi-VN') : '-'}</td>
+                                                <td className="p-2">{formatTradeTime(trade.entry_time || trade.entryTime || trade.open_time)}</td>
+                                                <td className="p-2">{formatTradeTime(trade.exit_time || trade.exitTime || trade.close_time)}</td>
                                                 <td className="p-2 text-center">{trade.side || trade.type || '-'}</td>
                                                 <td className="p-2 text-right">{trade.entry_price !== undefined ? trade.entry_price : '-'}</td>
+                                                <td className="p-2 text-center text-xs">
+                                                  {getBuySignalText(selectedExperiment, trade)}
+                                                </td>
                                                 <td className="p-2 text-right">{trade.exit_price !== undefined ? trade.exit_price : '-'}</td>
+                                                <td className="p-2 text-center text-xs">
+                                                  {getSellSignalText(selectedExperiment, trade)}
+                                                </td>
                                                 <td className="p-2 text-right">{trade.size !== undefined ? trade.size : '-'}</td>
-                                                <td className={`p-2 text-right font-semibold ${profit > 0 ? 'text-green-600' : profit < 0 ? 'text-red-600' : ''}`}>{profit.toFixed(2)}</td>
+                                                <td className={`p-2 text-right font-semibold ${gross > 0 ? 'text-green-600' : gross < 0 ? 'text-red-600' : ''}`}>{gross.toFixed(2)}</td>
+                                                <td className="p-2 text-right">{fee > 0 ? fee.toFixed(2) : '-'}</td>
+                                                <td className={`p-2 text-right font-semibold ${net > 0 ? 'text-green-600' : net < 0 ? 'text-red-600' : ''}`}>{net.toFixed(2)}</td>
                                               </tr>
                                             );
                                           })}
                                         </tbody>
                                         <tfoot className="sticky bottom-0 bg-muted/70 border-t">
                                           <tr className="font-bold">
-                                            <td className="p-2 text-right" colSpan={6}>Tổng lợi nhuận</td>
+                                            <td className="p-2 text-right" colSpan={8}>Tổng lợi nhuận (Gross)</td>
                                             <td className="p-2 text-right">
                                               {(() => {
                                                 const total = resultObj.trades.reduce((sum: number, t: any) => {
                                                   const entry = Number(t.entry_price);
                                                   const exit = Number(t.exit_price);
                                                   const size = Number(t.size);
-                                                  const profit = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
-                                                  return sum + profit;
+                                                  const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                                  return sum + gross;
                                                 }, 0);
                                                 return <span className={total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}>{total.toFixed(2)}</span>;
                                               })()}
                                             </td>
+                                            <td className="p-2 text-right">
+                                              {(() => {
+                                                const totalFee = resultObj.trades.reduce((sum: number, t: any) => (sum + (t.entry_fee || 0) + (t.exit_fee || 0)), 0);
+                                                return <span className={totalFee > 0 ? 'text-yellow-700' : ''}>{totalFee.toFixed(2)}</span>;
+                                              })()}
+                                            </td>
+                                            <td className="p-2 text-right">
+                                              {(() => {
+                                                const totalNet = resultObj.trades.reduce((sum: number, t: any) => {
+                                                  const entry = Number(t.entry_price);
+                                                  const exit = Number(t.exit_price);
+                                                  const size = Number(t.size);
+                                                  const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                                  const fee = (t.entry_fee || 0) + (t.exit_fee || 0);
+                                                  return sum + (gross - fee);
+                                                }, 0);
+                                                return <span className={totalNet > 0 ? 'text-green-700' : totalNet < 0 ? 'text-red-700' : ''}>{totalNet.toFixed(2)}</span>;
+                                              })()}
+                                            </td>
+                                            <td className="p-2 text-center" colSpan={2}></td>
                                           </tr>
                                         </tfoot>
                                       </table>
@@ -4459,6 +4652,16 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                     <Card>
                       <CardHeader><CardTitle className="text-base">Kết quả</CardTitle></CardHeader>
                       <CardContent>
+                        {/* Hiển thị tổng phí giao dịch nếu có */}
+                        {selectedExperiment.results.total_transaction_costs || (selectedExperiment.results.cost_analysis && selectedExperiment.results.cost_analysis.total_transaction_costs) ? (
+                          <div className="mb-3 p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                            <span className="font-semibold text-yellow-700 dark:text-yellow-200">Tổng phí giao dịch đã trả: </span>
+                            <span className="font-mono text-yellow-900 dark:text-yellow-100">
+                              {(selectedExperiment.results.total_transaction_costs || (selectedExperiment.results.cost_analysis && selectedExperiment.results.cost_analysis.total_transaction_costs)).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-xs text-yellow-700 dark:text-yellow-200 ml-2">(VNĐ hoặc USD tuỳ cấu hình)</span>
+                          </div>
+                        ) : null}
                         <div className="bg-muted p-4 rounded-lg">
                           <pre className="text-sm overflow-auto">{JSON.stringify(selectedExperiment.results, null, 2)}</pre>
                         </div>
@@ -4517,21 +4720,33 @@ function BacktestResultDetail({ results }: { results: any }) {
     total_trades: 'Tổng số lệnh đã thực hiện.',
     final_capital: 'Số dư cuối cùng sau backtest.',
     losing_trades: 'Số lệnh thua.',
-    winning_trades: 'Số lệnh thắng.'
+    winning_trades: 'Số lệnh thắng.',
+    total_transaction_costs: 'Tổng phí giao dịch đã trả trong toàn bộ backtest.'
   };
+  // Lấy tổng phí giao dịch nếu có
+  const totalFee = metrics.total_transaction_costs || (metrics.cost_analysis && metrics.cost_analysis.total_transaction_costs);
   return (
     <div className="mb-6">
       <h4 className="font-semibold mb-2">Chỉ số Backtest chi tiết</h4>
+      {typeof totalFee === 'number' && (
+        <div className="flex items-center gap-2 p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg mb-2">
+          <span className="font-semibold text-yellow-700 dark:text-yellow-200">Tổng phí giao dịch:</span>
+          <span className="font-mono text-yellow-900 dark:text-yellow-100">{totalFee.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span className="text-xs text-yellow-700 dark:text-yellow-200">(VNĐ hoặc USD tuỳ cấu hình)</span>
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {Object.entries(metrics).map(([key, value]) => (
-          <div key={key} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-            <span className="font-semibold">{key.replace(/_/g, ' ')}:</span>
-            <span className="font-mono">{typeof value === 'number' ? Number(value).toFixed(4) : String(value)}</span>
-            <span className="relative group cursor-pointer">
-              <span className="text-blue-500 border border-blue-400 rounded-full px-1 text-xs ml-1">i</span>
-              <span className="absolute left-1/2 z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 whitespace-nowrap -translate-x-1/2 mt-2 shadow-lg">{explain[key] || key}</span>
-            </span>
-          </div>
+          key !== 'cost_analysis' && key !== 'total_transaction_costs' && (
+            <div key={key} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+              <span className="font-semibold">{key.replace(/_/g, ' ')}:</span>
+              <span className="font-mono">{typeof value === 'number' ? Number(value).toFixed(4) : String(value)}</span>
+              <span className="relative group cursor-pointer">
+                <span className="text-blue-500 border border-blue-400 rounded-full px-1 text-xs ml-1">i</span>
+                <span className="absolute left-1/2 z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 whitespace-nowrap -translate-x-1/2 mt-2 shadow-lg">{explain[key] || key}</span>
+              </span>
+            </div>
+          )
         ))}
       </div>
     </div>

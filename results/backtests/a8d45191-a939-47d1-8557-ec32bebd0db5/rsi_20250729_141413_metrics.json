@@ -1,0 +1,13 @@
+{
+    "total_return": -12.256196074262371,
+    "sharpe_ratio": -0.524914517460537,
+    "max_drawdown": 16.118808416102038,
+    "total_trades": 6,
+    "winning_trades": 3,
+    "losing_trades": 3,
+    "win_rate": 50.0,
+    "average_win": 234.29942958501042,
+    "average_loss": -642.8392987270904,
+    "final_capital": 8774.380392573763,
+    "total_fee": 107.52482260871227
+}

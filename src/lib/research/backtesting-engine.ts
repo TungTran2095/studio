@@ -135,11 +135,11 @@ export class BacktestingEngine {
       const priceChange = (currentBar.close - previousBar.close) / previousBar.close;
       const volumeRatio = currentBar.volume / previousBar.volume;
 
-      // Entry condition: price up > 2% with high volume
+      // Entry condition: price up > 2% with high volume - Mua khi có signal mua
       if (priceChange > 0.02 && volumeRatio > 1.5 && this.state.positions.length === 0) {
         this.openPosition('long', currentBar.close, currentBar.timestamp, 'Momentum Buy');
       }
-      // Exit condition: price down > 1%
+      // Exit condition: price down > 1% - Bán khi có signal bán
       else if (priceChange < -0.01 && this.state.positions.length > 0) {
         this.state.positions.forEach(position => {
           this.closePosition(position, currentBar.close, currentBar.timestamp, 'Momentum Exit');
@@ -155,11 +155,11 @@ export class BacktestingEngine {
 
       const priceDeviation = (currentBar.close - sma20) / sma20;
 
-      // Entry condition: price below SMA by 3%
+      // Entry condition: price below SMA by 3% - Mua khi có signal mua
       if (priceDeviation < -0.03 && this.state.positions.length === 0) {
         this.openPosition('long', currentBar.close, currentBar.timestamp, 'Mean Reversion Buy');
       }
-      // Exit condition: price above SMA
+      // Exit condition: price above SMA - Bán khi có signal bán
       else if (priceDeviation > 0 && this.state.positions.length > 0) {
         this.state.positions.forEach(position => {
           this.closePosition(position, currentBar.close, currentBar.timestamp, 'Mean Reversion Exit');

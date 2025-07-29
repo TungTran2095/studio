@@ -22,6 +22,74 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TradingViewWidget } from '@/components/chart/tradingview-widget';
 import { PriceChart } from '@/components/research/price-chart';
 import { supabase } from '@/lib/supabase-client';
+
+// Helper functions để tạo text signal cho bot
+function getBotBuySignalText(bot: any, trade: any): string {
+  if (!bot?.config?.strategy?.type) {
+    return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
+  }
+
+  const strategyType = bot.config.strategy.type;
+  const params = bot.config.strategy.parameters || {};
+
+  switch (strategyType) {
+    case 'rsi':
+      // Lấy giá trị RSI thực tế tại thời điểm mua
+      const buyRsiValue = trade.entry_rsi || trade.rsi_value || trade.indicator_value;
+      if (buyRsiValue !== undefined && buyRsiValue !== null) {
+        return `RSI = ${buyRsiValue.toFixed(2)} (Quá bán)`;
+      }
+      return `RSI < ${params.oversold || 30} (Quá bán)`;
+    case 'macd':
+      return `MACD cắt lên Signal`;
+    case 'ma_crossover':
+      return `MA${params.fastPeriod || 10} cắt lên MA${params.slowPeriod || 20}`;
+    case 'bollinger_bands':
+      return `Giá chạm dải dưới BB`;
+    case 'moving_average':
+      return `Giá > MA${params.period || 20}`;
+    case 'momentum':
+      return `Momentum tăng > 2%`;
+    case 'mean_reversion':
+      return `Giá < SMA${params.period || 20} - 3%`;
+    default:
+      return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
+  }
+}
+
+function getBotSellSignalText(bot: any, trade: any): string {
+  if (!bot?.config?.strategy?.type) {
+    return trade.exit_reason || trade.sell_signal || '-';
+  }
+
+  const strategyType = bot.config.strategy.type;
+  const params = bot.config.strategy.parameters || {};
+
+  switch (strategyType) {
+    case 'rsi':
+      // Lấy giá trị RSI thực tế tại thời điểm bán
+      const sellRsiValue = trade.exit_rsi || trade.rsi_value || trade.indicator_value;
+      if (sellRsiValue !== undefined && sellRsiValue !== null) {
+        return `RSI = ${sellRsiValue.toFixed(2)} (Quá mua)`;
+      }
+      return `RSI > ${params.overbought || 70} (Quá mua)`;
+    case 'macd':
+      return `MACD cắt xuống Signal`;
+    case 'ma_crossover':
+      return `MA${params.fastPeriod || 10} cắt xuống MA${params.slowPeriod || 20}`;
+    case 'bollinger_bands':
+      return `Giá chạm dải trên BB`;
+    case 'moving_average':
+      return `Giá < MA${params.period || 20}`;
+    case 'momentum':
+      return `Momentum giảm > 1%`;
+    case 'mean_reversion':
+      return `Giá > SMA${params.period || 20}`;
+    default:
+      return trade.exit_reason || trade.sell_signal || '-';
+  }
+}
+
 import {
   LineChart as RechartsLineChart,
   Line as RechartsLine,
@@ -904,6 +972,8 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                               <th className="p-2 text-center">Loại</th>
                               <th className="p-2 text-center">Trạng thái</th>
                               <th className="p-2 text-right">Giá</th>
+                              <th className="p-2 text-center">Signal mua</th>
+                              <th className="p-2 text-center">Signal bán</th>
                               <th className="p-2 text-right">Số lượng</th>
                               <th className="p-2 text-right">Lợi nhuận</th>
                             </tr>
@@ -911,7 +981,7 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                           <tbody>
                             {tradesLoading ? (
                               <tr>
-                                <td colSpan={6} className="p-4 text-center text-muted-foreground">Đang tải...</td>
+                                <td colSpan={8} className="p-4 text-center text-muted-foreground">Đang tải...</td>
                               </tr>
                             ) : botTrades.length > 0 ? (
                               botTrades.map((trade: any, idx: number) => (
@@ -929,6 +999,12 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                                       : trade.entry_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })
                                     }
                                   </td>
+                                  <td className="p-2 text-center text-xs">
+                                    {getBotBuySignalText(selectedBot, trade)}
+                                  </td>
+                                  <td className="p-2 text-center text-xs">
+                                    {getBotSellSignalText(selectedBot, trade)}
+                                  </td>
                                   <td className="p-2 text-right">{trade.quantity}</td>
                                   <td className="p-2 text-right">
                                     <span className={trade.pnl !== undefined && trade.pnl !== null ? (trade.pnl >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-500'}>
@@ -939,7 +1015,7 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                               ))
                             ) : (
                               <tr>
-                                <td colSpan={6} className="p-4 text-center text-muted-foreground">Chưa có giao dịch nào</td>
+                                <td colSpan={8} className="p-4 text-center text-muted-foreground">Chưa có giao dịch nào</td>
                               </tr>
                             )}
                           </tbody>

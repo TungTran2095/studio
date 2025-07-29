@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from backtest_strategies.base_strategy import BaseStrategy
+from base_strategy import BaseStrategy
 
 class MACDStrategy(BaseStrategy):
     def __init__(self, config):
@@ -29,13 +29,13 @@ class MACDStrategy(BaseStrategy):
         df = data.copy()
         
         # Calculate MACD components
-        df['macd'], df['signal'], df['histogram'] = self.calculate_macd(df['close'])
+        df['macd'], df['signal_line'], df['histogram'] = self.calculate_macd(df['close'])
         
         # Generate signals
         df['signal'] = 0
         # Buy when MACD crosses above signal line
-        df.loc[(df['macd'] > df['signal']) & (df['macd'].shift(1) <= df['signal'].shift(1)), 'signal'] = 1
+        df.loc[(df['macd'] > df['signal_line']) & (df['macd'].shift(1) <= df['signal_line'].shift(1)), 'signal'] = 1
         # Sell when MACD crosses below signal line
-        df.loc[(df['macd'] < df['signal']) & (df['macd'].shift(1) >= df['signal'].shift(1)), 'signal'] = -1
+        df.loc[(df['macd'] < df['signal_line']) & (df['macd'].shift(1) >= df['signal_line'].shift(1)), 'signal'] = -1
         
         return df 

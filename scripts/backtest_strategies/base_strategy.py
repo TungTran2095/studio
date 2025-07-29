@@ -15,6 +15,9 @@ class BaseStrategy(ABC):
         self.timeframe = self.trading_config.get('timeframe', '1h')
         self.initial_capital = float(self.trading_config.get('initialCapital', 10000))
         self.position_size = float(self.trading_config.get('positionSize', 1))
+        # Transaction fee (đơn vị %)
+        self.maker_fee = float(self.trading_config.get('maker_fee', 0.1)) / 100
+        self.taker_fee = float(self.trading_config.get('taker_fee', 0.1)) / 100
         
         # Risk management parameters
         self.stop_loss = float(self.risk_config.get('stopLoss', 2)) / 100
@@ -52,76 +55,88 @@ class BaseStrategy(ABC):
         current_capital = self.initial_capital
         max_capital = self.initial_capital
         max_drawdown = 0
+        total_fee = 0
+        entry_fee_last_trade = 0
         
         # Track positions
         in_position = False
         entry_price = 0
         position_size = 0
+        entry_time = None
+        entry_indicators = {}
         
         # Iterate through data
         for i in range(1, len(signals)):
             current_price = signals.iloc[i]['close']
             signal = signals.iloc[i]['signal']
             
-            # Check for exit conditions if in position
-            if in_position:
+            # Debug: print signal info (commented out)
+            # if signal != 0:
+            #     print(f"Signal at index {i}: {signal}, price: {current_price}, in_position: {in_position}")
+            
+            # Check for signal-based exit (chỉ bán khi có sell signal và đang có position)
+            if in_position and signal == -1:
                 # Calculate profit/loss
                 pnl = (current_price - entry_price) * position_size
                 pnl_pct = (current_price - entry_price) / entry_price
+                # Maker fee khi thoát lệnh
+                exit_fee = current_price * position_size * self.maker_fee
                 
-                # Check stop loss
-                if pnl_pct <= -self.stop_loss:
-                    trades.append({
-                        'entry_time': signals.index[i-1],
-                        'exit_time': signals.index[i],
-                        'entry_price': entry_price,
-                        'exit_price': current_price,
-                        'size': position_size,
-                        'pnl': pnl,
-                        'pnl_pct': pnl_pct,
-                        'type': 'long',
-                        'exit_reason': 'stop_loss'
-                    })
-                    current_capital += pnl
-                    in_position = False
+                # Lấy giá trị indicator tại thời điểm bán
+                exit_indicators = {}
+                for col in signals.columns:
+                    if col not in ['open', 'high', 'low', 'close', 'volume', 'signal']:
+                        exit_indicators[col] = signals.iloc[i][col]
                 
-                # Check take profit
-                elif pnl_pct >= self.take_profit:
-                    trades.append({
-                        'entry_time': signals.index[i-1],
-                        'exit_time': signals.index[i],
-                        'entry_price': entry_price,
-                        'exit_price': current_price,
-                        'size': position_size,
-                        'pnl': pnl,
-                        'pnl_pct': pnl_pct,
-                        'type': 'long',
-                        'exit_reason': 'take_profit'
-                    })
-                    current_capital += pnl
-                    in_position = False
+                # Tạo trade record với cả entry và exit indicators
+                trade_record = {
+                    'entry_time': entry_time,  # Sử dụng thời gian mua thực tế
+                    'exit_time': signals.index[i],
+                    'entry_price': entry_price,
+                    'exit_price': current_price,
+                    'size': position_size,
+                    'pnl': pnl - entry_fee_last_trade - exit_fee,
+                    'pnl_pct': pnl_pct,
+                    'type': 'long',
+                    'exit_reason': 'signal',
+                    'entry_fee': entry_fee_last_trade,
+                    'exit_fee': exit_fee
+                }
                 
-                # Check signal exit
-                elif signal == -1:
-                    trades.append({
-                        'entry_time': signals.index[i-1],
-                        'exit_time': signals.index[i],
-                        'entry_price': entry_price,
-                        'exit_price': current_price,
-                        'size': position_size,
-                        'pnl': pnl,
-                        'pnl_pct': pnl_pct,
-                        'type': 'long',
-                        'exit_reason': 'signal'
-                    })
-                    current_capital += pnl
-                    in_position = False
+                # Thêm entry indicators với prefix "entry_"
+                for key, value in entry_indicators.items():
+                    trade_record[f'entry_{key}'] = value
+                
+                # Thêm exit indicators với prefix "exit_"
+                for key, value in exit_indicators.items():
+                    trade_record[f'exit_{key}'] = value
+                
+                trades.append(trade_record)
+                current_capital += pnl - exit_fee
+                total_fee += exit_fee
+                in_position = False
+                entry_fee_last_trade = 0
+            # Bỏ qua sell signal khi không có position
+            elif signal == -1 and not in_position:
+                pass  # Skip sell signal when no position
             
-            # Check for entry if not in position
+            # Check for entry if not in position - Mua khi có signal mua
             elif signal == 1 and not in_position:
                 entry_price = current_price
+                entry_time = signals.index[i]  # Lưu thời gian mua thực tế
                 position_size = (current_capital * self.position_size) / current_price
+                # Taker fee khi vào lệnh
+                entry_fee = current_price * position_size * self.taker_fee
+                current_capital -= entry_fee
+                total_fee += entry_fee
+                entry_fee_last_trade = entry_fee
                 in_position = True
+                
+                # Lưu thông tin entry để sử dụng khi exit
+                entry_indicators = {}
+                for col in signals.columns:
+                    if col not in ['open', 'high', 'low', 'close', 'volume', 'signal']:
+                        entry_indicators[col] = signals.iloc[i][col]
             
             # Update equity curve
             equity.append(current_capital)
@@ -131,6 +146,54 @@ class BaseStrategy(ABC):
                 max_capital = current_capital
             drawdown = (max_capital - current_capital) / max_capital
             max_drawdown = max(max_drawdown, drawdown)
+        
+        # Close any remaining position at the end
+        if in_position:
+            # print(f"  Closing remaining position at end - price: {current_price}")
+            # Calculate profit/loss
+            pnl = (current_price - entry_price) * position_size
+            pnl_pct = (current_price - entry_price) / entry_price
+            # Maker fee khi thoát lệnh
+            exit_fee = current_price * position_size * self.maker_fee
+            
+            # Lấy giá trị indicator tại thời điểm bán
+            exit_indicators = {}
+            for col in signals.columns:
+                if col not in ['open', 'high', 'low', 'close', 'volume', 'signal']:
+                    # Tìm giá trị indicator hợp lệ gần nhất
+                    for j in range(len(signals)-1, -1, -1):
+                        if not pd.isna(signals.iloc[j][col]) and signals.iloc[j][col] != 0:
+                            exit_indicators[col] = signals.iloc[j][col]
+                            break
+                    else:
+                        exit_indicators[col] = 0
+            
+            # Tạo trade record với cả entry và exit indicators
+            trade_record = {
+                'entry_time': entry_time,  # Sử dụng thời gian mua thực tế
+                'exit_time': signals.index[-1],  # Last time
+                'entry_price': entry_price,
+                'exit_price': current_price,
+                'size': position_size,
+                'pnl': pnl - entry_fee_last_trade - exit_fee,
+                'pnl_pct': pnl_pct,
+                'type': 'long',
+                'exit_reason': 'end_of_backtest',
+                'entry_fee': entry_fee_last_trade,
+                'exit_fee': exit_fee
+            }
+            
+            # Thêm entry indicators với prefix "entry_"
+            for key, value in entry_indicators.items():
+                trade_record[f'entry_{key}'] = value
+            
+            # Thêm exit indicators với prefix "exit_"
+            for key, value in exit_indicators.items():
+                trade_record[f'exit_{key}'] = value
+            
+            trades.append(trade_record)
+            current_capital += pnl - exit_fee
+            total_fee += exit_fee
         
         # Calculate performance metrics
         total_trades = len(trades)
@@ -160,6 +223,7 @@ class BaseStrategy(ABC):
                 'win_rate': win_rate * 100,
                 'average_win': avg_win,
                 'average_loss': avg_loss,
-                'final_capital': current_capital
+                'final_capital': current_capital,
+                'total_fee': total_fee
             }
         } 

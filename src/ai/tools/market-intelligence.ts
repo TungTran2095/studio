@@ -1165,7 +1165,7 @@ export async function runBacktestStrategy(
       if (!signal) continue; // Bỏ qua nếu không có tín hiệu cho nến này
       
       if (signal.type === 'buy' && currentPosition <= 0) {
-        // Mở vị thế mua
+        // Mở vị thế mua khi có signal mua
         const quantity = capital / candle.close;
         currentPosition = quantity;
         trades.push({
@@ -1175,17 +1175,18 @@ export async function runBacktestStrategy(
           quantity: quantity,
           reason: signal.reason
         });
-      } else if (signal.type === 'sell' && currentPosition >= 0) {
-        // Mở vị thế bán
-        const quantity = capital / candle.close;
-        currentPosition = -quantity;
+      } else if (signal.type === 'sell' && currentPosition > 0) {
+        // Đóng vị thế mua khi có signal bán
+        const pnl = (candle.close - trades[trades.length - 1].entryPrice) * currentPosition;
+        capital += pnl;
         trades.push({
           type: 'sell',
           entryPrice: candle.close,
           entryTime: candle.timestamp,
-          quantity: quantity,
+          quantity: currentPosition,
           reason: signal.reason
         });
+        currentPosition = 0;
       }
       
       // Cập nhật vốn

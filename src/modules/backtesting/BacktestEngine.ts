@@ -74,19 +74,14 @@ export class BacktestEngine {
           if (currentPosition < 0) {
             this.closePosition(candle.timestamp, candle.close, currentPosition);
           }
-          // Open long position
+          // Open long position - Mua khi có signal mua
           currentPosition = signal.quantity;
           entryPrice = candle.close;
           entryTime = candle.timestamp;
-        } else if (signal.type === 'SELL' && currentPosition >= 0) {
-          // Close long position if exists
-          if (currentPosition > 0) {
-            this.closePosition(candle.timestamp, candle.close, currentPosition);
-          }
-          // Open short position
-          currentPosition = -signal.quantity;
-          entryPrice = candle.close;
-          entryTime = candle.timestamp;
+        } else if (signal.type === 'SELL' && currentPosition > 0) {
+          // Close long position - Bán khi có signal bán
+          this.closePosition(candle.timestamp, candle.close, currentPosition);
+          currentPosition = 0;
         }
       }
 

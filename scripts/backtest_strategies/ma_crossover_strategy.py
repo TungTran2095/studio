@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from backtest_strategies.base_strategy import BaseStrategy
+from base_strategy import BaseStrategy
 
 class MACrossoverStrategy(BaseStrategy):
     def __init__(self, config):
@@ -15,9 +15,13 @@ class MACrossoverStrategy(BaseStrategy):
         df['fast_ma'] = df['close'].rolling(window=self.fast_period).mean()
         df['slow_ma'] = df['close'].rolling(window=self.slow_period).mean()
         
-        # Generate signals
+        # Generate signals - chỉ tạo signal khi có crossover
         df['signal'] = 0
-        df.loc[df['fast_ma'] > df['slow_ma'], 'signal'] = 1  # Buy signal
-        df.loc[df['fast_ma'] < df['slow_ma'], 'signal'] = -1  # Sell signal
+        
+        # Buy signal khi fast MA cắt lên trên slow MA
+        df.loc[(df['fast_ma'] > df['slow_ma']) & (df['fast_ma'].shift(1) <= df['slow_ma'].shift(1)), 'signal'] = 1
+        
+        # Sell signal khi fast MA cắt xuống dưới slow MA
+        df.loc[(df['fast_ma'] < df['slow_ma']) & (df['fast_ma'].shift(1) >= df['slow_ma'].shift(1)), 'signal'] = -1
         
         return df 
