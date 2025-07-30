@@ -27,6 +27,10 @@ class BaseStrategy(ABC):
         self.trailing_stop = bool(self.risk_config.get('trailingStop', True))
         self.trailing_stop_distance = float(self.risk_config.get('trailingStopDistance', 1)) / 100
         
+        # Priority settings
+        self.prioritize_stoploss = bool(self.risk_config.get('prioritizeStoploss', False))
+        self.use_take_profit = bool(self.risk_config.get('useTakeProfit', False))
+        
         # Trading state
         self.capital = self.initial_capital
         self.positions = []
@@ -74,8 +78,78 @@ class BaseStrategy(ABC):
             # if signal != 0:
             #     print(f"Signal at index {i}: {signal}, price: {current_price}, in_position: {in_position}")
             
-            # Check for signal-based exit (chỉ bán khi có sell signal và đang có position)
-            if in_position and signal == -1:
+            # Check for position exit (stoploss priority, then signal, then take profit)
+            if in_position:
+                exit_reason = None
+                should_exit = False
+                
+                # 1. Check stoploss first (highest priority)
+                if self.prioritize_stoploss:
+                    stoploss_price = entry_price * (1 - self.stop_loss)
+                    if current_price <= stoploss_price:
+                        exit_reason = 'stoploss'
+                        should_exit = True
+                
+                # 2. Check sell signal (second priority)
+                if not should_exit and signal == -1:
+                    exit_reason = 'signal'
+                    should_exit = True
+                
+                # 3. Check take profit (third priority) - chỉ khi bật use_take_profit
+                if not should_exit and self.prioritize_stoploss and self.use_take_profit:
+                    take_profit_price = entry_price * (1 + self.take_profit)
+                    if current_price >= take_profit_price:
+                        exit_reason = 'take_profit'
+                        should_exit = True
+                
+                # Execute exit if any condition is met
+                if should_exit:
+                    # Calculate profit/loss
+                    pnl = (current_price - entry_price) * position_size
+                    pnl_pct = (current_price - entry_price) / entry_price
+                    # Maker fee khi thoát lệnh
+                    exit_fee = current_price * position_size * self.maker_fee
+                    
+                    # Lấy giá trị indicator tại thời điểm bán
+                    exit_indicators = {}
+                    for col in signals.columns:
+                        if col not in ['open', 'high', 'low', 'close', 'volume', 'signal']:
+                            exit_indicators[col] = signals.iloc[i][col]
+                    
+                    # Tạo trade record với cả entry và exit indicators
+                    trade_record = {
+                        'entry_time': entry_time,  # Sử dụng thời gian mua thực tế
+                        'exit_time': signals.index[i],
+                        'entry_price': entry_price,
+                        'exit_price': current_price,
+                        'size': position_size,
+                        'pnl': pnl - entry_fee_last_trade - exit_fee,
+                        'pnl_pct': pnl_pct,
+                        'type': 'long',
+                        'exit_reason': exit_reason,  # Sử dụng exit_reason từ logic trên
+                        'entry_fee': entry_fee_last_trade,
+                        'exit_fee': exit_fee
+                    }
+                    
+                    # Thêm entry indicators với prefix "entry_"
+                    for key, value in entry_indicators.items():
+                        trade_record[f'entry_{key}'] = value
+                    
+                    # Thêm exit indicators với prefix "exit_"
+                    for key, value in exit_indicators.items():
+                        trade_record[f'exit_{key}'] = value
+                    
+                    trades.append(trade_record)
+                    current_capital += pnl - exit_fee
+                    total_fee += exit_fee
+                    in_position = False
+                    entry_fee_last_trade = 0
+            # Bỏ qua sell signal khi không có position
+            elif signal == -1 and not in_position:
+                pass  # Skip sell signal when no position
+            
+            # Legacy logic: Check for signal-based exit when prioritize_stoploss is False
+            elif in_position and signal == -1 and not self.prioritize_stoploss:
                 # Calculate profit/loss
                 pnl = (current_price - entry_price) * position_size
                 pnl_pct = (current_price - entry_price) / entry_price
@@ -116,9 +190,6 @@ class BaseStrategy(ABC):
                 total_fee += exit_fee
                 in_position = False
                 entry_fee_last_trade = 0
-            # Bỏ qua sell signal khi không có position
-            elif signal == -1 and not in_position:
-                pass  # Skip sell signal when no position
             
             # Check for entry if not in position - Mua khi có signal mua
             elif signal == 1 and not in_position:

@@ -58,8 +58,23 @@ function getBotBuySignalText(bot: any, trade: any): string {
 }
 
 function getBotSellSignalText(bot: any, trade: any): string {
+  // Ưu tiên hiển thị exit_reason từ backend nếu có
+  if (trade.exit_reason) {
+    switch (trade.exit_reason) {
+      case 'stoploss':
+        return 'Stoploss';
+      case 'take_profit':
+        return 'Take Profit';
+      case 'signal':
+        // Nếu là signal, hiển thị theo strategy type
+        break;
+      default:
+        return trade.exit_reason;
+    }
+  }
+
   if (!bot?.config?.strategy?.type) {
-    return trade.exit_reason || trade.sell_signal || '-';
+    return trade.sell_signal || '-';
   }
 
   const strategyType = bot.config.strategy.type;
@@ -86,7 +101,7 @@ function getBotSellSignalText(bot: any, trade: any): string {
     case 'mean_reversion':
       return `Giá > SMA${params.period || 20}`;
     default:
-      return trade.exit_reason || trade.sell_signal || '-';
+      return trade.sell_signal || '-';
   }
 }
 

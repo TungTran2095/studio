@@ -70,8 +70,23 @@ function getBacktestBuySignalText(config: any, trade: any): string {
 }
 
 function getBacktestSellSignalText(config: any, trade: any): string {
+  // Ưu tiên hiển thị exit_reason từ backend nếu có
+  if ((trade as any).exit_reason) {
+    switch ((trade as any).exit_reason) {
+      case 'stoploss':
+        return 'Stoploss';
+      case 'take_profit':
+        return 'Take Profit';
+      case 'signal':
+        // Nếu là signal, hiển thị theo strategy type
+        break;
+      default:
+        return (trade as any).exit_reason;
+    }
+  }
+
   if (!config?.strategyType) {
-    return (trade as any).exit_reason || (trade as any).sell_signal || '-';
+    return (trade as any).sell_signal || '-';
   }
 
   const strategyType = config.strategyType;
@@ -97,7 +112,7 @@ function getBacktestSellSignalText(config: any, trade: any): string {
     case 'mean_reversion':
       return `Giá > SMA${config.period || 20}`;
     default:
-      return (trade as any).exit_reason || (trade as any).sell_signal || '-';
+      return (trade as any).sell_signal || '-';
   }
 }
 

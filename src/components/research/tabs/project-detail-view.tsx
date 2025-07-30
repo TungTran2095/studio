@@ -37,8 +37,23 @@ function getBuySignalText(experiment: any, trade: any): string {
 }
 
 function getSellSignalText(experiment: any, trade: any): string {
+  // Ưu tiên hiển thị exit_reason từ backend nếu có
+  if (trade.exit_reason) {
+    switch (trade.exit_reason) {
+      case 'stoploss':
+        return 'Stoploss';
+      case 'take_profit':
+        return 'Take Profit';
+      case 'signal':
+        // Nếu là signal, hiển thị theo strategy type
+        break;
+      default:
+        return trade.exit_reason;
+    }
+  }
+
   if (!experiment?.config?.strategy?.type) {
-    return trade.exit_reason || trade.sell_signal || '-';
+    return trade.sell_signal || '-';
   }
 
   const strategyType = experiment.config.strategy.type;
@@ -65,7 +80,7 @@ function getSellSignalText(experiment: any, trade: any): string {
     case 'mean_reversion':
       return `Giá > SMA${params.period || 20}`;
     default:
-      return trade.exit_reason || trade.sell_signal || '-';
+      return trade.sell_signal || '-';
   }
 }
 
@@ -1976,6 +1991,8 @@ interface BacktestConfig {
   channelPeriod?: number;
   maker_fee?: number;
   taker_fee?: number;
+  prioritizeStoploss?: boolean;
+  useTakeProfit?: boolean;
 }
 
 interface OHLCV {
@@ -2167,7 +2184,9 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           maxPositions: backtestConfig.maxPositions || 1,
           maxDrawdown: backtestConfig.maxDrawdown || 10,
           trailingStop: backtestConfig.trailingStop || true,
-          trailingStopDistance: backtestConfig.trailingStopDistance || 1
+          trailingStopDistance: backtestConfig.trailingStopDistance || 1,
+          prioritizeStoploss: backtestConfig.prioritizeStoploss || false,
+          useTakeProfit: backtestConfig.useTakeProfit || false
         },
         transaction_costs: {
           maker_fee: backtestConfig.maker_fee ?? 0.1,
@@ -3381,6 +3400,34 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         onChange={(e) => handleBacktestConfigChange('takeProfit', Number(e.target.value))}
                         className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={backtestConfig.prioritizeStoploss || false}
+                          onChange={(e) => handleBacktestConfigChange('prioritizeStoploss', e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span>Ưu tiên bán theo stoploss</span>
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Khi bật: Stoploss (ưu tiên 1) → Sell Signal (ưu tiên 2) → Take Profit (ưu tiên 3)
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={backtestConfig.useTakeProfit || false}
+                          onChange={(e) => handleBacktestConfigChange('useTakeProfit', e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span>Sử dụng Take Profit</span>
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Khi bật: Take Profit sẽ được sử dụng làm ưu tiên số 3. Khi tắt: chỉ có Stoploss và Sell Signal
+                      </p>
                     </div>
                     <div className="col-span-2 space-y-2">
                       <Label>
