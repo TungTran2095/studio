@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, BarChart4, TrendingUp, Zap, Shield, Settings } from 'lucide-react';
+
 import { format } from 'date-fns';
 
 interface AdvancedBacktestConfig {
@@ -570,6 +571,8 @@ export default function AdvancedBacktestingPage() {
             </Card>
           </div>
         </TabsContent>
+
+
 
         <TabsContent value="results" className="space-y-4">
           {error && (

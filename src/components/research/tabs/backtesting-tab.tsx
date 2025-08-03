@@ -239,20 +239,20 @@ export function BacktestingTab() {
                     {backtest.performance_metrics && (
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div className="flex items-center gap-1">
-                          <TrendingUp className="h-3 w-3 text-green-500" />
-                          <span>Return: {formatPercentage(backtest.performance_metrics.total_return)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
                           <BarChart3 className="h-3 w-3 text-blue-500" />
-                          <span>Sharpe: {formatNumber(backtest.performance_metrics.sharpe_ratio)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <TrendingDown className="h-3 w-3 text-red-500" />
-                          <span>Drawdown: {formatPercentage(Math.abs(backtest.performance_metrics.max_drawdown))}</span>
+                          <span>Trades: {backtest.performance_metrics.total_trades || 0}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Target className="h-3 w-3 text-purple-500" />
-                          <span>Win Rate: {formatPercentage(backtest.performance_metrics.win_rate)}</span>
+                          <span>Win Rate: {formatPercentage(backtest.performance_metrics.win_rate || 0)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <TrendingUp className="h-3 w-3 text-green-500" />
+                          <span>Avg Win: {(backtest.performance_metrics.avg_win_net || backtest.performance_metrics.avg_win || 0).toFixed(2)}%</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <TrendingDown className="h-3 w-3 text-red-500" />
+                          <span>Avg Loss: {Math.abs(backtest.performance_metrics.avg_loss_net || backtest.performance_metrics.avg_loss || 0).toFixed(2)}%</span>
                         </div>
                       </div>
                     )}
@@ -297,30 +297,36 @@ export function BacktestingTab() {
                   </div>
 
                   {backtest.performance_metrics && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-3 bg-green-50 rounded-lg">
-                        <div className="text-lg font-bold text-green-600">
-                          {formatPercentage(backtest.performance_metrics.total_return)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Total Return</div>
-                      </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <div className="text-center p-3 bg-blue-50 rounded-lg">
                         <div className="text-lg font-bold text-blue-600">
-                          {formatNumber(backtest.performance_metrics.sharpe_ratio)}
+                          {backtest.performance_metrics.total_trades || 0}
                         </div>
-                        <div className="text-xs text-muted-foreground">Sharpe Ratio</div>
-                      </div>
-                      <div className="text-center p-3 bg-red-50 rounded-lg">
-                        <div className="text-lg font-bold text-red-600">
-                          {formatPercentage(Math.abs(backtest.performance_metrics.max_drawdown))}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Max Drawdown</div>
+                        <div className="text-xs text-muted-foreground">Số lượng Trade</div>
                       </div>
                       <div className="text-center p-3 bg-purple-50 rounded-lg">
                         <div className="text-lg font-bold text-purple-600">
-                          {formatPercentage(backtest.performance_metrics.win_rate)}
+                          {formatPercentage(backtest.performance_metrics.win_rate || 0)}
                         </div>
-                        <div className="text-xs text-muted-foreground">Win Rate</div>
+                        <div className="text-xs text-muted-foreground">Winrate</div>
+                      </div>
+                      <div className="text-center p-3 bg-green-50 rounded-lg">
+                        <div className="text-lg font-bold text-green-600">
+                          {(backtest.performance_metrics.avg_win_net || backtest.performance_metrics.avg_win || 0).toFixed(2)}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">Tỷ lệ lãi net trung bình</div>
+                      </div>
+                      <div className="text-center p-3 bg-red-50 rounded-lg">
+                        <div className="text-lg font-bold text-red-600">
+                          {Math.abs(backtest.performance_metrics.avg_loss_net || backtest.performance_metrics.avg_loss || 0).toFixed(2)}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">Tỷ lệ lỗ net trung bình</div>
+                      </div>
+                      <div className="text-center p-3 bg-green-50 rounded-lg">
+                        <div className="text-lg font-bold text-green-600">
+                          {formatPercentage(backtest.performance_metrics.total_return || 0)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Tổng lợi nhuận</div>
                       </div>
                     </div>
                   )}

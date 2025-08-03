@@ -275,6 +275,25 @@ class BaseStrategy(ABC):
         avg_win = np.mean([t['pnl'] for t in trades if t['pnl'] > 0]) if winning_trades > 0 else 0
         avg_loss = np.mean([t['pnl'] for t in trades if t['pnl'] < 0]) if losing_trades > 0 else 0
         
+        # Tính toán tỷ lệ lãi net trung bình và tỷ lệ lỗ net trung bình
+        avg_win_net = 0
+        avg_loss_net = 0
+        
+        if total_trades > 0:
+            # Tính tỷ lệ lợi nhuận cho từng giao dịch
+            for trade in trades:
+                entry_value = trade['entry_price'] * trade['size']
+                net_pnl = trade['pnl']  # Đã trừ phí
+                trade['profit_ratio'] = (net_pnl / entry_value) * 100 if entry_value > 0 else 0
+            
+            # Tính tỷ lệ lãi net trung bình = avg tỷ lệ lợi nhuận các giao dịch lãi
+            winning_trade_ratios = [t['profit_ratio'] for t in trades if t['pnl'] > 0]
+            avg_win_net = np.mean(winning_trade_ratios) if winning_trade_ratios else 0
+            
+            # Tính tỷ lệ lỗ net trung bình = avg tỷ lệ lợi nhuận các giao dịch lỗ
+            losing_trade_ratios = [t['profit_ratio'] for t in trades if t['pnl'] < 0]
+            avg_loss_net = np.mean(losing_trade_ratios) if losing_trade_ratios else 0
+        
         total_return = (current_capital - self.initial_capital) / self.initial_capital * 100
         
         # Calculate Sharpe Ratio (assuming risk-free rate = 0)
@@ -294,6 +313,8 @@ class BaseStrategy(ABC):
                 'win_rate': win_rate * 100,
                 'average_win': avg_win,
                 'average_loss': avg_loss,
+                'avg_win_net': avg_win_net,
+                'avg_loss_net': avg_loss_net,
                 'final_capital': current_capital,
                 'total_fee': total_fee
             }

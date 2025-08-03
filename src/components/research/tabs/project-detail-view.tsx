@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import MonteCarloHistogram from '@/components/MonteCarloHistogram';
+import MonteCarloProfitSimulation from '@/components/MonteCarloProfitSimulation';
+import MonteCarloEquityCurve from '@/components/MonteCarloEquityCurve';
 
 // Helper functions để tạo text signal dựa trên chiến lược
 function getBuySignalText(experiment: any, trade: any): string {
@@ -112,6 +115,62 @@ function formatTradeTime(timeValue: any): string {
     console.error('Error formatting trade time:', error, timeValue);
     return '-';
   }
+}
+
+// Hàm tính toán tỷ lệ lãi/lỗ net trung bình từ dữ liệu thực
+function calculateNetProfitRatios(trades: any[]) {
+  console.log('🔍 calculateNetProfitRatios - Input trades:', trades);
+  
+  if (!trades || trades.length === 0) {
+    console.log('🔍 calculateNetProfitRatios - No trades data');
+    return { avgWinNet: 0, avgLossNet: 0 };
+  }
+
+  // Tính tỷ lệ lợi nhuận cho từng giao dịch (giống như trong bảng)
+  const tradesWithRatios = trades.map(trade => {
+    const entry = Number(trade.entry_price);
+    const exit = Number(trade.exit_price);
+    const size = Number(trade.size);
+    const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+    const fee = (trade.entry_fee || 0) + (trade.exit_fee || 0);
+    const net = gross - fee;
+    const tradeValue = entry * size;
+    const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0;
+    
+    console.log('🔍 Trade calculation:', {
+      entry, exit, size, gross, fee, net, tradeValue, profitRatio
+    });
+    
+    return {
+      ...trade,
+      net,
+      profitRatio
+    };
+  });
+
+  // Phân loại giao dịch thắng/thua
+  const winningTrades = tradesWithRatios.filter(trade => trade.net > 0);
+  const losingTrades = tradesWithRatios.filter(trade => trade.net < 0);
+
+  console.log('🔍 Trades classification:', {
+    total: tradesWithRatios.length,
+    winning: winningTrades.length,
+    losing: losingTrades.length
+  });
+
+  // Tính tỷ lệ lãi net trung bình = avg tỷ lệ lợi nhuận các giao dịch lãi
+  const avgWinNet = winningTrades.length > 0
+    ? winningTrades.reduce((sum, trade) => sum + trade.profitRatio, 0) / winningTrades.length
+    : 0;
+
+  // Tính tỷ lệ lỗ net trung bình = avg tỷ lệ lợi nhuận các giao dịch lỗ
+  const avgLossNet = losingTrades.length > 0
+    ? losingTrades.reduce((sum, trade) => sum + trade.profitRatio, 0) / losingTrades.length
+    : 0;
+
+  console.log('🔍 Final results:', { avgWinNet, avgLossNet });
+
+  return { avgWinNet, avgLossNet };
 }
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1137,7 +1196,11 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
             <Activity className="h-4 w-4 mr-2" />
             Làm mới
           </Button>
-          <Button onClick={() => setShowCreateModel(true)}>
+          <Button onClick={() => {
+            console.log('🔘 [Modal] Button clicked!');
+            alert('Button clicked! Modal should open now.');
+            setShowCreateModel(true);
+          }}>
             <Plus className="h-4 w-4 mr-2" />
             Tạo Model Mới
           </Button>
@@ -1372,6 +1435,36 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
           </Card>
         </DialogContent>
       </Dialog>
+
+      {/* Test Modal */}
+      {showCreateModel && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            borderRadius: '8px',
+            maxWidth: '80vw',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <h2>🧪 Test Modal - Hoạt động!</h2>
+            <p>Nếu bạn thấy cái này thì modal đang hoạt động bình thường.</p>
+            <p>State: {String(showCreateModel)}</p>
+            <button onClick={() => setShowCreateModel(false)}>Đóng Modal</button>
+          </div>
+        </div>
+      )}
 
       {/* Create Model Form */}
       <Dialog open={showCreateModel} onOpenChange={setShowCreateModel}>
@@ -2071,14 +2164,21 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     maxSharpe: '',
     minWinrate: '',
     maxWinrate: '',
+    minAvgWinNet: '',
+    maxAvgWinNet: '',
+    minAvgLossNet: '',
+    maxAvgLossNet: '',
     status: '',
     type: '',
   });
   // Thêm state cho backtests completed
   const [backtests, setBacktests] = useState<any[]>([]);
   const [useDefaultFee, setUseDefaultFee] = useState(true);
+  
+  // State cho Monte Carlo simulation
+  const [monteCarloResults, setMonteCarloResults] = useState<any[]>([]);
 
-  const handleBacktestConfigChange = (field: string, value: string | number) => {
+  const handleBacktestConfigChange = (field: string, value: string | number | boolean) => {
     setBacktestConfig(prev => ({
       ...prev,
       [field]: value
@@ -2574,6 +2674,10 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     maxSharpe: '',
     minWinrate: '',
     maxWinrate: '',
+    minAvgWinNet: '',
+    maxAvgWinNet: '',
+    minAvgLossNet: '',
+    maxAvgLossNet: '',
     status: '',
     type: '',
   });
@@ -2597,6 +2701,22 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         if (filter.maxSharpe && (sharpe_ratio === undefined || Number(sharpe_ratio) > Number(filter.maxSharpe))) return false;
         if (filter.minWinrate && (win_rate === undefined || Number(win_rate) < Number(filter.minWinrate))) return false;
         if (filter.maxWinrate && (win_rate === undefined || Number(win_rate) > Number(filter.maxWinrate))) return false;
+        
+        // Tính toán tỷ lệ lãi/lỗ net trung bình từ dữ liệu thực
+        let avgWinNet = 0;
+        let avgLossNet = 0;
+        
+        // Sử dụng dữ liệu thực từ database
+        avgWinNet = Number(exp.results?.avg_win_net || 0);
+        avgLossNet = Number(exp.results?.avg_loss_net || 0);
+        
+        // Filter theo tỷ lệ lãi net trung bình
+        if (filter.minAvgWinNet && avgWinNet < Number(filter.minAvgWinNet)) return false;
+        if (filter.maxAvgWinNet && avgWinNet > Number(filter.maxAvgWinNet)) return false;
+        
+        // Filter theo tỷ lệ lỗ net trung bình
+        if (filter.minAvgLossNet && avgLossNet < Number(filter.minAvgLossNet)) return false;
+        if (filter.maxAvgLossNet && avgLossNet > Number(filter.maxAvgLossNet)) return false;
       }
       return true;
     });
@@ -2873,6 +2993,20 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
               <div className="flex gap-1">
                 <Input id="minWinrate" type="number" step="0.1" min="0" max="100" placeholder="Từ" value={filter.minWinrate} onChange={e => setFilter(f => ({ ...f, minWinrate: e.target.value }))} />
                 <Input id="maxWinrate" type="number" step="0.1" min="0" max="100" placeholder="Đến" value={filter.maxWinrate} onChange={e => setFilter(f => ({ ...f, maxWinrate: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="minAvgWinNet">Tỷ lệ lãi net TB (%)</Label>
+              <div className="flex gap-1">
+                <Input id="minAvgWinNet" type="number" step="0.01" min="0" max="50" placeholder="Từ" value={filter.minAvgWinNet} onChange={e => setFilter(f => ({ ...f, minAvgWinNet: e.target.value }))} />
+                <Input id="maxAvgWinNet" type="number" step="0.01" min="0" max="50" placeholder="Đến" value={filter.maxAvgWinNet} onChange={e => setFilter(f => ({ ...f, maxAvgWinNet: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="minAvgLossNet">Tỷ lệ lỗ net TB (%)</Label>
+              <div className="flex gap-1">
+                <Input id="minAvgLossNet" type="number" step="0.01" min="-50" max="0" placeholder="Từ" value={filter.minAvgLossNet} onChange={e => setFilter(f => ({ ...f, minAvgLossNet: e.target.value }))} />
+                <Input id="maxAvgLossNet" type="number" step="0.01" min="-50" max="0" placeholder="Đến" value={filter.maxAvgLossNet} onChange={e => setFilter(f => ({ ...f, maxAvgLossNet: e.target.value }))} />
               </div>
             </div>
             <div className="flex gap-2 mt-2 md:mt-0">
@@ -3726,39 +3860,56 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                 {experiment.status === 'completed' && experiment.results && experiment.type === 'backtest' && (
                   <div className="mb-4 p-3 bg-muted/50 rounded-lg">
                     <h4 className="text-sm font-medium mb-2 text-foreground">Kết quả Backtest</h4>
-                    <div className="flex items-center justify-between text-xs">
-                      {experiment.results.total_return !== undefined && (
-                        <div className="text-center flex-1">
-                          <div className={`font-semibold ${
-                            experiment.results.total_return >= 0 ? 'text-green-600' : 'text-red-600'
-                          }`} title="Tổng lợi nhuận: Chỉ số này cho thấy hiệu suất tổng thể của chiến lược. Giá trị dương = lợi nhuận, âm = thua lỗ">
-                            {experiment.results.total_return >= 0 ? '+' : ''}{experiment.results.total_return?.toFixed(2)}%
+                    <div className="grid grid-cols-5 gap-2 text-xs">
+                      {experiment.results.total_trades !== undefined && (
+                        <div className="text-center">
+                          <div className="font-semibold text-blue-600" title="Số lượng Trade: Tổng số giao dịch đã thực hiện">
+                            {experiment.results.total_trades}
                           </div>
-                          <div className="text-muted-foreground">Tổng lợi nhuận</div>
-                        </div>
-                      )}
-                      {experiment.results.sharpe_ratio !== undefined && (
-                        <div className="text-center flex-1">
-                          <div className="font-semibold text-blue-600" title="Sharpe Ratio: Đo lường lợi nhuận so với rủi ro. >1 = tốt, >2 = rất tốt, <0 = kém">
-                            {experiment.results.sharpe_ratio?.toFixed(2)}
-                          </div>
-                          <div className="text-muted-foreground">Sharpe Ratio</div>
-                        </div>
-                      )}
-                      {experiment.results.max_drawdown !== undefined && (
-                        <div className="text-center flex-1">
-                          <div className="font-semibold text-red-600" title="Max Drawdown: Mức thua lỗ lớn nhất từ đỉnh. <10% = tốt, >20% = rủi ro cao">
-                            {experiment.results.max_drawdown?.toFixed(2)}%
-                          </div>
-                          <div className="text-muted-foreground">Max Drawdown</div>
+                          <div className="text-muted-foreground">Số lượng Trade</div>
                         </div>
                       )}
                       {experiment.results.win_rate !== undefined && (
-                        <div className="text-center flex-1">
-                          <div className="font-semibold text-green-600" title="Win Rate: Tỷ lệ giao dịch thắng. >50% = tốt, >60% = rất tốt">
+                        <div className="text-center">
+                          <div className="font-semibold text-purple-600" title="Winrate: Tỷ lệ giao dịch thắng">
                             {experiment.results.win_rate?.toFixed(1)}%
                           </div>
-                          <div className="text-muted-foreground">Win Rate</div>
+                          <div className="text-muted-foreground">Winrate</div>
+                        </div>
+                      )}
+                      {(() => {
+                        let avgWinNet = 0;
+                        let avgLossNet = 0;
+                        
+                        // Sử dụng dữ liệu thực từ database
+                        avgWinNet = Number(experiment.results?.avg_win_net || 0);
+                        avgLossNet = Number(experiment.results?.avg_loss_net || 0);
+                        
+                        return (
+                          <>
+                            <div className="text-center">
+                              <div className="font-semibold text-green-600" title="Tỷ lệ lãi net trung bình: Lãi trung bình sau khi đã trừ chi phí">
+                                {avgWinNet.toFixed(2)}%
+                              </div>
+                              <div className="text-muted-foreground">Tỷ lệ lãi net trung bình</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="font-semibold text-red-600" title="Tỷ lệ lỗ net trung bình: Lỗ trung bình sau khi đã trừ chi phí">
+                                {Math.abs(avgLossNet).toFixed(2)}%
+                              </div>
+                              <div className="text-muted-foreground">Tỷ lệ lỗ net trung bình</div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                      {experiment.results.total_return !== undefined && (
+                        <div className="text-center">
+                          <div className={`font-semibold ${
+                            experiment.results.total_return >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`} title="Tổng lợi nhuận: Chỉ số này cho thấy hiệu suất tổng thể của chiến lược">
+                            {experiment.results.total_return >= 0 ? '+' : ''}{experiment.results.total_return?.toFixed(2)}%
+                          </div>
+                          <div className="text-muted-foreground">Tổng lợi nhuận</div>
                         </div>
                       )}
                     </div>
@@ -4539,6 +4690,45 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                               const resultObj = selectedExperiment.results || selectedExperiment.metrics || {};
                               return <>
                                 <BacktestResultDetail results={resultObj} />
+                                
+                                {/* Monte Carlo Profit Simulation */}
+                                {resultObj.total_trades && resultObj.win_rate && (
+                                  <div className="mt-6 space-y-6">
+                                    {(() => {
+                                      const metrics = {
+                                        totalTrades: Number(resultObj.total_trades) || 0,
+                                        winRate: Number(resultObj.win_rate) || 0,
+                                        avgWinNet: Number(resultObj.avg_win_net) || 2.0,
+                                        avgLossNet: Number(resultObj.avg_loss_net) || -1.5
+                                      };
+
+                                      return (
+                                        <MonteCarloProfitSimulation 
+                                          backtestMetrics={metrics}
+                                          initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
+                                          simulations={1000}
+                                          backtestResult={{
+                                            totalReturn: resultObj.total_return,
+                                            maxDrawdown: resultObj.max_drawdown,
+                                            totalProfit: resultObj.total_profit || resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0
+                                          }}
+                                          onSimulationComplete={setMonteCarloResults}
+                                          experimentId={selectedExperiment.id}
+                                        />
+                                      );
+                                    })()}
+                                    
+                                    {/* Equity Curve Analysis */}
+                                    {monteCarloResults.length > 0 && (
+                                      <MonteCarloEquityCurve
+                                        simulationResults={monteCarloResults}
+                                        initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
+                                        backtestEquityCurve={resultObj.equity_curve}
+                                      />
+                                    )}
+                                  </div>
+                                )}
+                                
                                 {/* Hiển thị bảng trades nếu có */}
                                 {Array.isArray(resultObj.trades) && resultObj.trades.length > 0 ? (
                                   <div className="mb-6">
@@ -4558,6 +4748,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                             <th className="p-2 text-right">Lợi nhuận (Gross)</th>
                                             <th className="p-2 text-right">Phí giao dịch</th>
                                             <th className="p-2 text-right">Lợi nhuận (Net)</th>
+                                            <th className="p-2 text-right">Tỷ lệ lợi nhuận</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -4568,6 +4759,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                             const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
                                             const fee = (trade.entry_fee || 0) + (trade.exit_fee || 0);
                                             const net = gross - fee;
+                                            const tradeValue = entry * size; // Giá vào * Khối lượng
+                                            const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0; // Tỷ lệ lợi nhuận (%)
                                             return (
                                               <tr key={idx} className="border-b hover:bg-muted/30">
                                                 <td className="p-2">{formatTradeTime(trade.entry_time || trade.entryTime || trade.open_time)}</td>
@@ -4585,13 +4778,14 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                                 <td className={`p-2 text-right font-semibold ${gross > 0 ? 'text-green-600' : gross < 0 ? 'text-red-600' : ''}`}>{gross.toFixed(2)}</td>
                                                 <td className="p-2 text-right">{fee > 0 ? fee.toFixed(2) : '-'}</td>
                                                 <td className={`p-2 text-right font-semibold ${net > 0 ? 'text-green-600' : net < 0 ? 'text-red-600' : ''}`}>{net.toFixed(2)}</td>
+                                                <td className={`p-2 text-right font-semibold ${profitRatio > 0 ? 'text-green-600' : profitRatio < 0 ? 'text-red-600' : ''}`}>{profitRatio.toFixed(2)}%</td>
                                               </tr>
                                             );
                                           })}
                                         </tbody>
                                         <tfoot className="sticky bottom-0 bg-muted/70 border-t">
                                           <tr className="font-bold">
-                                            <td className="p-2 text-right" colSpan={8}>Tổng lợi nhuận (Gross)</td>
+                                            <td className="p-2 text-right" colSpan={8}>Tổng cộng</td>
                                             <td className="p-2 text-right">
                                               {(() => {
                                                 const total = resultObj.trades.reduce((sum: number, t: any) => {
@@ -4623,7 +4817,25 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                                 return <span className={totalNet > 0 ? 'text-green-700' : totalNet < 0 ? 'text-red-700' : ''}>{totalNet.toFixed(2)}</span>;
                                               })()}
                                             </td>
-                                            <td className="p-2 text-center" colSpan={2}></td>
+                                            <td className="p-2 text-right">
+                                              {(() => {
+                                                const totalTradeValue = resultObj.trades.reduce((sum: number, t: any) => {
+                                                  const entry = Number(t.entry_price);
+                                                  const size = Number(t.size);
+                                                  return sum + (entry * size);
+                                                }, 0);
+                                                const totalNet = resultObj.trades.reduce((sum: number, t: any) => {
+                                                  const entry = Number(t.entry_price);
+                                                  const exit = Number(t.exit_price);
+                                                  const size = Number(t.size);
+                                                  const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                                  const fee = (t.entry_fee || 0) + (t.exit_fee || 0);
+                                                  return sum + (gross - fee);
+                                                }, 0);
+                                                const avgProfitRatio = totalTradeValue > 0 ? (totalNet / totalTradeValue) * 100 : 0;
+                                                return <span className={avgProfitRatio > 0 ? 'text-green-700' : avgProfitRatio < 0 ? 'text-red-700' : ''}>{avgProfitRatio.toFixed(2)}%</span>;
+                                              })()}
+                                            </td>
                                           </tr>
                                         </tfoot>
                                       </table>

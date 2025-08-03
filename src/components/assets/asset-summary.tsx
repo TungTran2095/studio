@@ -41,6 +41,7 @@ import { format } from 'date-fns'; // For formatting timestamps
 import { useAssetStore, BinanceAccount } from '@/store/asset-store'; // Import Zustand store
 import { useRouter } from 'next/navigation'; // Import router
 import { supabase as supabaseClient } from '@/lib/supabase-client';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
 
 // Schema for form validation - remains the same
 const formSchema = z.object({
@@ -245,13 +246,13 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
         {showAddForm && (
           <form className="border rounded p-3 mb-2 flex flex-col gap-2 bg-muted/30" onSubmit={handleAddAccount}>
             <label className="text-black font-medium text-xs">Tên tài khoản (tuỳ chọn)
-              <Input className="text-black border-2 border-border font-medium" placeholder="Tên tài khoản (tuỳ chọn)" value={newAccount.name} onChange={e => setNewAccount({ ...newAccount, name: e.target.value })} />
+              <Input placeholder="Tên tài khoản (tuỳ chọn)" value={newAccount.name} onChange={e => setNewAccount({ ...newAccount, name: e.target.value })} />
             </label>
             <label className="text-black font-medium text-xs">API Key
-              <Input className="text-black border-2 border-border font-medium" placeholder="API Key" value={newAccount.apiKey} onChange={e => setNewAccount({ ...newAccount, apiKey: e.target.value })} required />
+              <Input placeholder="API Key" value={newAccount.apiKey} onChange={e => setNewAccount({ ...newAccount, apiKey: e.target.value })} required />
             </label>
             <label className="text-black font-medium text-xs">API Secret
-              <Input className="text-black border-2 border-border font-medium" placeholder="API Secret" value={newAccount.apiSecret} onChange={e => setNewAccount({ ...newAccount, apiSecret: e.target.value })} required type="password" />
+              <Input placeholder="API Secret" value={newAccount.apiSecret} onChange={e => setNewAccount({ ...newAccount, apiSecret: e.target.value })} required type="password" />
             </label>
             <div className="flex items-center gap-2">
               <Checkbox checked={newAccount.isTestnet} onCheckedChange={v => setNewAccount({ ...newAccount, isTestnet: !!v })} />
@@ -345,34 +346,25 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
             <div className="flex flex-wrap gap-2 mb-2 items-end">
               <div>
                 <label className="block text-xs font-medium mb-1">Tài khoản</label>
-                <select
-                  className="border rounded px-2 py-1 text-xs"
-                  value={selectedAccountId}
-                  onChange={e => setSelectedAccountId(e.target.value)}
-                >
-                  <option value="all">Tất cả</option>
-                  {accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>{acc.name || 'Binance'}</option>
-                  ))}
-                </select>
+                <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                  <SelectTrigger className="h-10 w-40">
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    {accounts.map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>{acc.name || 'Binance'}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">Từ ngày</label>
-                <input
-                  type="date"
-                  className="border rounded px-2 py-1 text-xs"
-                  value={dateFrom}
-                  onChange={e => setDateFrom(e.target.value)}
-                />
+                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">Đến ngày</label>
-                <input
-                  type="date"
-                  className="border rounded px-2 py-1 text-xs"
-                  value={dateTo}
-                  onChange={e => setDateTo(e.target.value)}
-                />
+                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
               </div>
             </div>
             <div className="flex-1 max-h-[400px] overflow-y-auto">

@@ -73,6 +73,11 @@ interface DataConfig {
 export function ModelBuilderTab() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedAlgorithm, setSelectedAlgorithm] = useState<string>('');
+
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+    setSelectedAlgorithm(''); // Reset algorithm when category changes
+  };
   const [loading, setLoading] = useState(false);
   const [models, setModels] = useState<Model[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
@@ -237,6 +242,13 @@ export function ModelBuilderTab() {
   };
 
   const createModel = async () => {
+    console.log('🔍 [Create Model] Validation check:', {
+      modelName: modelName.trim(),
+      selectedCategory,
+      selectedAlgorithm,
+      selectedProject
+    });
+
     if (!modelName.trim() || !selectedCategory || !selectedAlgorithm || !selectedProject) {
       alert('Vui lòng điền đầy đủ thông tin model');
       return;
@@ -250,7 +262,8 @@ export function ModelBuilderTab() {
         description: modelDescription.trim(),
         category: selectedCategory,
         algorithm_type: selectedAlgorithm,
-        data_config: dataConfig,
+        status: 'draft',
+        feature_config: dataConfig,
         training_config: {
           train_test_split: trainTestSplit[0] / 100,
           sample_size: sampleSize[0],
@@ -259,12 +272,16 @@ export function ModelBuilderTab() {
         }
       };
 
+      console.log('📋 [Create Model] Sending model data:', modelData);
+
       const response = await fetch('/api/research/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(modelData)
       });
 
+      console.log('📡 [Create Model] Response status:', response.status);
+      
       if (response.ok) {
         const result = await response.json();
         console.log('✅ Model created:', result.model);
@@ -275,12 +292,34 @@ export function ModelBuilderTab() {
         setModelDescription('');
         setSelectedCategory('');
         setSelectedAlgorithm('');
+        setDataConfig({
+          source_table: 'crypto_ohlcv_1h',
+          sample_size: 10000,
+          time_range: {
+            start_date: '2024-01-01',
+            end_date: '2024-12-31',
+            period: '6m'
+          },
+          train_test_split: 80,
+          features: ['open', 'high', 'low', 'close', 'volume'],
+          target_column: 'close',
+          preprocessing: {
+            normalize: true,
+            handle_missing: 'fill_forward',
+            remove_outliers: false
+          }
+        });
         
         alert('✅ Model đã được tạo thành công!');
       } else {
         const error = await response.json();
         console.error('❌ Failed to create model:', error);
-        alert(`❌ Lỗi tạo model: ${error.error || 'Unknown error'}`);
+        console.error('❌ Error details:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: error
+        });
+        alert(`❌ Lỗi tạo model: ${error.error || error.details || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('❌ Network error:', error);
@@ -522,7 +561,7 @@ export function ModelBuilderTab() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label>Loại Model</Label>
-                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <Select value={selectedCategory} onValueChange={handleCategoryChange}>
                       <SelectTrigger>
                         <SelectValue placeholder="Chọn loại model" />
                       </SelectTrigger>
@@ -546,7 +585,7 @@ export function ModelBuilderTab() {
                         {selectedCategory && modelCategories
                           .find(cat => cat.id === selectedCategory)?.algorithms
                           .map((algorithm) => (
-                          <SelectItem key={algorithm.id} value={algorithm.name}>
+                          <SelectItem key={algorithm.id} value={algorithm.id}>
                             <div className="flex items-center gap-2">
                               <span>{algorithm.name}</span>
                               <Badge variant={algorithm.difficulty === 'beginner' ? 'secondary' : 'default'} className="text-xs">
@@ -617,6 +656,42 @@ export function ModelBuilderTab() {
                       Tạo Model
                     </>
                   )}
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const testData = {
+                        project_id: selectedProject,
+                        name: modelName.trim() || 'Test Model',
+                        description: modelDescription.trim() || 'Test description',
+                        category: selectedCategory || 'machine_learning',
+                        algorithm_type: selectedAlgorithm || 'linear_regression'
+                      };
+                      
+                      console.log('🧪 Testing with data:', testData);
+                      
+                      const response = await fetch('/api/research/models/test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(testData)
+                      });
+                      
+                      const result = await response.json();
+                      console.log('🧪 Test result:', result);
+                      
+                      if (response.ok) {
+                        alert('✅ Test thành công! Kiểm tra console để xem chi tiết.');
+                      } else {
+                        alert(`❌ Test thất bại: ${result.error || result.details || 'Unknown error'}`);
+                      }
+                    } catch (error) {
+                      console.error('❌ Test error:', error);
+                      alert('❌ Lỗi test');
+                    }
+                  }}
+                >
+                  🧪 Test
                 </Button>
                 <Button variant="outline">
                   <Save className="h-4 w-4 mr-2" />

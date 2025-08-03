@@ -75,6 +75,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('🚀 [Models API] POST - Creating model:', body);
 
+    // Validate required fields
+    if (!body.project_id) {
+      return NextResponse.json(
+        { error: 'Project ID is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!body.name || !body.name.trim()) {
+      return NextResponse.json(
+        { error: 'Model name is required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate category
+    const validCategories = ['statistical', 'machine_learning', 'financial_math'];
+    if (body.category && !validCategories.includes(body.category)) {
+      return NextResponse.json(
+        { error: `Invalid category. Must be one of: ${validCategories.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     // First check what columns exist in the table
     const { data: schemaInfo, error: schemaError } = await supabase
       .from('research_models')
@@ -90,23 +114,25 @@ export async function POST(request: NextRequest) {
     const modelData: any = {
       project_id: body.project_id,
       name: body.name,
-      model_type: body.algorithm_type || body.model_type || 'Linear Regression',
-      algorithm: body.algorithm_type || body.algorithm || 'Linear Regression'
+      category: body.category || 'machine_learning',
+      algorithm_type: body.algorithm_type || body.algorithm || 'linear_regression',
+      status: body.status || 'draft',
+      user_id: null // Will be set by RLS policy based on auth context
     };
 
     // Add optional fields if they exist in schema
     if (body.description) modelData.description = body.description;
-    if (body.status) modelData.status = body.status;
     if (body.parameters) modelData.parameters = body.parameters;
-    if (body.performance_metrics) modelData.performance_metrics = body.performance_metrics;
+    if (body.hyperparameters) modelData.hyperparameters = body.hyperparameters;
+    if (body.feature_config) modelData.feature_config = body.feature_config;
     if (body.training_config) modelData.training_config = body.training_config;
-    if (body.training_logs) modelData.training_logs = body.training_logs;
-    if (body.accuracy) modelData.accuracy = body.accuracy;
-    if (body.loss) modelData.loss = body.loss;
-    if (body.training_time) modelData.training_time = body.training_time;
+    if (body.model_file_path) modelData.model_file_path = body.model_file_path;
+    if (body.training_time_seconds) modelData.training_time_seconds = body.training_time_seconds;
+    if (body.data_size) modelData.data_size = body.data_size;
 
     console.log('📋 [Models API] Prepared model data (actual schema):', modelData);
 
+    // Try to insert with RLS bypass for testing
     const { data: model, error } = await supabase
       .from('research_models')
       .insert([modelData])

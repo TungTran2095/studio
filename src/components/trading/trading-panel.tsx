@@ -267,7 +267,7 @@ export const TradingPanel: FC = () => {
             <div>
               <label className="text-xs text-black mb-1 block">Chọn tài khoản giao dịch</label>
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                <SelectTrigger className="w-full h-8 text-xs text-black border-border">
+                                    <SelectTrigger className="w-full h-8 text-xs">
                   <SelectValue placeholder="Chọn tài khoản" />
                 </SelectTrigger>
                 <SelectContent>
@@ -292,7 +292,7 @@ export const TradingPanel: FC = () => {
                         <Input
                           {...field}
                           readOnly
-                          className="h-8 text-xs bg-input border-border text-black"
+                          className="h-8 text-xs"
                           disabled={isSubmitting}
                           value={field.value ?? ''}
                         />
@@ -349,7 +349,7 @@ export const TradingPanel: FC = () => {
                             type="number"
                             step="any"
                             min={0}
-                            className="h-8 text-xs bg-input border-border text-black"
+                            className="h-8 text-xs"
                             disabled={isSubmitting}
                             value={field.value ?? ''}
                             placeholder="Nhập giá..."
@@ -374,7 +374,7 @@ export const TradingPanel: FC = () => {
                           type="number"
                           step="any"
                           min={0.000001}
-                          className="h-8 text-xs bg-input border-border text-black"
+                          className="h-8 text-xs"
                           disabled={isSubmitting}
                           value={field.value ?? ''}
                           placeholder="Nhập số lượng..."

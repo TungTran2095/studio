@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { BarChart, LineChart, ArrowRight, Settings, Sliders, TrendingUp } from 'lucide-react';
+import { BarChart, LineChart, ArrowRight, Settings, Sliders, TrendingUp, BarChart3 } from 'lucide-react';
 import { Signal, BacktestResult, StrategyParams, PositionSizingType } from '@/lib/trading/strategy';
+import MonteCarloProfitSimulation from '@/components/MonteCarloProfitSimulation';
 
 // Tạm thời sử dụng dữ liệu giả
 const mockTradingStrategies = [
@@ -53,6 +54,7 @@ export default function TradingStrategy() {
   const [latestSignal, setLatestSignal] = useState<Signal | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
   const [activeTab, setActiveTab] = useState('parameters');
+  const [monteCarloResults, setMonteCarloResults] = useState<any[]>([]);
 
   // Lấy tín hiệu giao dịch
   const fetchSignals = async () => {
@@ -293,6 +295,10 @@ export default function TradingStrategy() {
               <TabsTrigger value="backtest">
                 <LineChart className="w-4 h-4 mr-2" />
                 Kết quả Backtest
+              </TabsTrigger>
+              <TabsTrigger value="monte-carlo">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Monte Carlo
               </TabsTrigger>
             </TabsList>
 
@@ -560,6 +566,82 @@ export default function TradingStrategy() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="monte-carlo">
+              <div className="space-y-6">
+                {/* Monte Carlo Analysis với dữ liệu từ backtest */}
+                {backtestResult ? (
+                  <MonteCarloProfitSimulation 
+                    backtestMetrics={{
+                      totalTrades: backtestResult.totalTrades,
+                      winRate: backtestResult.winRate,
+                      avgWinNet: backtestResult.averageWin || 2.0,
+                      avgLossNet: backtestResult.averageLoss || -1.5
+                    }}
+                    initialCapital={backtestResult.initialCapital}
+                    simulations={1000}
+                    backtestResult={{
+                      totalReturn: backtestResult.totalReturn,
+                      maxDrawdown: backtestResult.maxDrawdown,
+                      totalProfit: backtestResult.finalCapital - backtestResult.initialCapital
+                    }}
+                    onSimulationComplete={setMonteCarloResults}
+                    experimentId={`strategy-${selectedStrategy}`}
+                  />
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Monte Carlo Analysis</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-center py-8 text-gray-500">
+                        <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <p>Vui lòng chạy Backtest trước để xem phân tích Monte Carlo</p>
+                        <p className="text-sm mt-2">Monte Carlo sẽ mô phỏng 1000 scenarios dựa trên kết quả backtest thực tế</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Thông tin về Monte Carlo Analysis */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>📊 Về Monte Carlo Analysis</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-medium mb-2">🎯 Mục đích</h4>
+                        <p className="text-sm text-gray-600">
+                          Monte Carlo Analysis giúp đánh giá rủi ro và tiềm năng của chiến lược giao dịch 
+                          bằng cách mô phỏng hàng nghìn kịch bản khác nhau dựa trên dữ liệu backtest thực tế.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-medium mb-2">📈 Các chỉ số quan trọng</h4>
+                        <ul className="text-sm text-gray-600 space-y-1">
+                          <li>• <strong>Phân vị (Percentiles):</strong> P5, P25, P50, P75, P95 - cho thấy phân phối lợi nhuận</li>
+                          <li>• <strong>Xác suất lãi/lỗ:</strong> % simulations có lợi nhuận dương/âm</li>
+                          <li>• <strong>Kịch bản tốt nhất/xấu nhất:</strong> Giá trị cao nhất/thấp nhất trong 1000 simulations</li>
+                          <li>• <strong>Độ biến động:</strong> Độ lệch chuẩn của phân phối lợi nhuận</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-medium mb-2">⚠️ Lưu ý quan trọng</h4>
+                        <ul className="text-sm text-gray-600 space-y-1">
+                          <li>• Kết quả dựa trên dữ liệu backtest và giả định các trade độc lập</li>
+                          <li>• Không đảm bảo kết quả thực tế trong tương lai</li>
+                          <li>• Nên sử dụng kết hợp với các công cụ phân tích rủi ro khác</li>
+                          <li>• Cập nhật thường xuyên khi có dữ liệu backtest mới</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
           </Tabs>
         </div>

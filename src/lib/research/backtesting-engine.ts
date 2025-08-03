@@ -319,6 +319,28 @@ export class BacktestingEngine {
     const avgWin = winningTrades > 0 ? grossWins / winningTrades / initialCapital * 100 : 0;
     const avgLoss = losingTrades > 0 ? grossLosses / losingTrades / initialCapital * 100 : 0;
 
+    // Tính toán tỷ lệ lãi/lỗ net (đã trừ chi phí)
+    const winningTradesList = this.state.trades.filter(t => t.pnl > 0);
+    const losingTradesList = this.state.trades.filter(t => t.pnl < 0);
+    
+    // Tính tỷ lệ lãi net trung bình: trung bình của (Lợi nhuận net)/(Giá vào*Khối lượng) cho các giao dịch thắng
+    const avgWinNet = winningTradesList.length > 0 
+      ? winningTradesList.reduce((sum, trade) => {
+          const tradeValue = trade.entryPrice * trade.quantity;
+          const netReturn = trade.pnl / tradeValue; // Lợi nhuận net / (Giá vào * Khối lượng)
+          return sum + netReturn;
+        }, 0) / winningTradesList.length * 100 // Chuyển thành phần trăm
+      : 0;
+    
+    // Tính tỷ lệ lỗ net trung bình: trung bình của (Lợi nhuận net)/(Giá vào*Khối lượng) cho các giao dịch thua
+    const avgLossNet = losingTradesList.length > 0 
+      ? losingTradesList.reduce((sum, trade) => {
+          const tradeValue = trade.entryPrice * trade.quantity;
+          const netReturn = trade.pnl / tradeValue; // Lợi nhuận net / (Giá vào * Khối lượng)
+          return sum + netReturn;
+        }, 0) / losingTradesList.length * 100 // Chuyển thành phần trăm
+      : 0;
+
     const calmarRatio = maxDrawdown > 0 ? annualizedReturn / maxDrawdown : 0;
 
     return {
@@ -331,6 +353,8 @@ export class BacktestingEngine {
       profitFactor,
       avgWin,
       avgLoss,
+      avgWinNet,
+      avgLossNet,
       totalTrades: this.state.trades.length,
       winningTrades,
       losingTrades,
@@ -352,6 +376,8 @@ export class BacktestingEngine {
       profitFactor: 0,
       avgWin: 0,
       avgLoss: 0,
+      avgWinNet: 0,
+      avgLossNet: 0,
       totalTrades: 0,
       winningTrades: 0,
       losingTrades: 0,

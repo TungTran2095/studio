@@ -11,6 +11,7 @@ import { DataCollectionJobsManager } from './modules/data-collection-jobs-manage
 import { DataSourceManager } from './modules/data-source-manager';
 import { DataQualityDashboard } from './modules/data-quality-dashboard';
 import { ResearchDevelopmentContent } from "@/components/research/research-development-content";
+import MonteCarloAnalysis from '@/components/MonteCarloAnalysis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,8 @@ import {
   Activity,
   Pause,
   Play,
-  Eye
+  Eye,
+  BarChart4
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle'; // Import ThemeToggle
 import { TotalAssetsCard } from "@/components/trading/total-assets-card";
@@ -595,6 +597,45 @@ function DashboardModule() {
   );
 }
 
+// Algorithm Optimization Module
+function AlgorithmOptimizationModule() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">🎯 Theo dõi và tối ưu hóa thuật toán</h1>
+          <p className="text-muted-foreground">
+            Giám sát và tối ưu hóa hiệu suất thuật toán giao dịch với Monte Carlo, Walk Forward Analysis, Cross Validation
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Badge variant="secondary" className="text-sm">
+            Advanced Analytics
+          </Badge>
+          <Badge variant="outline" className="text-sm">
+            Real-time Monitoring
+          </Badge>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart4 className="h-5 w-5" />
+            Monte Carlo Analysis
+          </CardTitle>
+          <CardDescription>
+            Phân tích rủi ro toàn diện thông qua mô phỏng Monte Carlo
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MonteCarloAnalysis key="workspace-monte-carlo" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // Component placeholder cho các module khác
 function ModulePlaceholder({ moduleId }: { moduleId: ModuleId }) {
   const module = WORKSPACE_MODULES.find(m => m.id === moduleId);
@@ -667,6 +708,8 @@ export function WorkspaceContent({ activeModule }: WorkspaceContentProps) {
         return <DataSourceManager />;
       case 'data-quality':
         return <DataQualityDashboard />;
+      case 'algorithm-optimization':
+        return <AlgorithmOptimizationModule />;
       default:
         return <ModulePlaceholder moduleId={activeModule} />;
     }

@@ -500,7 +500,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
      const commonDisabled = useDefaultConfig || trainingStatus === 'training';
      // Consistent grid styling
      const gridClass = cn("grid grid-cols-2 gap-x-4 gap-y-2 transition-opacity duration-300", commonDisabled && "opacity-60 pointer-events-none");
-     const inputClass = "h-7 text-xs"; // Consistent input size
+     const inputClass = "h-7 text-xs"; // Consistent input size - now uses default Input styling
      const labelClass = "text-xs"; // Consistent label size
 
      switch (selectedModel) {

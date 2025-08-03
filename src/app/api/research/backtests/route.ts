@@ -20,17 +20,22 @@ async function runBacktestWithEngine(strategyConfig: any, backtestConfig: any) {
       slippage: 0.0005, // 0.05%
       strategy: {
         id: strategyConfig.type || 'momentum',
-        parameters: {
-          lookbackPeriod: strategyConfig.lookback_period || 20,
-          threshold: strategyConfig.threshold || 0.02,
-          ...strategyConfig
-        }
+        name: `${strategyConfig.type || 'momentum'} Strategy`,
+        entryRules: [],
+        exitRules: [],
+        positionSizing: {
+          method: 'fixed_percentage' as const,
+          parameters: { percentage: 0.1 }
+        },
+        signals: []
       },
       riskManagement: {
-        riskPerTrade: 2.0, // 2% per trade
+        maxPositionSize: 10.0, // 10% max position size
         stopLoss: 3.0, // 3% stop loss
         takeProfit: 6.0, // 6% take profit
-        maxPositions: 1
+        maxDrawdown: 20.0, // 20% max drawdown
+        maxConcurrentPositions: 1,
+        riskPerTrade: 2.0 // 2% per trade
       }
     };
 
@@ -43,6 +48,11 @@ async function runBacktestWithEngine(strategyConfig: any, backtestConfig: any) {
       sharpeRatio: result.performance.sharpeRatio || 0,
       maxDrawdown: result.performance.maxDrawdown || 0,
       winRate: result.performance.winRate || 0,
+      totalTrades: result.performance.totalTrades || 0,
+      avgWinNet: result.performance.avgWinNet || 0,
+      avgLossNet: result.performance.avgLossNet || 0,
+      avgWin: result.performance.avgWin || 0,
+      avgLoss: result.performance.avgLoss || 0,
       trades: result.trades,
       equityCurve: result.equity
     };
@@ -75,7 +85,11 @@ export async function GET(request: NextRequest) {
           sharpe_ratio: 1.45,
           max_drawdown: -0.156,
           win_rate: 0.62,
-          total_trades: 45
+          total_trades: 45,
+          avg_win_net: 2.5,
+          avg_loss_net: -1.8,
+          avg_win: 5.2,
+          avg_loss: -3.8
         },
         status: 'completed',
         created_at: new Date('2024-01-15').toISOString()
@@ -99,7 +113,11 @@ export async function GET(request: NextRequest) {
           sharpe_ratio: 1.23,
           max_drawdown: -0.098,
           win_rate: 0.58,
-          total_trades: 32
+          total_trades: 32,
+          avg_win_net: 2.2,
+          avg_loss_net: -1.6,
+          avg_win: 4.4,
+          avg_loss: -3.4
         },
         status: 'completed',
         created_at: new Date('2024-01-10').toISOString()
@@ -123,7 +141,11 @@ export async function GET(request: NextRequest) {
           sharpe_ratio: 1.67,
           max_drawdown: -0.089,
           win_rate: 0.71,
-          total_trades: 28
+          total_trades: 28,
+          avg_win_net: 3.5,
+          avg_loss_net: -1.5,
+          avg_win: 5.9,
+          avg_loss: -3.1
         },
         status: 'completed',
         created_at: new Date('2024-01-05').toISOString()
@@ -154,7 +176,11 @@ export async function POST(request: NextRequest) {
       sharpe_ratio: Math.random() * 2 + 0.5, // 0.5 to 2.5
       max_drawdown: -(Math.random() * 0.2), // 0% to -20%
       win_rate: Math.random() * 0.4 + 0.4, // 40% to 80%
-      total_trades: Math.floor(Math.random() * 50) + 10
+      total_trades: Math.floor(Math.random() * 50) + 10,
+      avg_win_net: Math.random() * 3 + 1, // 1% to 4% net win
+      avg_loss_net: -(Math.random() * 2.5 + 0.5), // -0.5% to -3% net loss
+      avg_win: Math.random() * 0.06 + 0.025, // 2.5% to 8.5% gross win
+      avg_loss: -(Math.random() * 0.05 + 0.015) // -1.5% to -6.5% gross loss
     } : null;
 
     const newBacktest = {

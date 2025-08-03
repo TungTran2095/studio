@@ -145,6 +145,8 @@ export interface PerformanceMetrics {
   profitFactor: number;
   avgWin: number;
   avgLoss: number;
+  avgWinNet: number; // Tỷ lệ lãi net trung bình (đã trừ chi phí)
+  avgLossNet: number; // Tỷ lệ lỗ net trung bình (đã trừ chi phí)
   totalTrades: number;
   winningTrades: number;
   losingTrades: number;

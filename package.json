@@ -49,6 +49,7 @@
     "@tanstack/react-query": "^5.66.0",
     "@types/highcharts": "^5.0.44",
     "@types/node-cron": "^3.0.11",
+    "@types/three": "^0.178.1",
     "@types/uuid": "^10.0.0",
     "binance-api-node": "^0.12.9",
     "chart.js": "^4.4.9",
@@ -78,6 +79,7 @@
     "socket.io-client": "^4.7.2",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.178.0",
     "uuid": "^11.1.0",
     "zod": "^3.24.2",
     "zustand": "^4.5.5"
