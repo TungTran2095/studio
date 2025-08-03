@@ -12,9 +12,13 @@ import { DataSourceManager } from './modules/data-source-manager';
 import { DataQualityDashboard } from './modules/data-quality-dashboard';
 import { ResearchDevelopmentContent } from "@/components/research/research-development-content";
 import MonteCarloAnalysis from '@/components/MonteCarloAnalysis';
+import WalkForwardAnalysis from '@/components/WalkForwardAnalysis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   LayoutDashboard, 
   Database, 
@@ -27,18 +31,21 @@ import {
   Plus,
   Zap,
   TrendingUp,
+  TrendingDown,
   Activity,
   Pause,
   Play,
   Eye,
-  BarChart4
+  BarChart4,
+  BarChart3,
+  Calendar,
+  Target,
+  AlertTriangle
 } from 'lucide-react';
-import ThemeToggle from '@/components/ThemeToggle'; // Import ThemeToggle
+import ThemeToggle from '@/components/ThemeToggle';
 import { TotalAssetsCard } from "@/components/trading/total-assets-card";
 import { useEffect, useState } from 'react';
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { supabase } from '@/lib/supabase-client';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface WorkspaceContentProps {
   activeModule: ModuleId;
@@ -618,20 +625,44 @@ function AlgorithmOptimizationModule() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart4 className="h-5 w-5" />
-            Monte Carlo Analysis
-          </CardTitle>
-          <CardDescription>
-            Phân tích rủi ro toàn diện thông qua mô phỏng Monte Carlo
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <MonteCarloAnalysis key="workspace-monte-carlo" />
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="monte-carlo" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="monte-carlo">Monte Carlo</TabsTrigger>
+          <TabsTrigger value="walk-forward">Walk Forward</TabsTrigger>
+        </TabsList>
+        <TabsContent value="monte-carlo">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart4 className="h-5 w-5" />
+                Monte Carlo Analysis
+              </CardTitle>
+              <CardDescription>
+                Phân tích rủi ro toàn diện thông qua mô phỏng Monte Carlo
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <MonteCarloAnalysis key="workspace-monte-carlo" />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="walk-forward">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Walk Forward Analysis
+              </CardTitle>
+              <CardDescription>
+                Phân tích rủi ro và hiệu suất thuật toán trong quá trình Walk Forward
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <WalkForwardAnalysis key="workspace-walk-forward" />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
