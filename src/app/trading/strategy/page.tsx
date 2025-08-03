@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { BarChart, LineChart, ArrowRight, Settings, Sliders, TrendingUp, BarChart3 } from 'lucide-react';
+import { BarChart, LineChart, ArrowRight, Settings, Sliders, TrendingUp, BarChart3, Calendar } from 'lucide-react';
 import { Signal, BacktestResult, StrategyParams, PositionSizingType } from '@/lib/trading/strategy';
 import MonteCarloProfitSimulation from '@/components/MonteCarloProfitSimulation';
+import WalkForwardAnalysis from '@/components/WalkForwardAnalysis';
 
 // Tạm thời sử dụng dữ liệu giả
 const mockTradingStrategies = [
@@ -299,6 +300,10 @@ export default function TradingStrategy() {
               <TabsTrigger value="monte-carlo">
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Monte Carlo
+              </TabsTrigger>
+              <TabsTrigger value="walk-forward">
+                <Calendar className="w-4 h-4 mr-2" />
+                Walk Forward Analysis
               </TabsTrigger>
             </TabsList>
 
@@ -642,6 +647,10 @@ export default function TradingStrategy() {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="walk-forward">
+              <WalkForwardAnalysis />
             </TabsContent>
           </Tabs>
         </div>
