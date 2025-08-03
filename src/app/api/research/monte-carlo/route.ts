@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Simulate Monte Carlo analysis
-    const results = await performMonteCarloAnalysis(config);
+    // Perform real Monte Carlo analysis using actual market data
+    const results = await performRealMonteCarloAnalysis(config);
 
     // Save results to database
     await saveMonteCarloResults(experiment_id, config, results);
@@ -40,112 +40,316 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function performMonteCarloAnalysis(config: any) {
-  // Simulate processing time
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
+async function performRealMonteCarloAnalysis(config: any) {
+  console.log('🔄 Starting real Monte Carlo analysis with config:', config);
+  
   const {
     n_simulations = 1000,
     confidence_level = 0.95,
     time_horizon_days = 252,
-    volatility_model = 'garch',
-    return_distribution = 'normal',
-    correlation_structure = 'historical',
-    optimization_method = 'efficient_frontier',
-    risk_tolerance = 50,
-    scenarios
+    symbols = ['BTC', 'ETH'],
+    start_date,
+    end_date,
+    initial_capital = 10000
   } = config;
 
-  // Generate mock results based on configuration
-  const baseReturn = 0.12; // 12% annual return
-  const baseVolatility = 0.18; // 18% annual volatility
+  // Fetch real historical data from Supabase
+  const historicalData = await fetchHistoricalData(symbols, start_date, end_date);
   
-  // Adjust based on risk tolerance
-  const riskMultiplier = risk_tolerance / 50;
-  const adjustedReturn = baseReturn * riskMultiplier;
-  const adjustedVolatility = baseVolatility * (0.8 + 0.4 * riskMultiplier);
-
-  // Calculate probability of profit
-  const zScore = adjustedReturn / adjustedVolatility;
-  const probabilityOfProfit = (1 - normcdf(-zScore)) * 100;
-
-  // Calculate VaR
-  const varPercentile = 1 - confidence_level;
-  const varZScore = norminv(varPercentile);
-  const valueAtRisk = (adjustedReturn + varZScore * adjustedVolatility) * 100;
-
-  // Calculate expected Sharpe ratio
-  const riskFreeRate = 0.02; // 2% risk-free rate
-  const expectedSharpeRatio = (adjustedReturn - riskFreeRate) / adjustedVolatility;
-
-  // Generate confidence intervals
-  const confidenceIntervals = {
-    ci_90: [
-      (adjustedReturn - 1.645 * adjustedVolatility) * 100,
-      (adjustedReturn + 1.645 * adjustedVolatility) * 100
-    ],
-    ci_95: [
-      (adjustedReturn - 1.96 * adjustedVolatility) * 100,
-      (adjustedReturn + 1.96 * adjustedVolatility) * 100
-    ],
-    ci_99: [
-      (adjustedReturn - 2.576 * adjustedVolatility) * 100,
-      (adjustedReturn + 2.576 * adjustedVolatility) * 100
-    ]
-  };
-
-  // Calculate tail risk metrics
-  const expectedShortfall = (adjustedReturn - 2.06 * adjustedVolatility) * 100;
-  const tailDependence = 0.5 + 0.3 * Math.random();
-  const maximumDrawdown = -(adjustedVolatility * 2.5) * 100;
-
-  // Generate scenario analysis
-  const scenarioAnalysis: any = {};
-  
-  if (scenarios?.bull_market) {
-    scenarioAnalysis.bull_market = {
-      expected_return: 25.5,
-      volatility: 12.3,
-      probability: 0.35
-    };
+  if (!historicalData || Object.keys(historicalData).length === 0) {
+    throw new Error('No historical data available for Monte Carlo analysis');
   }
+
+  console.log(`📊 Fetched ${Object.keys(historicalData).length} symbols with historical data`);
+
+  // Calculate real returns and volatility from historical data
+  const marketStats = calculateMarketStatistics(historicalData);
   
-  if (scenarios?.bear_market) {
-    scenarioAnalysis.bear_market = {
-      expected_return: -15.2,
-      volatility: 18.7,
-      probability: 0.25
-    };
-  }
-  
-  if (scenarios?.sideways_market) {
-    scenarioAnalysis.sideways_market = {
-      expected_return: 3.2,
-      volatility: 8.9,
-      probability: 0.40
-    };
-  }
+  // Run Monte Carlo simulations using real market parameters
+  const simulationResults = await runMonteCarloSimulations(
+    marketStats,
+    n_simulations,
+    time_horizon_days,
+    initial_capital
+  );
+
+  // Calculate risk metrics from simulation results
+  const riskMetrics = calculateRiskMetrics(simulationResults, confidence_level);
 
   return {
-    probability_of_profit: Math.round(probabilityOfProfit * 10) / 10,
-    value_at_risk: Math.round(valueAtRisk * 10) / 10,
-    expected_sharpe_ratio: Math.round(expectedSharpeRatio * 100) / 100,
-    confidence_intervals,
-    tail_risk_metrics: {
-      expected_shortfall: Math.round(expectedShortfall * 10) / 10,
-      tail_dependence: Math.round(tailDependence * 100) / 100,
-      maximum_drawdown: Math.round(maximumDrawdown * 10) / 10
-    },
-    scenario_analysis,
+    ...riskMetrics,
+    market_statistics: marketStats,
     simulation_parameters: {
       n_simulations,
       confidence_level,
       time_horizon_days,
-      volatility_model,
-      return_distribution,
-      correlation_structure,
-      optimization_method,
-      risk_tolerance
+      symbols,
+      initial_capital,
+      data_period: {
+        start_date,
+        end_date,
+        data_points: Object.values(historicalData).reduce((sum, data) => sum + data.length, 0)
+      }
+    },
+    simulation_results: {
+      total_simulations: simulationResults.length,
+      sample_results: simulationResults.slice(0, 10) // Return first 10 for reference
+    }
+  };
+}
+
+async function fetchHistoricalData(symbols: string[], startDate?: string, endDate?: string) {
+  const historicalData: any = {};
+  
+  for (const symbol of symbols) {
+    try {
+      let query = supabase
+        .from(`ohlcv_${symbol.toLowerCase()}_usdt_1m`)
+        .select('close_price, open_time')
+        .order('open_time', { ascending: true });
+
+      if (startDate) {
+        query = query.gte('open_time', startDate);
+      }
+      if (endDate) {
+        query = query.lte('open_time', endDate);
+      }
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error(`Error fetching data for ${symbol}:`, error);
+        continue;
+      }
+
+      if (data && data.length > 0) {
+        historicalData[symbol] = (data as any[]).map(row => ({
+          price: parseFloat(row.close_price),
+          timestamp: row.open_time
+        }));
+        console.log(`✅ Fetched ${data.length} data points for ${symbol}`);
+      }
+    } catch (error) {
+      console.error(`Error processing ${symbol}:`, error);
+    }
+  }
+
+  return historicalData;
+}
+
+function calculateMarketStatistics(historicalData: any) {
+  const stats: any = {};
+  
+  for (const [symbol, data] of Object.entries(historicalData)) {
+    const prices = (data as any[]).map(d => d.price);
+    const returns = [];
+    
+    // Calculate daily returns
+    for (let i = 1; i < prices.length; i++) {
+      const dailyReturn = (prices[i] - prices[i-1]) / prices[i-1];
+      returns.push(dailyReturn);
+    }
+    
+    // Calculate statistics
+    const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length;
+    const volatility = Math.sqrt(variance);
+    
+    // Annualize (assuming 1-minute data, 1440 minutes per day, 252 trading days)
+    const annualizedReturn = meanReturn * 1440 * 252;
+    const annualizedVolatility = volatility * Math.sqrt(1440 * 252);
+    
+    stats[symbol] = {
+      mean_return: annualizedReturn,
+      volatility: annualizedVolatility,
+      total_returns: returns.length,
+      price_range: {
+        min: Math.min(...prices),
+        max: Math.max(...prices),
+        current: prices[prices.length - 1]
+      },
+      returns_distribution: {
+        mean: meanReturn,
+        std: volatility,
+        skewness: calculateSkewness(returns),
+        kurtosis: calculateKurtosis(returns)
+      }
+    };
+  }
+  
+  return stats;
+}
+
+function calculateSkewness(returns: number[]): number {
+  const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+  const std = Math.sqrt(variance);
+  
+  const skewness = returns.reduce((sum, r) => sum + Math.pow((r - mean) / std, 3), 0) / returns.length;
+  return skewness;
+}
+
+function calculateKurtosis(returns: number[]): number {
+  const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+  const std = Math.sqrt(variance);
+  
+  const kurtosis = returns.reduce((sum, r) => sum + Math.pow((r - mean) / std, 4), 0) / returns.length;
+  return kurtosis;
+}
+
+async function runMonteCarloSimulations(
+  marketStats: any,
+  nSimulations: number,
+  timeHorizonDays: number,
+  initialCapital: number
+) {
+  const results = [];
+  const symbols = Object.keys(marketStats);
+  
+  console.log(`🎲 Running ${nSimulations} Monte Carlo simulations...`);
+  
+  for (let sim = 0; sim < nSimulations; sim++) {
+    let portfolioValue = initialCapital;
+    const dailyValues = [portfolioValue];
+    
+    // Simulate daily returns for the time horizon
+    for (let day = 0; day < timeHorizonDays; day++) {
+      let dailyReturn = 0;
+      
+      // Calculate portfolio return based on market statistics
+      for (const symbol of symbols) {
+        const stats = marketStats[symbol];
+        
+        // Generate random return based on normal distribution
+        const randomReturn = generateNormalRandom(stats.mean_return, stats.volatility);
+        dailyReturn += randomReturn / symbols.length; // Equal weight for simplicity
+      }
+      
+      // Update portfolio value
+      portfolioValue *= (1 + dailyReturn);
+      dailyValues.push(portfolioValue);
+    }
+    
+    // Calculate simulation metrics
+    const totalReturn = (portfolioValue - initialCapital) / initialCapital;
+    const maxDrawdown = calculateMaxDrawdown(dailyValues);
+    const volatility = calculateVolatility(dailyValues);
+    const sharpeRatio = (totalReturn - 0.02) / volatility; // Assuming 2% risk-free rate
+    
+    results.push({
+      simulation_id: sim,
+      final_value: portfolioValue,
+      total_return: totalReturn,
+      max_drawdown: maxDrawdown,
+      volatility: volatility,
+      sharpe_ratio: sharpeRatio,
+      equity_curve: dailyValues.slice(0, 50) // Store first 50 points for visualization
+    });
+    
+    // Progress update every 100 simulations
+    if ((sim + 1) % 100 === 0) {
+      console.log(`📈 Completed ${sim + 1}/${nSimulations} simulations`);
+    }
+  }
+  
+  return results;
+}
+
+function generateNormalRandom(mean: number, std: number): number {
+  // Box-Muller transform for normal distribution
+  const u1 = Math.random();
+  const u2 = Math.random();
+  const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return mean + std * z0;
+}
+
+function calculateMaxDrawdown(values: number[]): number {
+  let maxDrawdown = 0;
+  let peak = values[0];
+  
+  for (const value of values) {
+    if (value > peak) {
+      peak = value;
+    }
+    const drawdown = (peak - value) / peak;
+    if (drawdown > maxDrawdown) {
+      maxDrawdown = drawdown;
+    }
+  }
+  
+  return maxDrawdown;
+}
+
+function calculateVolatility(values: number[]): number {
+  const returns = [];
+  for (let i = 1; i < values.length; i++) {
+    returns.push((values[i] - values[i-1]) / values[i-1]);
+  }
+  
+  const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+  return Math.sqrt(variance);
+}
+
+function calculateRiskMetrics(simulationResults: any[], confidenceLevel: number) {
+  const returns = simulationResults.map(r => r.total_return);
+  const finalValues = simulationResults.map(r => r.final_value);
+  const maxDrawdowns = simulationResults.map(r => r.max_drawdown);
+  
+  // Sort for percentile calculations
+  returns.sort((a, b) => a - b);
+  finalValues.sort((a, b) => a - b);
+  maxDrawdowns.sort((a, b) => a - b);
+  
+  const n = returns.length;
+  const varIndex = Math.floor((1 - confidenceLevel) * n);
+  const esIndex = Math.floor((1 - confidenceLevel) * n * 0.5); // Expected shortfall
+  
+  const meanReturn = returns.reduce((sum, r) => sum + r, 0) / n;
+  const stdReturn = Math.sqrt(returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / n);
+  
+  const valueAtRisk = -returns[varIndex];
+  const expectedShortfall = -returns.slice(0, esIndex).reduce((sum, r) => sum + r, 0) / esIndex;
+  
+  const probabilityOfLoss = returns.filter(r => r < 0).length / n;
+  const probabilityOfProfit = 1 - probabilityOfLoss;
+  
+  return {
+    probability_of_profit: Math.round(probabilityOfProfit * 1000) / 10,
+    value_at_risk: Math.round(valueAtRisk * 1000) / 10,
+    expected_sharpe_ratio: Math.round(((meanReturn - 0.02) / stdReturn) * 100) / 100,
+    confidence_intervals: {
+      ci_90: [
+        Math.round((meanReturn - 1.645 * stdReturn) * 1000) / 10,
+        Math.round((meanReturn + 1.645 * stdReturn) * 1000) / 10
+      ],
+      ci_95: [
+        Math.round((meanReturn - 1.96 * stdReturn) * 1000) / 10,
+        Math.round((meanReturn + 1.96 * stdReturn) * 1000) / 10
+      ],
+      ci_99: [
+        Math.round((meanReturn - 2.576 * stdReturn) * 1000) / 10,
+        Math.round((meanReturn + 2.576 * stdReturn) * 1000) / 10
+      ]
+    },
+    tail_risk_metrics: {
+      expected_shortfall: Math.round(expectedShortfall * 1000) / 10,
+      maximum_drawdown: Math.round(Math.max(...maxDrawdowns) * 1000) / 10,
+      worst_case_return: Math.round(Math.min(...returns) * 1000) / 10,
+      best_case_return: Math.round(Math.max(...returns) * 1000) / 10
+    },
+    distribution_metrics: {
+      mean_return: Math.round(meanReturn * 1000) / 10,
+      std_return: Math.round(stdReturn * 1000) / 10,
+      median_return: Math.round(returns[Math.floor(n/2)] * 1000) / 10,
+      percentiles: {
+        p5: Math.round(returns[Math.floor(0.05 * n)] * 1000) / 10,
+        p25: Math.round(returns[Math.floor(0.25 * n)] * 1000) / 10,
+        p50: Math.round(returns[Math.floor(0.50 * n)] * 1000) / 10,
+        p75: Math.round(returns[Math.floor(0.75 * n)] * 1000) / 10,
+        p95: Math.round(returns[Math.floor(0.95 * n)] * 1000) / 10
+      }
     }
   };
 }
@@ -165,85 +369,10 @@ async function saveMonteCarloResults(experimentId: string, config: any, results:
 
     if (error) {
       console.error('Error saving Monte Carlo results:', error);
+    } else {
+      console.log('✅ Monte Carlo results saved to database');
     }
   } catch (error) {
     console.error('Error saving to database:', error);
   }
-}
-
-// Helper functions for normal distribution
-function normcdf(x: number): number {
-  return 0.5 * (1 + erf(x / Math.sqrt(2)));
-}
-
-function norminv(p: number): number {
-  // Simplified inverse normal CDF approximation
-  if (p <= 0 || p >= 1) {
-    throw new Error('Probability must be between 0 and 1');
-  }
-  
-  const a1 = -3.969683028665376e+01;
-  const a2 = 2.209460984245205e+02;
-  const a3 = -2.759285104469687e+02;
-  const a4 = 1.383577518672690e+02;
-  const a5 = -3.066479806614716e+01;
-  const a6 = 2.506628277459239e+00;
-  
-  const b1 = -5.447609879822406e+01;
-  const b2 = 1.615858368580409e+02;
-  const b3 = -1.556989798598866e+02;
-  const b4 = 6.680131188771972e+01;
-  const b5 = -1.328068155288572e+01;
-  
-  const c1 = -7.784894002430293e-03;
-  const c2 = -3.223964580411365e-01;
-  const c3 = -2.400758277161838e+00;
-  const c4 = -2.549732539343734e+00;
-  const c5 = 4.374664141464968e+00;
-  const c6 = 2.938163982698783e+00;
-  
-  const d1 = 7.784695709041462e-03;
-  const d2 = 3.224671290700398e-01;
-  const d3 = 2.445134137142996e+00;
-  const d4 = 3.754408661907416e+00;
-  
-  const p_low = 0.02425;
-  const p_high = 1 - p_low;
-  
-  let q, r, x_out;
-  
-  if (p < p_low) {
-    q = Math.sqrt(-2 * Math.log(p));
-    x_out = (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
-            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
-  } else if (p <= p_high) {
-    q = p - 0.5;
-    r = q * q;
-    x_out = (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
-            (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1);
-  } else {
-    q = Math.sqrt(-2 * Math.log(1 - p));
-    x_out = -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
-            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
-  }
-  
-  return x_out;
-}
-
-function erf(x: number): number {
-  // Approximation of error function
-  const a1 = 0.254829592;
-  const a2 = -0.284496736;
-  const a3 = 1.421413741;
-  const a4 = -1.453152027;
-  const a5 = 1.061405429;
-  const p = 0.3275911;
-  
-  const sign = x >= 0 ? 1 : -1;
-  x = Math.abs(x);
-  
-  const t = 1 / (1 + p * x);
-  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-  
-  return sign * y;
 } 

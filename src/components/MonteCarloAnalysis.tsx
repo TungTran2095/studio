@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, TrendingUp, AlertTriangle } from 'lucide-react';
+import { BarChart3, TrendingUp, AlertTriangle, Play, Database } from 'lucide-react';
 import MonteCarloProfitSimulation from './MonteCarloProfitSimulation';
 
 interface StrategyMetrics {
@@ -29,6 +29,16 @@ interface MonteCarloResult {
   };
 }
 
+interface RealMonteCarloConfig {
+  n_simulations: number;
+  confidence_level: number;
+  time_horizon_days: number;
+  symbols: string[];
+  start_date?: string;
+  end_date?: string;
+  initial_capital: number;
+}
+
 export default function MonteCarloAnalysis() {
   const [metrics, setMetrics] = useState<StrategyMetrics>({
     totalTrades: 100,
@@ -39,6 +49,47 @@ export default function MonteCarloAnalysis() {
   });
 
   const [monteCarloResults, setMonteCarloResults] = useState<any[]>([]);
+  const [isRunningRealAnalysis, setIsRunningRealAnalysis] = useState(false);
+  const [realAnalysisResults, setRealAnalysisResults] = useState<any>(null);
+  const [analysisConfig, setAnalysisConfig] = useState<RealMonteCarloConfig>({
+    n_simulations: 1000,
+    confidence_level: 0.95,
+    time_horizon_days: 252,
+    symbols: ['BTC', 'ETH'],
+    initial_capital: 10000
+  });
+
+  // Chạy Monte Carlo analysis thực tế với dữ liệu từ database
+  const runRealMonteCarloAnalysis = async () => {
+    setIsRunningRealAnalysis(true);
+    
+    try {
+      const response = await fetch('/api/research/monte-carlo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          experiment_id: `monte-carlo-${Date.now()}`,
+          config: analysisConfig
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to run Monte Carlo analysis');
+      }
+
+      const result = await response.json();
+      setRealAnalysisResults(result.results);
+      console.log('✅ Real Monte Carlo analysis completed:', result);
+      
+    } catch (error) {
+      console.error('❌ Error running real Monte Carlo analysis:', error);
+      alert('Có lỗi khi chạy Monte Carlo analysis. Vui lòng thử lại.');
+    } finally {
+      setIsRunningRealAnalysis(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -118,40 +169,154 @@ export default function MonteCarloAnalysis() {
           </CardContent>
         </Card>
 
-        {/* Monte Carlo Configuration */}
+        {/* Real Monte Carlo Configuration */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Cấu hình Monte Carlo
+              <Database className="h-5 w-5" />
+              Monte Carlo với dữ liệu thực tế
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600 mb-4">Thiết lập mô phỏng Monte Carlo</p>
+            <p className="text-sm text-gray-600 mb-4">Sử dụng dữ liệu thị trường thực tế từ database</p>
             
             <div className="space-y-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h4 className="font-medium text-sm mb-2">📈 Thông tin chiến lược</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>Win Rate: <span className="font-medium">{metrics.winRate}%</span></div>
-                  <div>Total Trades: <span className="font-medium">{metrics.totalTrades}</span></div>
-                  <div>Avg Profit: <span className="font-medium text-green-600">{metrics.avgProfit}%</span></div>
-                  <div>Avg Loss: <span className="font-medium text-red-600">{metrics.avgLoss}%</span></div>
-                  <div>Expected Return: <span className="font-medium">{((metrics.winRate * metrics.avgProfit + (100 - metrics.winRate) * metrics.avgLoss) / 100).toFixed(2)}%</span></div>
-                </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Số simulations: {analysisConfig.n_simulations}
+                </label>
+                <input 
+                  type="range" 
+                  min="100" 
+                  max="10000" 
+                  step="100" 
+                  value={analysisConfig.n_simulations}
+                  onChange={(e) => setAnalysisConfig({
+                    ...analysisConfig, 
+                    n_simulations: parseInt(e.target.value)
+                  })}
+                  className="w-full"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Time horizon (ngày): {analysisConfig.time_horizon_days}
+                </label>
+                <input 
+                  type="range" 
+                  min="30" 
+                  max="365" 
+                  step="30" 
+                  value={analysisConfig.time_horizon_days}
+                  onChange={(e) => setAnalysisConfig({
+                    ...analysisConfig, 
+                    time_horizon_days: parseInt(e.target.value)
+                  })}
+                  className="w-full"
+                />
               </div>
 
-              <div className="bg-green-50 p-4 rounded-lg">
-                <h4 className="font-medium text-sm mb-2">💰 Thông tin đầu tư</h4>
-                <div className="text-sm">
-                  <div>Initial Investment: <span className="font-medium">$10,000 USD</span></div>
-                  <div>Simulations: <span className="font-medium">1,000</span></div>
-                </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Initial Capital: ${analysisConfig.initial_capital.toLocaleString()}
+                </label>
+                <input 
+                  type="range" 
+                  min="1000" 
+                  max="100000" 
+                  step="1000" 
+                  value={analysisConfig.initial_capital}
+                  onChange={(e) => setAnalysisConfig({
+                    ...analysisConfig, 
+                    initial_capital: parseInt(e.target.value)
+                  })}
+                  className="w-full"
+                />
               </div>
+
+              <Button 
+                onClick={runRealMonteCarloAnalysis}
+                disabled={isRunningRealAnalysis}
+                className="w-full"
+              >
+                {isRunningRealAnalysis ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Đang chạy analysis...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Chạy Monte Carlo với dữ liệu thực tế
+                  </>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Real Analysis Results */}
+      {realAnalysisResults && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Kết quả Monte Carlo thực tế
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h4 className="font-medium text-sm mb-2">📈 Xác suất lãi</h4>
+                <div className="text-2xl font-bold text-green-600">
+                  {realAnalysisResults.probability_of_profit}%
+                </div>
+              </div>
+              
+              <div className="bg-red-50 p-4 rounded-lg">
+                <h4 className="font-medium text-sm mb-2">⚠️ Value at Risk (95%)</h4>
+                <div className="text-2xl font-bold text-red-600">
+                  {realAnalysisResults.value_at_risk}%
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-sm mb-2">📊 Expected Sharpe Ratio</h4>
+                <div className="text-2xl font-bold text-blue-600">
+                  {realAnalysisResults.expected_sharpe_ratio}
+                </div>
+              </div>
+              
+              <div className="bg-orange-50 p-4 rounded-lg">
+                <h4 className="font-medium text-sm mb-2">📉 Expected Shortfall</h4>
+                <div className="text-2xl font-bold text-orange-600">
+                  {realAnalysisResults.tail_risk_metrics?.expected_shortfall}%
+                </div>
+              </div>
+            </div>
+
+            {realAnalysisResults.market_statistics && (
+              <div className="mt-6">
+                <h4 className="font-medium mb-3">📊 Thống kê thị trường</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.entries(realAnalysisResults.market_statistics).map(([symbol, stats]: [string, any]) => (
+                    <div key={symbol} className="bg-gray-50 p-3 rounded-lg">
+                      <h5 className="font-medium text-sm mb-2">{symbol}</h5>
+                      <div className="text-sm space-y-1">
+                        <div>Mean Return: <span className="font-medium">{stats.mean_return.toFixed(2)}%</span></div>
+                        <div>Volatility: <span className="font-medium">{stats.volatility.toFixed(2)}%</span></div>
+                        <div>Data Points: <span className="font-medium">{stats.total_returns}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Monte Carlo Simulation */}
       <MonteCarloProfitSimulation 
@@ -201,13 +366,14 @@ export default function MonteCarloAnalysis() {
                 <li>• Kết quả dựa trên giả định các trade độc lập</li>
                 <li>• Không đảm bảo kết quả thực tế trong tương lai</li>
                 <li>• Nên sử dụng kết hợp với các công cụ phân tích rủi ro khác</li>
+                <li>• <strong>Dữ liệu thực tế:</strong> Sử dụng dữ liệu thị trường thực từ database</li>
               </ul>
             </div>
           </div>
-               </CardContent>
-     </Card>
-   </div>
- );
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 
