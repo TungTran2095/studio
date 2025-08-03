@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { BarChart, LineChart, ArrowRight, Settings, Sliders, TrendingUp, BarChart3, Calendar } from 'lucide-react';
+import { BarChart, LineChart, ArrowRight, Settings, Sliders, TrendingUp, BarChart3, Calendar, Play } from 'lucide-react';
 import { Signal, BacktestResult, StrategyParams, PositionSizingType } from '@/lib/trading/strategy';
 import MonteCarloProfitSimulation from '@/components/MonteCarloProfitSimulation';
 import WalkForwardAnalysis from '@/components/WalkForwardAnalysis';
@@ -653,12 +653,48 @@ export default function TradingStrategy() {
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Walk Forward Analysis</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <Calendar className="h-5 w-5" />
+                      Walk Forward Analysis
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p>Walk Forward Analysis component đang được load...</p>
+                    <div className="space-y-4">
+                      <p className="text-sm text-gray-600">
+                        Walk-Forward Analysis giúp đánh giá tính ổn định và khả năng tổng quát hóa của chiến lược giao dịch.
+                      </p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                          <h4 className="font-medium text-sm mb-2">🎯 Mục đích</h4>
+                          <ul className="text-sm text-gray-600 space-y-1">
+                            <li>• Phát hiện overfitting</li>
+                            <li>• Đánh giá độ ổn định tham số</li>
+                            <li>• Kiểm tra robustness</li>
+                            <li>• Phát hiện market regime changes</li>
+                          </ul>
+                        </div>
+                        
+                        <div className="p-4 bg-green-50 rounded-lg">
+                          <h4 className="font-medium text-sm mb-2">📈 Quy trình</h4>
+                          <ul className="text-sm text-gray-600 space-y-1">
+                            <li>• In-Sample Period (Training)</li>
+                            <li>• Out-Sample Period (Testing)</li>
+                            <li>• Step Forward</li>
+                            <li>• Stability Analysis</li>
+                          </ul>
+                        </div>
+                      </div>
+                      
+                      <Button className="w-full">
+                        <Play className="h-4 w-4 mr-2" />
+                        Chạy Walk-Forward Analysis
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
+                
+                {/* Full WalkForwardAnalysis component */}
                 <WalkForwardAnalysis />
               </div>
             </TabsContent>
