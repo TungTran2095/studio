@@ -284,7 +284,7 @@ export default function TradingStrategy() {
         {/* Main content */}
         <div className="md:col-span-3">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 grid w-full grid-cols-5">
               <TabsTrigger value="parameters">
                 <Settings className="w-4 h-4 mr-2" />
                 Tham số
@@ -303,7 +303,7 @@ export default function TradingStrategy() {
               </TabsTrigger>
               <TabsTrigger value="walk-forward">
                 <Calendar className="w-4 h-4 mr-2" />
-                Walk Forward Analysis
+                Walk Forward
               </TabsTrigger>
             </TabsList>
 
@@ -650,7 +650,17 @@ export default function TradingStrategy() {
             </TabsContent>
 
             <TabsContent value="walk-forward">
-              <WalkForwardAnalysis />
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Walk Forward Analysis</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p>Walk Forward Analysis component đang được load...</p>
+                  </CardContent>
+                </Card>
+                <WalkForwardAnalysis />
+              </div>
             </TabsContent>
           </Tabs>
         </div>

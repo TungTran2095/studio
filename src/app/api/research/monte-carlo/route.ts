@@ -88,7 +88,7 @@ async function performRealMonteCarloAnalysis(config: any) {
       data_period: {
         start_date,
         end_date,
-        data_points: Object.values(historicalData).reduce((sum, data) => sum + data.length, 0)
+        data_points: Object.values(historicalData).reduce((sum: number, data) => sum + (data as any[]).length, 0)
       }
     },
     simulation_results: {
