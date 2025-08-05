@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -58,6 +59,7 @@ export default function WalkForwardAnalysis({
   onAnalysisComplete,
   className = ""
 }: WalkForwardAnalysisProps) {
+  const { toast } = useToast();
   const [isRunning, setIsRunning] = useState(false);
   const [config, setConfig] = useState<WalkForwardConfig>({
     totalPeriod: 252 * 2, // 2 năm
@@ -108,82 +110,89 @@ export default function WalkForwardAnalysis({
     return periods;
   }, [config]);
 
-  // Chạy walk-forward analysis
+  // Chạy walk-forward analysis thực tế
   const runWalkForwardAnalysis = async () => {
     setIsRunning(true);
     const generatedPeriods = generatePeriods();
     setPeriods(generatedPeriods);
     
     try {
-      // Simulate walk-forward analysis
-      for (let i = 0; i < generatedPeriods.length; i++) {
-        const period = generatedPeriods[i];
-        
-        // Update status to running
-        setPeriods(prev => prev.map(p => 
-          p.id === period.id ? { ...p, status: 'running' } : p
-        ));
-        
-        // Simulate processing time
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Generate mock results
-        const inSampleReturn = (Math.random() * 40 - 10); // -10% to +30%
-        const outSampleReturn = inSampleReturn + (Math.random() * 20 - 10); // Add some variation
-        const inSampleSharpe = Math.random() * 2 + 0.5;
-        const outSampleSharpe = inSampleSharpe + (Math.random() * 1 - 0.5);
-        const inSampleDrawdown = -(Math.random() * 15 + 5);
-        const outSampleDrawdown = -(Math.random() * 20 + 5);
-        const parameterDrift = Math.random() * 0.3; // 0-30% drift
-        const stability = Math.max(0, 1 - parameterDrift); // Higher drift = lower stability
-        
-        // Update period with results
-        setPeriods(prev => prev.map(p => 
-          p.id === period.id ? {
-            ...p,
-            status: 'completed',
-            inSampleReturn,
-            outSampleReturn,
-            inSampleSharpe,
-            outSampleSharpe,
-            inSampleDrawdown,
-            outSampleDrawdown,
-            parameterDrift,
-            stability
-          } : p
-        ));
-      }
-      
-      // Calculate overall analysis results
-      const completedPeriods = generatedPeriods.map(p => ({
-        ...p,
-        inSampleReturn: (Math.random() * 40 - 10),
-        outSampleReturn: (Math.random() * 40 - 10),
-        inSampleSharpe: Math.random() * 2 + 0.5,
-        outSampleSharpe: Math.random() * 2 + 0.5,
-        inSampleDrawdown: -(Math.random() * 15 + 5),
-        outSampleDrawdown: -(Math.random() * 20 + 5),
-        parameterDrift: Math.random() * 0.3,
-        stability: Math.random() * 0.5 + 0.5,
-        status: 'completed' as const
-      }));
-      
-      setAnalysisResults({
-        totalPeriods: completedPeriods.length,
-        averageInSampleReturn: completedPeriods.reduce((sum, p) => sum + p.inSampleReturn, 0) / completedPeriods.length,
-        averageOutSampleReturn: completedPeriods.reduce((sum, p) => sum + p.outSampleReturn, 0) / completedPeriods.length,
-        averageStability: completedPeriods.reduce((sum, p) => sum + p.stability, 0) / completedPeriods.length,
-        consistencyScore: Math.random() * 0.4 + 0.6, // 60-100%
-        overfittingRisk: Math.random() * 0.3, // 0-30%
-        recommendation: getRecommendation(completedPeriods)
+      // Gọi API thực tế
+      const response = await fetch('/api/research/walk-forward', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          experiment_id: `walk-forward-${Date.now()}`,
+          config: {
+            total_period: config.totalPeriod,
+            in_sample_period: config.inSamplePeriod,
+            out_sample_period: config.outSamplePeriod,
+            step_size: config.stepSize,
+            optimization_method: config.optimizationMethod,
+            param_ranges: {
+              fast_period: [5, 20, 5],
+              slow_period: [20, 100, 10],
+              stop_loss: [0.02, 0.10, 0.02],
+              take_profit: [0.05, 0.20, 0.05]
+            }
+          }
+        })
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
       
-      if (onAnalysisComplete) {
-        onAnalysisComplete(completedPeriods);
+      if (data.success && data.results) {
+        // Cập nhật periods với kết quả thực tế
+        const realPeriods = data.results.periods.map((period: any) => ({
+          id: period.id,
+          startDate: period.startDate,
+          endDate: period.endDate,
+          inSampleReturn: period.inSampleMetrics?.totalReturn || 0,
+          outSampleReturn: period.outSampleMetrics?.totalReturn || 0,
+          inSampleSharpe: period.inSampleMetrics?.sharpeRatio || 0,
+          outSampleSharpe: period.outSampleMetrics?.sharpeRatio || 0,
+          inSampleDrawdown: period.inSampleMetrics?.maxDrawdown || 0,
+          outSampleDrawdown: period.outSampleMetrics?.maxDrawdown || 0,
+          parameterDrift: period.parameterDrift || 0,
+          stability: period.stability || 0,
+          status: period.status
+        }));
+
+        setPeriods(realPeriods);
+
+        // Cập nhật overall metrics
+        if (data.results.overallMetrics) {
+          setAnalysisResults({
+            totalPeriods: data.results.overallMetrics.totalPeriods,
+            averageInSampleReturn: data.results.overallMetrics.averageInSampleReturn,
+            averageOutSampleReturn: data.results.overallMetrics.averageOutSampleReturn,
+            averageStability: data.results.overallMetrics.averageStability,
+            consistencyScore: data.results.overallMetrics.consistencyScore,
+            overfittingRisk: data.results.overallMetrics.overfittingRisk,
+            recommendation: data.results.overallMetrics.recommendation
+          });
+        }
+
+        if (onAnalysisComplete) {
+          onAnalysisComplete(realPeriods);
+        }
+      } else {
+        throw new Error('Invalid response format');
       }
       
     } catch (error) {
       console.error('Error running walk-forward analysis:', error);
+      toast({
+        title: "Lỗi",
+        description: "Không thể chạy Walk Forward Analysis. Vui lòng thử lại.",
+        variant: "destructive",
+      });
     } finally {
       setIsRunning(false);
     }
