@@ -3017,15 +3017,15 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       </Card>
 
       {/* Backtest Configuration Modal */}
-      {showBacktestConfig && (
-        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 w-[1500px] max-h-[90vh] left-[50%] top-[50%] transform translate-x-[-50%] translate-y-[-50%]">
-          <CardHeader>
-            <CardTitle>Cấu hình Backtest</CardTitle>
-            <CardDescription>
+      <Dialog open={showBacktestConfig} onOpenChange={setShowBacktestConfig}>
+        <DialogContent className="max-h-[90vh] flex flex-col max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Cấu hình Backtest</DialogTitle>
+            <DialogDescription>
               Thiết lập các tham số cho thí nghiệm backtest
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-6 pr-6 -mr-6">
             {/* Phần 1: Biểu đồ nến */}
             <div className="space-y-4">
               <div className="border rounded-lg p-4 h-[400px] flex flex-col justify-center">
@@ -3657,8 +3657,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                 </TabsContent>
               </Tabs>
             </div>
-          </CardContent>
-          <DialogFooter className="flex justify-end gap-2">
+          </div>
+          <DialogFooter className="mt-4 flex gap-2 border-t pt-4">
             <Button variant="outline" onClick={() => setShowBacktestConfig(false)}>
               Hủy
             </Button>
@@ -3676,8 +3676,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
               )}
             </Button>
           </DialogFooter>
-        </Card>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Hypothesis Test Configuration Modal */}
       {showHypothesisConfig && (
@@ -3975,27 +3975,34 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       {/* Quick Stats */}
 
       {/* Experiment Details Modal */}
-      {showDetails && selectedExperiment && (
-        <Card className="fixed inset-4 z-50 bg-background border shadow-lg overflow-auto">
-          <CardHeader className="sticky top-0 bg-background border-b">
+      {selectedExperiment && (
+        <Dialog open={showDetails} onOpenChange={(open) => {
+          if (!open) {
+            setShowDetails(false);
+            setSelectedExperiment(null);
+            setExperimentChartData([]); // Reset data chart
+          }
+        }}>
+        <DialogContent className="max-h-[90vh] flex flex-col max-w-6xl">
+          <DialogHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2">
+                <DialogTitle className="flex items-center gap-2">
                   <TestTube className="h-5 w-5" />
-                  Chi tiết thí nghiệm: {selectedExperiment.name}
+                  Chi tiết thí nghiệm: {selectedExperiment?.name}
                   {isLoadingDetails && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                   )}
-                </CardTitle>
-                <CardDescription>
+                </DialogTitle>
+                <DialogDescription>
                   Xem và quản lý chi tiết thí nghiệm
-                </CardDescription>
+                </DialogDescription>
               </div>
               <div className="flex gap-2">
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => viewExperimentDetails(selectedExperiment)}
+                  onClick={() => selectedExperiment && viewExperimentDetails(selectedExperiment)}
                   disabled={isLoadingDetails}
                 >
                   <Activity className="h-4 w-4 mr-2" />
@@ -4005,6 +4012,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                   variant="outline" 
                   size="sm"
                   onClick={async () => {
+                    if (!selectedExperiment) return;
                     try {
                       const response = await fetch(`/api/research/debug-indicators?experiment_id=${selectedExperiment.id}`);
                       const data = await response.json();
@@ -4019,18 +4027,10 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                   <Bug className="h-4 w-4 mr-2" />
                   Debug
                 </Button>
-                <MacOSCloseButton 
-                  onClick={() => {
-                    setShowDetails(false);
-                    setSelectedExperiment(null);
-                    setExperimentChartData([]); // Reset data chart
-                  }}
-                  size="md"
-                />
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-6 pr-6 -mr-6">
             <div>
               {selectedExperiment.type === 'backtest' ? (
                 <>
@@ -4957,8 +4957,9 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                 </>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
       )}
     </div>
   );
