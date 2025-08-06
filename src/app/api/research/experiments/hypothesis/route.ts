@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     // Lấy dữ liệu thị trường dựa trên cấu hình
     const { data: marketData, error: dataError } = await supabase
-      .from('ohlcv_btc_usdt_1m')
+      .from('OHLCV_BTC_USDT_1m')
       .select('*')
       .gte('open_time', config.startDate)
       .lte('open_time', config.endDate)

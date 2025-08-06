@@ -21,7 +21,7 @@ supabase: Client = create_client(
 
 def fetch_market_data(start_date: str, end_date: str) -> pd.DataFrame:
     """Fetch market data from Supabase"""
-    response = supabase.table('ohlcv_btc_usdt_1m').select('*').gte('open_time', start_date).lte('open_time', end_date).execute()
+    response = supabase.table('OHLCV_BTC_USDT_1m').select('*').gte('open_time', start_date).lte('open_time', end_date).execute()
     return pd.DataFrame(response.data)
 
 def calculate_returns(data: pd.DataFrame) -> pd.Series:

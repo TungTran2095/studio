@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,10 +39,13 @@ export default function MonteCarloEquityCurve({
   const [selectedPercentiles, setSelectedPercentiles] = useState<number[]>([10, 25, 50, 75, 90]);
   const [isCalculating, setIsCalculating] = useState(false);
 
-  // Tính toán equity curves cho các percentile
-  const calculatePercentileCurves = useCallback(() => {
+
+
+  // Tạo SVG chart với useMemo để tránh infinite loop
+  const equityCurveChart = useMemo(() => {
     if (!simulationResults.length) return null;
     
+    // Tính toán equity curves cho các percentile
     const numPoints = simulationResults[0].equityCurve.length;
     const percentileCurves: { [key: number]: number[] } = {};
     
@@ -59,23 +62,11 @@ export default function MonteCarloEquityCurve({
       percentileCurves[percentile] = curve;
     });
     
-    return percentileCurves;
-  }, [simulationResults, selectedPercentiles]);
-
-  // Tạo SVG chart
-  const renderEquityCurve = () => {
-    if (!simulationResults.length) return null;
-    
-    const percentileCurves = calculatePercentileCurves();
-    if (!percentileCurves) return null;
-    
     const width = 800;
     const height = 500;
     const margin = { top: 20, right: 20, bottom: 80, left: 80 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
-    
-    const numPoints = simulationResults[0].equityCurve.length;
     const allValues = simulationResults.flatMap(sim => sim.equityCurve);
     const minValue = Math.min(...allValues);
     const maxValue = Math.max(...allValues);
@@ -276,16 +267,28 @@ export default function MonteCarloEquityCurve({
         </g>
       </svg>
     );
-  };
+  }, [simulationResults, selectedPercentiles, showAllPaths, backtestEquityCurve]);
 
   // Export equity curve data
   const exportEquityCurveData = () => {
     if (!simulationResults.length) return;
     
-    const percentileCurves = calculatePercentileCurves();
-    if (!percentileCurves) return;
-    
+    // Tính toán equity curves cho các percentile
     const numPoints = simulationResults[0].equityCurve.length;
+    const percentileCurves: { [key: number]: number[] } = {};
+    
+    // Tính toán cho từng percentile
+    selectedPercentiles.forEach(percentile => {
+      const curve: number[] = [];
+      
+      for (let point = 0; point < numPoints; point++) {
+        const values = simulationResults.map(sim => sim.equityCurve[point]).sort((a, b) => a - b);
+        const index = Math.floor((percentile / 100) * values.length);
+        curve.push(values[index]);
+      }
+      
+      percentileCurves[percentile] = curve;
+    });
     const csvRows = ['Trade'];
     
     // Add headers
@@ -388,7 +391,7 @@ export default function MonteCarloEquityCurve({
 
         {/* Chart */}
         <div className="border rounded-lg p-4 bg-white overflow-x-auto">
-          {renderEquityCurve()}
+          {equityCurveChart}
         </div>
 
         {/* Summary statistics */}

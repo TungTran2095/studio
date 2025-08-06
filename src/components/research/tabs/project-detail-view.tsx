@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MonteCarloHistogram from '@/components/MonteCarloHistogram';
 import MonteCarloProfitSimulation from '@/components/MonteCarloProfitSimulation';
-import MonteCarloEquityCurve from '@/components/MonteCarloEquityCurve';
+
 
 // Helper functions để tạo text signal dựa trên chiến lược
 function getBuySignalText(experiment: any, trade: any): string {
@@ -2341,12 +2341,12 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       if (response.ok) {
         result = await response.json();
         // Nếu có trades, update lại bản ghi với trades
-        if (result && result.trades) {
-          await supabase
-            .from('research_experiments')
-            .update({ trades: result.trades })
-            .eq('id', experiment.id);
-        }
+        // if (result && result.trades) {
+        //   await supabase
+        //     .from('research_experiments')
+        //     .update({ trades: result.trades })
+        //     .eq('id', experiment.id);
+        // }
       } else {
         throw new Error('Failed to start backtest');
       }
@@ -4779,14 +4779,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                       );
                                     })()}
                                     
-                                    {/* Equity Curve Analysis */}
-                                    {monteCarloResults.length > 0 && (
-                                      <MonteCarloEquityCurve
-                                        simulationResults={monteCarloResults}
-                                        initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
-                                        backtestEquityCurve={resultObj.equity_curve}
-                                      />
-                                    )}
+
                                   </div>
                                 )}
                                 

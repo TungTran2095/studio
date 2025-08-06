@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     
     // Lấy dữ liệu OHLCV từ Supabase
     const { data: ohlcvData, error: ohlcvError } = await supabase
-      .from('ohlcv_btc_usdt_1m')
+      .from('OHLCV_BTC_USDT_1m')
       .select('*')
       .gte('open_time', config.startDate)
       .lte('open_time', config.endDate)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { calculateMA, calculateRSI, calculateMACD } from '@/lib/indicators';
-import { calculateReturns, calculateSharpeRatio, calculateMaxDrawdown } from '@/lib/performance';
+import { spawn } from 'child_process';
+import path from 'path';
 
 // Khởi tạo Supabase client
 const supabase = createClient(
@@ -12,17 +12,18 @@ const supabase = createClient(
 interface PatchBacktestConfig {
   experimentId: string;
   config: {
-    name: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-    symbol: string;
-    timeframe: string;
-    initialCapital: number;
-    positionSize: number;
-    stopLoss: number;
-    takeProfit: number;
-    strategyType: string;
+    // Flat structure (legacy)
+    name?: string;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+    symbol?: string;
+    timeframe?: string;
+    initialCapital?: number;
+    positionSize?: number;
+    stopLoss?: number;
+    takeProfit?: number;
+    strategyType?: string;
     // Strategy parameters
     fastPeriod?: number;
     slowPeriod?: number;
@@ -40,6 +41,49 @@ interface PatchBacktestConfig {
     channelPeriod?: number;
     maker_fee?: number;
     taker_fee?: number;
+    patchDays?: number;
+    
+    // Nested structure (new)
+    trading?: {
+      symbol: string;
+      timeframe: string;
+      startDate: string;
+      endDate: string;
+      initialCapital: number;
+      positionSize: number;
+    };
+    riskManagement?: {
+      stopLoss: number;
+      takeProfit: number;
+      maxPositions?: number;
+      maxDrawdown?: number;
+      trailingStop?: boolean;
+      trailingStopDistance?: number;
+      prioritizeStoploss?: boolean;
+      useTakeProfit?: boolean;
+    };
+    strategy?: {
+      type: string;
+      parameters?: {
+        fastPeriod?: number;
+        slowPeriod?: number;
+        rsiPeriod?: number;
+        overbought?: number;
+        oversold?: number;
+        fastEMA?: number;
+        slowEMA?: number;
+        signalPeriod?: number;
+        period?: number;
+        stdDev?: number;
+        channelPeriod?: number;
+        multiplier?: number;
+      };
+    };
+    transaction_costs?: {
+      maker_fee: number;
+      taker_fee: number;
+    };
+    usePatchBacktest?: boolean;
   };
 }
 
@@ -62,332 +106,263 @@ interface PatchResult {
 }
 
 export async function POST(req: Request) {
+  let experimentId: string = '';
+  
   try {
-    const { experimentId, config }: PatchBacktestConfig = await req.json();
+    const { experimentId: expId, config }: PatchBacktestConfig = await req.json();
+    experimentId = expId;
     
-    console.log('🚀 Starting patch-based backtest:', {
+    console.log('🚀 Starting patch-based backtest with Python strategy:', {
       experimentId,
-      symbol: config.symbol,
-      startDate: config.startDate,
-      endDate: config.endDate,
-      strategyType: config.strategyType
+      strategy: config.strategy?.type || config.strategyType,
+      patchDays: config.patchDays || 30
     });
 
-    // Tạo patches 30 ngày
-    const patches = generatePatches(config.startDate, config.endDate, 30);
-    console.log(`📅 Generated ${patches.length} patches of 30 days each`);
+    // Xử lý cấu trúc config - có thể nested hoặc flat
+    let processedConfig = config;
+    
+    // Nếu config có cấu trúc nested (từ frontend mới)
+    if (config.trading) {
+      processedConfig = {
+        ...config,
+        symbol: config.trading.symbol,
+        startDate: config.trading.startDate,
+        endDate: config.trading.endDate,
+        timeframe: config.trading.timeframe,
+        initialCapital: config.trading.initialCapital,
+        positionSize: config.trading.positionSize,
+        stopLoss: config.riskManagement?.stopLoss,
+        takeProfit: config.riskManagement?.takeProfit,
+        strategyType: config.strategy?.type,
+        // Strategy parameters
+        fastPeriod: config.strategy?.parameters?.fastPeriod,
+        slowPeriod: config.strategy?.parameters?.slowPeriod,
+        rsiPeriod: config.strategy?.parameters?.rsiPeriod || config.strategy?.parameters?.period,
+        overbought: config.strategy?.parameters?.overbought,
+        oversold: config.strategy?.parameters?.oversold,
+        fastEMA: config.strategy?.parameters?.fastEMA,
+        slowEMA: config.strategy?.parameters?.slowEMA,
+        signalPeriod: config.strategy?.parameters?.signalPeriod,
+        bbPeriod: config.strategy?.parameters?.period,
+        bbStdDev: config.strategy?.parameters?.stdDev,
+        channelPeriod: config.strategy?.parameters?.channelPeriod,
+        multiplier: config.strategy?.parameters?.multiplier,
+        maker_fee: config.transaction_costs?.maker_fee || 0.1,
+        taker_fee: config.transaction_costs?.taker_fee || 0.1,
+        patchDays: config.patchDays || 30
+      };
+    }
+    
+    console.log('🔧 Processed config for Python script:', {
+      symbol: processedConfig.symbol,
+      startDate: processedConfig.startDate,
+      endDate: processedConfig.endDate,
+      strategyType: processedConfig.strategyType,
+      initialCapital: processedConfig.initialCapital,
+      patchDays: processedConfig.patchDays
+    });
 
-    const allResults: PatchResult[] = [];
-    let currentCapital = config.initialCapital;
-    let allTrades: any[] = [];
-    let patchId = 1;
-
-    // Chạy backtest cho từng patch
-    for (const patch of patches) {
-      console.log(`🔄 Running patch ${patchId}/${patches.length}:`, {
-        startDate: patch.startDate,
-        endDate: patch.endDate,
-        currentCapital
-      });
-
-      try {
-        // Lấy dữ liệu cho patch này
-        const { data: ohlcvData, error: ohlcvError } = await supabase
-          .from('OHLCV_BTC_USDT_1m')
-          .select('*')
-          .gte('open_time', patch.startDate)
-          .lte('open_time', patch.endDate)
-          .order('open_time', { ascending: true });
-
-        if (ohlcvError) {
-          console.error(`❌ Error loading data for patch ${patchId}:`, ohlcvError);
-          continue;
-        }
-
-        if (!ohlcvData || ohlcvData.length === 0) {
-          console.log(`⚠️ No data found for patch ${patchId}`);
-          continue;
-        }
-
-        console.log(`📊 Loaded ${ohlcvData.length} data points for patch ${patchId}`);
-
-        // Chạy backtest cho patch này
-        const patchResult = await runPatchBacktest(
-          ohlcvData,
-          config,
-          currentCapital,
-          patchId
-        );
-
-        allResults.push(patchResult);
-        allTrades = [...allTrades, ...patchResult.trades];
-        
-        // Rebalance: cập nhật capital cho patch tiếp theo
-        currentCapital = patchResult.finalCapital;
-        
-        console.log(`✅ Patch ${patchId} completed:`, {
-          initialCapital: patchResult.initialCapital,
-          finalCapital: patchResult.finalCapital,
-          totalReturn: patchResult.totalReturn,
-          trades: patchResult.trades.length
-        });
-
-      } catch (error) {
-        console.error(`❌ Error in patch ${patchId}:`, error);
-      }
-
-      patchId++;
+    // Validation
+    if (!processedConfig.startDate || !processedConfig.endDate) {
+      return NextResponse.json(
+        { error: 'startDate và endDate là bắt buộc', details: 'Missing required dates' },
+        { status: 400 }
+      );
     }
 
-    // Tính toán tổng kết
-    const totalResults = aggregatePatchResults(allResults, config.initialCapital);
+    if (!processedConfig.initialCapital || processedConfig.initialCapital <= 0) {
+      processedConfig.initialCapital = 10000; // Default capital
+    }
+
+    // Cập nhật trạng thái experiment thành 'running'
+    const { error: updateError } = await supabase
+      .from('research_experiments')
+      .update({ status: 'running' })
+      .eq('id', experimentId);
+
+    if (updateError) {
+      console.error('❌ Error updating experiment status:', updateError);
+      // Continue anyway, don't fail the entire process
+    }
+
+    // Gọi Python script cho patch backtest
+    const pythonScript = path.join(process.cwd(), 'scripts', 'backtest_strategies', 'patch_backtest_runner.py');
     
-    console.log('🎯 Patch-based backtest completed:', {
-      totalPatches: patches.length,
-      successfulPatches: allResults.length,
-      finalCapital: totalResults.finalCapital,
-      totalReturn: totalResults.totalReturn,
-      totalTrades: allTrades.length
-    });
+    return new Promise((resolve) => {
+      const pythonProcess = spawn('python', [
+        pythonScript,
+        '--experiment_id', experimentId,
+        '--config', JSON.stringify(processedConfig),
+        '--supabase_url', process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        '--supabase_key', process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      ]);
 
-    // Lưu kết quả vào database
-    await savePatchBacktestResults(experimentId, totalResults, allResults);
+      let scriptOutput = '';
+      let scriptError = '';
+      let results: any = null;
 
-    return NextResponse.json({
-      success: true,
-      results: totalResults,
-      patches: allResults,
-      message: `Patch-based backtest completed with ${allResults.length}/${patches.length} successful patches`
+      // Handle stdout
+      pythonProcess.stdout.on('data', (data) => {
+        const output = data.toString('utf8');
+        scriptOutput += output;
+      });
+
+      // Handle stderr
+      pythonProcess.stderr.on('data', (data) => {
+        const errorOutput = data.toString('utf8');
+        console.error(`Patch Backtest Python error: ${errorOutput}`);
+        scriptError += errorOutput;
+      });
+
+      // Handle process completion
+      pythonProcess.on('close', async (code) => {
+        console.log(`Patch Backtest Python script exited with code: ${code}`);
+        
+        // Small delay to ensure all data is received
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Parse JSON from complete output
+        try {
+          if (scriptOutput.trim()) {
+            // Clean up the output - remove any non-JSON content
+            let jsonContent = scriptOutput.trim();
+            
+            // Find the start and end of JSON object
+            const jsonStart = jsonContent.indexOf('{');
+            const jsonEnd = jsonContent.lastIndexOf('}');
+            
+            if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+              jsonContent = jsonContent.substring(jsonStart, jsonEnd + 1);
+              
+              try {
+                const parsed = JSON.parse(jsonContent);
+                if (parsed && parsed.success !== undefined) {
+                  results = parsed;
+                }
+              } catch (cleanParseError) {
+                // Fallback to original method
+                try {
+                  const parsed = JSON.parse(scriptOutput.trim());
+                  if (parsed && parsed.success !== undefined) {
+                    results = parsed;
+                  }
+                } catch (fullParseError) {
+                  console.error('Failed to parse JSON output. Error:', (fullParseError as Error).message);
+                  console.error('Script output length:', scriptOutput.length);
+                  console.error('Script output sample:', scriptOutput.substring(0, 200) + '...');
+                }
+              }
+            } else {
+              console.error('Could not find valid JSON boundaries in output');
+              console.error('Script output length:', scriptOutput.length);
+              console.error('Script output sample:', scriptOutput.substring(0, 200) + '...');
+            }
+          } else {
+            console.error('Script output is empty');
+          }
+        } catch (e) {
+          console.error('Error parsing JSON from script output:', e);
+        }
+
+        try {
+          if (code === 0 && results && results.success) {
+            console.log('🎯 Patch-based backtest completed successfully:', {
+              totalPatches: results.patches?.length || 0,
+              finalCapital: results.results?.finalCapital,
+              totalReturn: results.results?.totalReturn,
+              totalTrades: results.results?.totalTrades
+            });
+
+            // Lưu kết quả vào database
+            await savePatchBacktestResults(
+              experimentId, 
+              results.results, 
+              results.patches || [], 
+              results.trades || [], // All trades từ Python script
+              results.indicators || {} // All indicators từ Python script
+            );
+
+            // Cập nhật trạng thái experiment thành 'completed'
+            await supabase
+              .from('research_experiments')
+              .update({ status: 'completed' })
+              .eq('id', experimentId);
+
+            resolve(NextResponse.json({
+              success: true,
+              results: results.results,
+              patches: results.patches,
+              message: `Patch-based backtest completed with ${results.patches?.length || 0} patches using Python strategy engine`
+            }));
+
+          } else {
+            console.error('❌ Patch backtest failed:', { code, results, scriptError });
+            
+            // Cập nhật trạng thái experiment thành 'failed'
+            await supabase
+              .from('research_experiments')
+              .update({ status: 'failed' })
+              .eq('id', experimentId);
+
+            resolve(NextResponse.json(
+              { 
+                error: 'Patch backtest failed', 
+                details: results?.error || scriptError || `Exit code: ${code}`,
+                pythonOutput: scriptOutput 
+              },
+              { status: 500 }
+            ));
+          }
+        } catch (dbError) {
+          console.error('❌ Database error in patch backtest:', dbError);
+          resolve(NextResponse.json(
+            { error: 'Database error after patch backtest', details: (dbError as Error).message },
+            { status: 500 }
+          ));
+        }
+      });
+
+      // Handle process errors
+      pythonProcess.on('error', async (error) => {
+        console.error('❌ Error spawning patch backtest Python process:', error);
+        
+        await supabase
+          .from('research_experiments')
+          .update({ status: 'failed' })
+          .eq('id', experimentId);
+
+        resolve(NextResponse.json(
+          { error: 'Failed to run patch backtest Python script', details: error.message },
+          { status: 500 }
+        ));
+      });
     });
 
   } catch (error) {
     console.error('❌ Patch backtest error:', error);
+    
+    // Cập nhật trạng thái experiment thành 'failed'
+    try {
+      await supabase
+        .from('research_experiments')
+        .update({ status: 'failed' })
+        .eq('id', experimentId);
+    } catch (dbError) {
+      console.error('❌ Failed to update experiment status:', dbError);
+    }
+
     return NextResponse.json(
-      { error: 'Failed to run patch-based backtest', details: error.message },
+      { error: 'Failed to run patch-based backtest', details: (error as Error).message },
       { status: 500 }
     );
   }
 }
 
-function generatePatches(startDate: string, endDate: string, daysPerPatch: number): Array<{startDate: string, endDate: string}> {
-  const patches = [];
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  
-  let currentStart = new Date(start);
-  
-  while (currentStart < end) {
-    const currentEnd = new Date(currentStart);
-    currentEnd.setDate(currentEnd.getDate() + daysPerPatch);
-    
-    // Đảm bảo không vượt quá end date
-    if (currentEnd > end) {
-      currentEnd.setTime(end.getTime());
-    }
-    
-    patches.push({
-      startDate: currentStart.toISOString(),
-      endDate: currentEnd.toISOString()
-    });
-    
-    currentStart = new Date(currentEnd);
-  }
-  
-  return patches;
-}
-
-async function runPatchBacktest(
-  ohlcvData: any[],
-  config: any,
-  initialCapital: number,
-  patchId: number
-): Promise<PatchResult> {
-  // Tính toán các chỉ báo kỹ thuật
-  const prices = ohlcvData.map(d => parseFloat(d.close));
-  const timestamps = ohlcvData.map(d => new Date(d.open_time).getTime());
-  
-  let signals: number[] = [];
-  
-  // Tính toán signals dựa trên strategy type
-  switch (config.strategyType) {
-    case 'rsi':
-      const rsi = calculateRSI(prices, config.rsiPeriod || 14);
-      signals = rsi.map(r => {
-        if (r < (config.oversold || 30)) return 1; // Buy signal
-        if (r > (config.overbought || 70)) return -1; // Sell signal
-        return 0; // Hold
-      });
-      break;
-      
-    case 'ma_crossover':
-      const fastMA = calculateMA(prices, config.fastPeriod || 10);
-      const slowMA = calculateMA(prices, config.slowPeriod || 20);
-      signals = prices.map((_, i) => {
-        if (i < config.slowPeriod || 20) return 0;
-        if (fastMA[i] > slowMA[i] && fastMA[i-1] <= slowMA[i-1]) return 1; // Golden cross
-        if (fastMA[i] < slowMA[i] && fastMA[i-1] >= slowMA[i-1]) return -1; // Death cross
-        return 0;
-      });
-      break;
-      
-    case 'macd':
-      const { macd, signal } = calculateMACD(prices, config.fastEMA || 12, config.slowEMA || 26, config.signalPeriod || 9);
-      signals = prices.map((_, i) => {
-        if (i < config.slowEMA || 26) return 0;
-        if (macd[i] > signal[i] && macd[i-1] <= signal[i-1]) return 1; // MACD crosses above signal
-        if (macd[i] < signal[i] && macd[i-1] >= signal[i-1]) return -1; // MACD crosses below signal
-        return 0;
-      });
-      break;
-      
-    default:
-      signals = new Array(prices.length).fill(0);
-  }
-
-  // Thực hiện backtest
-  let position = 0;
-  let capital = initialCapital;
-  let trades: any[] = [];
-  let equity = [capital];
-  let maxCapital = capital;
-  let maxDrawdown = 0;
-
-  for (let i = 0; i < prices.length; i++) {
-    const price = prices[i];
-    const signal = signals[i];
-    const timestamp = timestamps[i];
-
-    // Xử lý tín hiệu mua/bán
-    if (signal === 1 && position === 0) {
-      // Mua
-      const shares = Math.floor((capital * config.positionSize) / price);
-      if (shares > 0) {
-        position = shares;
-        capital -= shares * price;
-        
-        trades.push({
-          type: 'buy',
-          timestamp,
-          price,
-          shares,
-          capital: capital + position * price
-        });
-      }
-    } else if (signal === -1 && position > 0) {
-      // Bán
-      const sellValue = position * price;
-      capital += sellValue;
-      
-      trades.push({
-        type: 'sell',
-        timestamp,
-        price,
-        shares: position,
-        capital
-      });
-      
-      position = 0;
-    }
-
-    // Tính equity hiện tại
-    const currentEquity = capital + position * price;
-    equity.push(currentEquity);
-    
-    // Cập nhật max drawdown
-    if (currentEquity > maxCapital) {
-      maxCapital = currentEquity;
-    }
-    const drawdown = (maxCapital - currentEquity) / maxCapital;
-    if (drawdown > maxDrawdown) {
-      maxDrawdown = drawdown;
-    }
-  }
-
-  // Đóng position cuối cùng nếu còn
-  if (position > 0) {
-    const finalPrice = prices[prices.length - 1];
-    const sellValue = position * finalPrice;
-    capital += sellValue;
-    
-    trades.push({
-      type: 'sell',
-      timestamp: timestamps[timestamps.length - 1],
-      price: finalPrice,
-      shares: position,
-      capital
-    });
-  }
-
-  const finalCapital = capital;
-  const totalReturn = ((finalCapital - initialCapital) / initialCapital) * 100;
-
-  // Tính toán metrics
-  const winningTrades = trades.filter(t => t.type === 'sell' && t.capital > trades.find(prev => prev.type === 'buy' && prev.timestamp < t.timestamp)?.capital);
-  const losingTrades = trades.filter(t => t.type === 'sell' && t.capital <= trades.find(prev => prev.type === 'buy' && prev.timestamp < t.timestamp)?.capital);
-
-  const winRate = trades.filter(t => t.type === 'sell').length > 0 
-    ? (winningTrades.length / trades.filter(t => t.type === 'sell').length) * 100 
-    : 0;
-
-  const avgWin = winningTrades.length > 0 
-    ? winningTrades.reduce((sum, t) => sum + (t.capital - trades.find(prev => prev.type === 'buy' && prev.timestamp < t.timestamp)?.capital), 0) / winningTrades.length 
-    : 0;
-
-  const avgLoss = losingTrades.length > 0 
-    ? losingTrades.reduce((sum, t) => sum + (trades.find(prev => prev.type === 'buy' && prev.timestamp < t.timestamp)?.capital - t.capital), 0) / losingTrades.length 
-    : 0;
-
-  const sharpeRatio = calculateSharpeRatio(equity);
-
-  return {
-    patchId,
-    startDate: new Date(timestamps[0]).toISOString(),
-    endDate: new Date(timestamps[timestamps.length - 1]).toISOString(),
-    initialCapital,
-    finalCapital,
-    totalReturn,
-    trades,
-    metrics: {
-      winRate,
-      totalTrades: trades.filter(t => t.type === 'sell').length,
-      avgWin,
-      avgLoss,
-      maxDrawdown: maxDrawdown * 100,
-      sharpeRatio
-    }
-  };
-}
-
-function aggregatePatchResults(patches: PatchResult[], initialCapital: number) {
-  const totalTrades = patches.reduce((sum, patch) => sum + patch.trades.length, 0);
-  const totalWinningTrades = patches.reduce((sum, patch) => sum + patch.metrics.winRate * patch.metrics.totalTrades / 100, 0);
-  const totalReturn = patches.reduce((sum, patch) => sum + patch.totalReturn, 0);
-  const avgWin = patches.reduce((sum, patch) => sum + patch.metrics.avgWin, 0) / patches.length;
-  const avgLoss = patches.reduce((sum, patch) => sum + patch.metrics.avgLoss, 0) / patches.length;
-  const maxDrawdown = Math.max(...patches.map(p => p.metrics.maxDrawdown));
-  const sharpeRatio = patches.reduce((sum, patch) => sum + patch.metrics.sharpeRatio, 0) / patches.length;
-
-  const finalCapital = patches.length > 0 ? patches[patches.length - 1].finalCapital : initialCapital;
-
-  return {
-    totalPatches: patches.length,
-    finalCapital,
-    totalReturn,
-    totalTrades,
-    winRate: totalTrades > 0 ? (totalWinningTrades / totalTrades) * 100 : 0,
-    avgWin,
-    avgLoss,
-    maxDrawdown,
-    sharpeRatio,
-    patches
-  };
-}
-
-async function savePatchBacktestResults(experimentId: string, totalResults: any, patches: PatchResult[]) {
+async function savePatchBacktestResults(experimentId: string, totalResults: any, patches: PatchResult[], allTrades: any[], indicators: any) {
   try {
     // Cập nhật experiment với kết quả patch-based backtest
     const { error } = await supabase
-      .from('experiments')
+      .from('research_experiments')
       .update({
         status: 'completed',
         results: {
@@ -403,7 +378,9 @@ async function savePatchBacktestResults(experimentId: string, totalResults: any,
           max_drawdown: totalResults.maxDrawdown,
           sharpe_ratio: totalResults.sharpeRatio,
           completed_at: new Date().toISOString()
-        }
+        },
+        trades: allTrades, // Lưu trades vào cột trades
+        indicators: indicators // Lưu indicators vào cột indicators
       })
       .eq('id', experimentId);
 
@@ -411,6 +388,7 @@ async function savePatchBacktestResults(experimentId: string, totalResults: any,
       console.error('Error saving patch backtest results:', error);
     } else {
       console.log('✅ Patch backtest results saved to database');
+      console.log(`📊 Saved ${allTrades.length} trades and indicators data`);
     }
   } catch (error) {
     console.error('Error saving results:', error);

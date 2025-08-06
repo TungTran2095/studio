@@ -7,31 +7,31 @@ interface PatchResult {
   patchId: number;
   startDate: string;
   endDate: string;
-  initialCapital: number;
-  finalCapital: number;
-  totalReturn: number;
+  initialCapital: number | null;
+  finalCapital: number | null;
+  totalReturn: number | null;
   trades: any[];
   metrics: {
-    winRate: number;
-    totalTrades: number;
-    avgWin: number;
-    avgLoss: number;
-    maxDrawdown: number;
-    sharpeRatio: number;
+    winRate: number | null;
+    totalTrades: number | null;
+    avgWin: number | null;
+    avgLoss: number | null;
+    maxDrawdown: number | null;
+    sharpeRatio: number | null;
   };
 }
 
 interface PatchBacktestResultsProps {
   results: {
-    totalPatches: number;
-    finalCapital: number;
-    totalReturn: number;
-    totalTrades: number;
-    winRate: number;
-    avgWin: number;
-    avgLoss: number;
-    maxDrawdown: number;
-    sharpeRatio: number;
+    totalPatches: number | null;
+    finalCapital: number | null;
+    totalReturn: number | null;
+    totalTrades: number | null;
+    winRate: number | null;
+    avgWin: number | null;
+    avgLoss: number | null;
+    maxDrawdown: number | null;
+    sharpeRatio: number | null;
     patches: PatchResult[];
   };
 }
@@ -55,7 +55,8 @@ export function PatchBacktestResults({ results }: PatchBacktestResultsProps) {
     });
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount == null || isNaN(amount)) return '$0.00';
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'USD',
@@ -63,7 +64,8 @@ export function PatchBacktestResults({ results }: PatchBacktestResultsProps) {
     }).format(amount);
   };
 
-  const formatPercentage = (value: number) => {
+  const formatPercentage = (value: number | null | undefined) => {
+    if (value == null || isNaN(value)) return '0.00%';
     return `${value.toFixed(2)}%`;
   };
 
@@ -81,7 +83,7 @@ export function PatchBacktestResults({ results }: PatchBacktestResultsProps) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">
-                {results.totalPatches}
+                {results.totalPatches ?? 0}
               </div>
               <div className="text-sm text-muted-foreground">Tổng số patches</div>
             </div>
@@ -92,14 +94,14 @@ export function PatchBacktestResults({ results }: PatchBacktestResultsProps) {
               <div className="text-sm text-muted-foreground">Vốn cuối</div>
             </div>
             <div className="text-center">
-              <div className={`text-2xl font-bold ${results.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <div className={`text-2xl font-bold ${(results.totalReturn ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {formatPercentage(results.totalReturn)}
               </div>
               <div className="text-sm text-muted-foreground">Tổng lợi nhuận</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-purple-600">
-                {results.totalTrades}
+                {results.totalTrades ?? 0}
               </div>
               <div className="text-sm text-muted-foreground">Tổng giao dịch</div>
             </div>
@@ -153,8 +155,8 @@ export function PatchBacktestResults({ results }: PatchBacktestResultsProps) {
                       {formatDate(patch.startDate)} - {formatDate(patch.endDate)}
                     </span>
                   </div>
-                  <Badge variant={patch.totalReturn >= 0 ? 'default' : 'destructive'}>
-                    {patch.totalReturn >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                  <Badge variant={(patch.totalReturn ?? 0) >= 0 ? 'default' : 'destructive'}>
+                    {(patch.totalReturn ?? 0) >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
                     {formatPercentage(patch.totalReturn)}
                   </Badge>
                 </div>
@@ -170,7 +172,7 @@ export function PatchBacktestResults({ results }: PatchBacktestResultsProps) {
                   </div>
                   <div>
                     <div className="font-semibold text-muted-foreground">Giao dịch</div>
-                    <div className="font-mono">{patch.metrics.totalTrades}</div>
+                    <div className="font-mono">{patch.metrics.totalTrades ?? 0}</div>
                   </div>
                   <div>
                     <div className="font-semibold text-muted-foreground">Tỷ lệ thắng</div>

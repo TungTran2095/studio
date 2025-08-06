@@ -42,7 +42,7 @@ const riskMetrics = calculateRiskMetrics(simulationResults, confidence_level);
 
 ### **Nguồn dữ liệu:**
 - **Database**: Supabase với 2.7M+ records
-- **Tables**: `ohlcv_btc_usdt_1m`, `ohlcv_eth_usdt_1m`
+- **Tables**: `OHLCV_BTC_USDT_1m`, `OHLCV_ETH_USDT_1m`
 - **Timeframe**: 1-minute OHLCV data
 - **Symbols**: BTC, ETH (có thể mở rộng)
 

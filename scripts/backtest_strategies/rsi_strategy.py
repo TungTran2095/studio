@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from .base_strategy import BaseStrategy
+from base_strategy import BaseStrategy
 
 class RSIStrategy(BaseStrategy):
     def __init__(self, config):
