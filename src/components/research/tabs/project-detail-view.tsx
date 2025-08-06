@@ -184,6 +184,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MacOSCloseButton } from '@/components/ui/macos-close-button';
+import { PatchBacktestResults } from '@/components/research/patch-backtest-results';
 import { 
   ArrowLeft, 
   Plus, 
@@ -2086,6 +2087,8 @@ interface BacktestConfig {
   taker_fee?: number;
   prioritizeStoploss?: boolean;
   useTakeProfit?: boolean;
+  usePatchBacktest?: boolean; // Thêm tùy chọn patch-based backtest
+  patchDays?: number; // Độ dài mỗi patch (ngày)
 }
 
 interface OHLCV {
@@ -2134,6 +2137,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     multiplier: 2,
     maker_fee: 0.1,
     taker_fee: 0.1,
+    usePatchBacktest: false, // Thêm tùy chọn patch-based backtest
+    patchDays: 30, // Độ dài mỗi patch (ngày)
   });
   const [chartData, setChartData] = useState<OHLCV[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -2312,15 +2317,23 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
 
       if (error) throw error;
 
-      // Gọi API để chạy backtest
-      const response = await fetch('/api/research/backtests/run', {
+      // Gọi API để chạy backtest (patch-based hoặc thường)
+      const apiEndpoint = backtestConfig.usePatchBacktest 
+        ? '/api/research/experiments/patch-backtest'
+        : '/api/research/backtests/run';
+        
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           experimentId: experiment.id,
-          config: fullConfig
+          config: {
+            ...fullConfig,
+            usePatchBacktest: backtestConfig.usePatchBacktest,
+            patchDays: backtestConfig.patchDays
+          }
         })
       });
 
@@ -2371,11 +2384,15 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         multiplier: 2,
         maker_fee: 0.1,
         taker_fee: 0.1,
+        usePatchBacktest: false,
+        patchDays: 30,
       });
 
       toast({
         title: 'Backtest đã được tạo',
-        description: 'Backtest đang được chạy trong background. Kết quả sẽ được cập nhật sau khi hoàn thành.',
+        description: backtestConfig.usePatchBacktest 
+          ? `Patch-based backtest đang được chạy với ${backtestConfig.patchDays} ngày/patch. Kết quả sẽ được cập nhật sau khi hoàn thành.`
+          : 'Backtest đang được chạy trong background. Kết quả sẽ được cập nhật sau khi hoàn thành.',
       });
 
       // Refresh danh sách experiments
@@ -3580,6 +3597,45 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         />
                         Sử dụng phí giao dịch mặc định (Maker/Taker: 0.1%)
                       </Label>
+                      
+                      {/* Patch-based Backtesting Options */}
+                      <div className="mt-4 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/30">
+                        <div className="space-y-3">
+                          <Label className="flex items-center space-x-2 text-blue-700 dark:text-blue-300">
+                            <input
+                              type="checkbox"
+                              checked={backtestConfig.usePatchBacktest || false}
+                              onChange={(e) => handleBacktestConfigChange('usePatchBacktest', e.target.checked)}
+                              className="h-4 w-4 rounded border-blue-300"
+                            />
+                            <span className="font-semibold">🔄 Sử dụng Patch-based Backtesting</span>
+                          </Label>
+                          <p className="text-xs text-blue-600 dark:text-blue-400">
+                            Chia dữ liệu thành các patch nhỏ để tránh lỗi timeout khi xử lý dữ liệu lớn. 
+                            Mỗi patch sẽ được backtest riêng và rebalance sau mỗi patch.
+                          </p>
+                          
+                          {backtestConfig.usePatchBacktest && (
+                            <div className="space-y-2">
+                              <Label className="text-sm text-blue-700 dark:text-blue-300">
+                                Độ dài mỗi patch (ngày)
+                              </Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                max="90"
+                                value={backtestConfig.patchDays || 30}
+                                onChange={(e) => handleBacktestConfigChange('patchDays', Number(e.target.value))}
+                                className="border border-blue-300 bg-white px-3 py-2 text-sm text-black font-normal"
+                                placeholder="30"
+                              />
+                              <p className="text-xs text-blue-600 dark:text-blue-400">
+                                Khuyến nghị: 30 ngày cho dữ liệu 1m, 60 ngày cho dữ liệu 1h
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Maker fee (%)</Label>
@@ -4689,7 +4745,12 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             (() => {
                               const resultObj = selectedExperiment.results || selectedExperiment.metrics || {};
                               return <>
-                                <BacktestResultDetail results={resultObj} />
+                                {/* Hiển thị patch-based backtest results nếu có */}
+                                {resultObj.patch_based && resultObj.patches ? (
+                                  <PatchBacktestResults results={resultObj} />
+                                ) : (
+                                  <BacktestResultDetail results={resultObj} />
+                                )}
                                 
                                 {/* Monte Carlo Profit Simulation */}
                                 {resultObj.total_trades && resultObj.win_rate && (
