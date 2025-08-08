@@ -108,7 +108,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // Only create Supabase client if environment variables are available
-let supabase: any = null;
+let supabaseInstance: any = null;
 
 if (supabaseUrl && supabaseAnonKey) {
   try {
@@ -116,7 +116,7 @@ if (supabaseUrl && supabaseAnonKey) {
     if (!supabaseUrl.startsWith('https://')) {
       console.error(`Invalid URL in NEXT_PUBLIC_SUPABASE_URL: "${supabaseUrl}"`);
     } else {
-      supabase = createClient(supabaseUrl, supabaseAnonKey);
+      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
       console.log('✅ Supabase client initialized successfully');
     }
   } catch (error) {
@@ -133,7 +133,7 @@ if (supabaseUrl && supabaseAnonKey) {
 }
 
 // Export the potentially null instance
-export const supabase = supabase;
+export const supabase = supabaseInstance;
 
 if (!supabase) {
   console.error('Supabase client could not be initialized. Check environment variables and URL format.');
