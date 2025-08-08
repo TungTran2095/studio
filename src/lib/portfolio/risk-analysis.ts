@@ -90,7 +90,7 @@ function calculateDailyReturns(historicalPrices: Record<string, number[]>): Reco
 /**
  * Tính ma trận hiệp phương sai từ dữ liệu lợi nhuận
  */
-function calculateCovarianceMatrix(returns: Record<string, number[]>): number[][] {
+export function calculateCovarianceMatrix(returns: Record<string, number[]>): number[][] {
   const symbols = Object.keys(returns);
   const n = symbols.length;
   const matrix: number[][] = Array(n).fill(0).map(() => Array(n).fill(0));
@@ -126,7 +126,7 @@ function calculateCovarianceMatrix(returns: Record<string, number[]>): number[][
 /**
  * Tính độ biến động của danh mục từ trọng số và ma trận hiệp phương sai
  */
-function calculatePortfolioVolatility(weights: number[], covarianceMatrix: number[][]): number {
+export function calculatePortfolioVolatility(weights: number[], covarianceMatrix: number[][]): number {
   let variance = 0;
   const n = weights.length;
   
