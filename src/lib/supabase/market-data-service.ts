@@ -9,9 +9,9 @@ import {
   DataQualityMetrics 
 } from '@/types/market-data';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // Sử dụng Service Role Key để có quyền ghi dữ liệu từ server-side
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; 
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY; 
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('Supabase URL and Service Role Key are required.');

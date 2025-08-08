@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import type { OhlcvHistory } from '@/lib/supabase-client';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 // Interface cho dữ liệu OHLCV đã được xử lý
