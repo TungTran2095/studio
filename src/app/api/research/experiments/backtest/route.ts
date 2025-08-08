@@ -14,8 +14,6 @@ const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
-}
-
 export async function POST(req: Request) {
   try {
     // Check if Supabase client is available
@@ -35,7 +33,6 @@ export async function POST(req: Request) {
     const { experimentId, config } = await req.json();
     
     // Lấy dữ liệu OHLCV từ Supabase
-    const { data: ohlcvData, error: ohlcvError } = await supabase
       .from('OHLCV_BTC_USDT_1m')
       .select('*')
       .gte('open_time', config.startDate)
@@ -48,7 +45,6 @@ export async function POST(req: Request) {
     const prices = ohlcvData.map(d => d.close_price);
     const ma20 = calculateMA(prices, 20);
     const rsi = calculateRSI(prices, 14);
-    const { macd, signal } = calculateMACD(prices);
 
     // Thực hiện backtest
     let position = 0;
@@ -105,7 +101,6 @@ export async function POST(req: Request) {
     const winRate = (winningTrades / totalTrades) * 100;
 
     // Cập nhật kết quả vào database
-    const { error: updateError } = await supabase
       .from('research_experiments')
       .update({
         status: 'completed',
@@ -118,8 +113,7 @@ export async function POST(req: Request) {
             maxDrawdown,
             totalTrades,
             winRate
-          }
-        },
+},
         completed_at: new Date().toISOString()
       })
       .eq('id', experimentId);
@@ -138,8 +132,7 @@ export async function POST(req: Request) {
           maxDrawdown,
           totalTrades,
           winRate
-        }
-    });
+});
 
   } catch (error) {
     console.error('Backtest error:', error);
@@ -147,4 +140,6 @@ export async function POST(req: Request) {
       { success: false, error: 'Failed to execute backtest' },
       { status: 500 }
     );
-  }
+}
+}
+}

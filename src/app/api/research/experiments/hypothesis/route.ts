@@ -19,8 +19,6 @@ const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
-}
-
 export async function POST(req: Request) {
   try {
     // Check if Supabase client is available
@@ -53,7 +51,6 @@ export async function POST(req: Request) {
       .eq('id', experimentId);
 
     // Lấy dữ liệu thị trường dựa trên cấu hình
-    const { data: marketData, error: dataError } = await supabase
       .from('OHLCV_BTC_USDT_1m')
       .select('*')
       .gte('open_time', config.startDate)
@@ -142,8 +139,7 @@ export async function POST(req: Request) {
             std: calculateStd(volatilities),
             min: Math.min(...volatilities),
             max: Math.max(...volatilities)
-          }
-    };
+};
 
     // Cập nhật experiment với kết quả
     await supabase
@@ -186,7 +182,6 @@ function calculateReturns(data: any[]): number[] {
 }
 
 function calculateVolatilities(data: any[], windowSize: number): number[] {
-  const returns = calculateReturns(data);
   return returns.map((_, i) => {
     if (i < windowSize) return 0;
     const window = returns.slice(i - windowSize, i);
@@ -231,4 +226,5 @@ function calculateStd(data: number[]): number {
   const mean = calculateMean(data);
   const variance = data.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (data.length - 1);
   return Math.sqrt(variance);
-} 
+}
+}

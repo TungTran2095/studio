@@ -107,7 +107,6 @@ interface PatchResult {
     maxDrawdown: number;
     sharpeRatio: number;
   };
-}
 
 export async function POST(req: Request) {
   try {
@@ -194,7 +193,6 @@ export async function POST(req: Request) {
     }
 
     // Cập nhật trạng thái experiment thành 'running'
-    const { error: updateError } = await supabase
       .from('research_experiments')
       .update({ status: 'running' })
       .eq('id', experimentId);
@@ -257,29 +255,23 @@ export async function POST(req: Request) {
                 const parsed = JSON.parse(jsonContent);
                 if (parsed && parsed.success !== undefined) {
                   results = parsed;
-                }
-              } catch (cleanParseError) {
+} catch (cleanParseError) {
                 // Fallback to original method
                 try {
-                  const parsed = JSON.parse(scriptOutput.trim());
                   if (parsed && parsed.success !== undefined) {
                     results = parsed;
-                  }
-                } catch (fullParseError) {
+} catch (fullParseError) {
                   console.error('Failed to parse JSON output. Error:', (fullParseError as Error).message);
                   console.error('Script output length:', scriptOutput.length);
                   console.error('Script output sample:', scriptOutput.substring(0, 200) + '...');
-                }
-              }
+}
             } else {
               console.error('Could not find valid JSON boundaries in output');
               console.error('Script output length:', scriptOutput.length);
               console.error('Script output sample:', scriptOutput.substring(0, 200) + '...');
-            }
-          } else {
+} else {
             console.error('Script output is empty');
-          }
-        } catch (e) {
+} catch (e) {
           console.error('Error parsing JSON from script output:', e);
         }
 
@@ -331,15 +323,13 @@ export async function POST(req: Request) {
               },
               { status: 500 }
             ));
-          }
-        } catch (dbError) {
+} catch (dbError) {
           console.error('❌ Database error in patch backtest:', dbError);
           resolve(NextResponse.json(
             { error: 'Database error after patch backtest', details: (dbError as Error).message },
             { status: 500 }
           ));
-        }
-      });
+});
 
       // Handle process errors
       pythonProcess.on('error', async (error) => {
@@ -374,13 +364,11 @@ export async function POST(req: Request) {
       { error: 'Failed to run patch-based backtest', details: (error as Error).message },
       { status: 500 }
     );
-  }
 }
 
 async function savePatchBacktestResults(experimentId: string, totalResults: any, patches: PatchResult[], allTrades: any[], indicators: any) {
   try {
     // Cập nhật experiment với kết quả patch-based backtest
-    const { error } = await supabase
       .from('research_experiments')
       .update({
         status: 'completed',
@@ -408,8 +396,7 @@ async function savePatchBacktestResults(experimentId: string, totalResults: any,
     } else {
       console.log('✅ Patch backtest results saved to database');
       console.log(`📊 Saved ${allTrades.length} trades and indicators data`);
-    }
-  } catch (error) {
+} catch (error) {
     console.error('Error saving results:', error);
-  }
-} 
+}
+}

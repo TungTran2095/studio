@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
 
     if (experimentId) {
       // Debug một experiment cụ thể
-      const { data: experiment, error } = await supabase
         .from('research_experiments')
         .select('*')
         .eq('id', experimentId)
@@ -50,13 +49,11 @@ export async function GET(request: NextRequest) {
           hasIndicators: !!experiment.indicators,
           indicatorsKeys: experiment.indicators ? Object.keys(experiment.indicators) : [],
           indicatorsData: experiment.indicators
-        }
-      };
+};
 
       return NextResponse.json(debugInfo);
     } else {
       // Debug tất cả experiments có indicators
-      const { data: experiments, error } = await supabase
         .from('research_experiments')
         .select('*')
         .not('indicators', 'is', null);
@@ -65,7 +62,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      const debugInfo = {
         totalExperiments: experiments?.length || 0,
         experiments: experiments?.map(exp => ({
           id: exp.id,
@@ -81,12 +77,10 @@ export async function GET(request: NextRequest) {
       };
 
       return NextResponse.json(debugInfo);
-    }
-  } catch (error) {
+} catch (error) {
     console.error('Error debugging indicators:', error);
           return NextResponse.json(
         { error: 'Internal server error' },
         { status: 500 }
       );
-  }
 }
