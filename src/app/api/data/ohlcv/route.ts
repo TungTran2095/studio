@@ -25,8 +25,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    
-  try {
     console.log('📊 [OHLCV API] Fetching data from OHLCV_BTC_USDT_1m...');
     
     const { searchParams } = new URL(request.url);
@@ -97,5 +95,4 @@ export async function GET(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     );
-  }
-} 
+  }

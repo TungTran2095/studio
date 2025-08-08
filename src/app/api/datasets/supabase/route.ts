@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '1000');
@@ -99,7 +98,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -116,8 +114,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    
-  try {
     const body = await request.json();
     const { sampleSize, trainTestSplit, startDate, endDate } = body;
 
@@ -190,7 +186,6 @@ export async function POST(request: NextRequest) {
           trainSize: trainData.length,
           testSize: testData.length
         }
-      }
     });
 
   } catch (error) {
@@ -199,5 +194,4 @@ export async function POST(request: NextRequest) {
       { error: 'Failed to create dataset', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
-  }
-} 
+  }

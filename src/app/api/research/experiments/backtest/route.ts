@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { calculateMA, calculateRSI, calculateMACD } from '@/lib/indicators';
 import { calculateReturns, calculateSharpeRatio, calculateMaxDrawdown } from '@/lib/performance';
@@ -12,6 +13,8 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = supabaseUrl && supabaseKey 
   ? createClient(supabaseUrl, supabaseKey)
   : null;
+
+}
 
 export async function POST(req: Request) {
   try {
@@ -28,7 +31,6 @@ export async function POST(req: Request) {
       );
     }
 
-    
   try {
     const { experimentId, config } = await req.json();
     
@@ -88,7 +90,6 @@ export async function POST(req: Request) {
           capital += position * currentPrice;
           position = 0;
         }
-      }
 
       // Cập nhật vốn
       equity.push(capital + (position * currentPrice));
@@ -138,7 +139,6 @@ export async function POST(req: Request) {
           totalTrades,
           winRate
         }
-      }
     });
 
   } catch (error) {
@@ -147,5 +147,4 @@ export async function POST(req: Request) {
       { success: false, error: 'Failed to execute backtest' },
       { status: 500 }
     );
-  }
-} 
+  }

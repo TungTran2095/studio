@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { 
   CorrelationTest, 
@@ -18,6 +19,8 @@ const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
+}
+
 export async function POST(req: Request) {
   try {
     // Check if Supabase client is available
@@ -33,7 +36,6 @@ export async function POST(req: Request) {
       );
     }
 
-    
   let experimentId = '';
   
   try {
@@ -141,8 +143,6 @@ export async function POST(req: Request) {
             min: Math.min(...volatilities),
             max: Math.max(...volatilities)
           }
-        }
-      }
     };
 
     // Cập nhật experiment với kết quả
@@ -176,7 +176,6 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
-}
 
 // Utility functions
 function calculateReturns(data: any[]): number[] {

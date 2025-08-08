@@ -1,9 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Khởi tạo Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // Check if environment variables are available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -13,7 +10,7 @@ const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     // Check if Supabase client is available
     if (!supabase) {
@@ -28,8 +25,6 @@ export async function GET(request: Request) {
       );
     }
 
-    
-  try {
     const { searchParams } = new URL(request.url);
     const experimentId = searchParams.get('experiment_id');
 
@@ -89,9 +84,9 @@ export async function GET(request: Request) {
     }
   } catch (error) {
     console.error('Error debugging indicators:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+          return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      );
   }
-} 
+}
