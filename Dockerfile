@@ -10,6 +10,9 @@ RUN npm ci
 FROM node:20-bookworm AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# Add environment variables for build stage
+ENV NEXT_PUBLIC_SUPABASE_URL=""
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=""
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
