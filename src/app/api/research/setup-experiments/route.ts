@@ -22,10 +22,9 @@ export async function POST(request: NextRequest) {
           success: false
         },
         { status: 503 }
-      );
-    }
+          );
+  }
 
-    
   try {
     console.log('🔧 Setting up research_experiments table...');
 

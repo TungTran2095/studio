@@ -25,7 +25,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-  try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '1000');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -57,6 +56,7 @@ export async function GET(request: NextRequest) {
     // Add pagination
     query = query.range(offset, offset + limit - 1);
 
+    const { data, error } = await query;
 
     if (error) {
       console.error('❌ Supabase query error:', error);
@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get total count for pagination
+    const { count: totalCount } = await supabase
       .from('OHLCV_BTC_USDT_1m')
       .select('*', { count: 'exact', head: true });
 
@@ -83,7 +84,8 @@ export async function GET(request: NextRequest) {
         limit,
         total: totalCount || 0,
         hasMore: (offset + limit) < (totalCount || 0)
-});
+      }
+    });
 
   } catch (error) {
     console.error('❌ API error:', error);
@@ -91,6 +93,8 @@ export async function GET(request: NextRequest) {
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -108,6 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const { sampleSize = 1000, trainTestSplit = 80, startDate, endDate } = body;
 
     console.log('📊 Creating dataset sample:', {
       sampleSize,
@@ -117,6 +122,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Build query for sampling
+    let query = supabase
       .from('OHLCV_BTC_USDT_1m')
       .select('*')
       .order('open_time', { ascending: true });
@@ -134,6 +140,7 @@ export async function POST(request: NextRequest) {
       query = query.limit(sampleSize);
     }
 
+    const { data, error } = await query;
 
     if (error) {
       console.error('❌ Supabase sampling error:', error);
@@ -164,25 +171,23 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      dataset: {
-        total: data.length,
+      data: {
         train: trainData,
         test: testData,
         metadata: {
-          sampleSize,
-          trainTestSplit,
-          startDate,
-          endDate,
-          trainSize: trainData.length,
-          testSize: testData.length
-});
+          totalRecords: data.length,
+          trainRecords: trainData.length,
+          testRecords: testData.length,
+          splitRatio: trainTestSplit
+        }
+      }
+    });
 
   } catch (error) {
-    console.error('❌ Dataset creation error:', error);
+    console.error('❌ API error:', error);
     return NextResponse.json(
-      { error: 'Failed to create dataset', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
-}
-}
+  }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { calculateMA, calculateRSI, calculateMACD } from '@/lib/indicators';
 import { calculateReturns, calculateSharpeRatio, calculateMaxDrawdown } from '@/lib/performance';
@@ -29,10 +29,10 @@ export async function POST(req: Request) {
       );
     }
 
-  try {
     const { experimentId, config } = await req.json();
     
     // Lấy dữ liệu OHLCV từ Supabase
+    const { data: ohlcvData, error: ohlcvError } = await supabase
       .from('OHLCV_BTC_USDT_1m')
       .select('*')
       .gte('open_time', config.startDate)
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
     const prices = ohlcvData.map(d => d.close_price);
     const ma20 = calculateMA(prices, 20);
     const rsi = calculateRSI(prices, 14);
+    const { macd, signal } = calculateMACD(prices);
 
     // Thực hiện backtest
     let position = 0;
@@ -86,6 +87,7 @@ export async function POST(req: Request) {
           capital += position * currentPrice;
           position = 0;
         }
+      }
 
       // Cập nhật vốn
       equity.push(capital + (position * currentPrice));
@@ -97,10 +99,11 @@ export async function POST(req: Request) {
     const sharpeRatio = calculateSharpeRatio(returns);
     const maxDrawdown = calculateMaxDrawdown(equity);
     const totalTrades = trades.length;
-    const winningTrades = trades.filter(t => t.type === 'sell' && t.price > trades[trades.indexOf(t)-1].price).length;
-    const winRate = (winningTrades / totalTrades) * 100;
+    const winningTrades = trades.filter(t => t.type === 'sell' && t.price > trades[trades.indexOf(t)-1]?.price).length;
+    const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
 
     // Cập nhật kết quả vào database
+    const { error: updateError } = await supabase
       .from('research_experiments')
       .update({
         status: 'completed',
@@ -113,7 +116,8 @@ export async function POST(req: Request) {
             maxDrawdown,
             totalTrades,
             winRate
-},
+          }
+        },
         completed_at: new Date().toISOString()
       })
       .eq('id', experimentId);
@@ -132,14 +136,15 @@ export async function POST(req: Request) {
           maxDrawdown,
           totalTrades,
           winRate
-});
+        }
+      }
+    });
 
   } catch (error) {
     console.error('Backtest error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to execute backtest' },
+      { error: 'Backtest failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
-}
-}
+  }
 }

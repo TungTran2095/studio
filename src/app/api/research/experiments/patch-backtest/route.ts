@@ -107,8 +107,11 @@ interface PatchResult {
     maxDrawdown: number;
     sharpeRatio: number;
   };
+}
 
 export async function POST(req: Request) {
+  let experimentId: string = '';
+  
   try {
     // Check if Supabase client is available
     if (!supabase) {
@@ -123,10 +126,6 @@ export async function POST(req: Request) {
       );
     }
 
-    
-  let experimentId: string = '';
-  
-  try {
     const { experimentId: expId, config }: PatchBacktestConfig = await req.json();
     experimentId = expId;
     
@@ -193,6 +192,7 @@ export async function POST(req: Request) {
     }
 
     // Cập nhật trạng thái experiment thành 'running'
+    const { error: updateError } = await supabase
       .from('research_experiments')
       .update({ status: 'running' })
       .eq('id', experimentId);
@@ -255,23 +255,29 @@ export async function POST(req: Request) {
                 const parsed = JSON.parse(jsonContent);
                 if (parsed && parsed.success !== undefined) {
                   results = parsed;
-} catch (cleanParseError) {
+                }
+              } catch (cleanParseError) {
                 // Fallback to original method
                 try {
-                  if (parsed && parsed.success !== undefined) {
-                    results = parsed;
-} catch (fullParseError) {
+                  const fallbackParsed = JSON.parse(jsonContent);
+                  if (fallbackParsed && fallbackParsed.success !== undefined) {
+                    results = fallbackParsed;
+                  }
+                } catch (fullParseError) {
                   console.error('Failed to parse JSON output. Error:', (fullParseError as Error).message);
                   console.error('Script output length:', scriptOutput.length);
                   console.error('Script output sample:', scriptOutput.substring(0, 200) + '...');
-}
+                }
+              }
             } else {
               console.error('Could not find valid JSON boundaries in output');
               console.error('Script output length:', scriptOutput.length);
               console.error('Script output sample:', scriptOutput.substring(0, 200) + '...');
-} else {
+            }
+          } else {
             console.error('Script output is empty');
-} catch (e) {
+          }
+        } catch (e) {
           console.error('Error parsing JSON from script output:', e);
         }
 
@@ -286,62 +292,82 @@ export async function POST(req: Request) {
 
             // Lưu kết quả vào database
             await savePatchBacktestResults(
-              experimentId, 
-              results.results, 
-              results.patches || [], 
-              results.trades || [], // All trades từ Python script
-              results.indicators || {} // All indicators từ Python script
+              experimentId,
+              results.results,
+              results.patches || [],
+              results.allTrades || [],
+              results.indicators || {}
             );
-
-            // Cập nhật trạng thái experiment thành 'completed'
-            await supabase
-              .from('research_experiments')
-              .update({ status: 'completed' })
-              .eq('id', experimentId);
 
             resolve(NextResponse.json({
               success: true,
+              message: 'Patch-based backtest completed successfully',
               results: results.results,
               patches: results.patches,
-              message: `Patch-based backtest completed with ${results.patches?.length || 0} patches using Python strategy engine`
+              totalPatches: results.patches?.length || 0
             }));
-
           } else {
-            console.error('❌ Patch backtest failed:', { code, results, scriptError });
-            
-            // Cập nhật trạng thái experiment thành 'failed'
+            console.error('❌ Patch backtest failed:', {
+              exitCode: code,
+              scriptError,
+              results
+            });
+
+            // Cập nhật trạng thái lỗi
             await supabase
               .from('research_experiments')
-              .update({ status: 'failed' })
+              .update({
+                status: 'failed',
+                error: scriptError || 'Python script failed',
+                completed_at: new Date().toISOString()
+              })
               .eq('id', experimentId);
 
             resolve(NextResponse.json(
               { 
                 error: 'Patch backtest failed', 
-                details: results?.error || scriptError || `Exit code: ${code}`,
-                pythonOutput: scriptOutput 
+                details: scriptError || 'Python script execution failed',
+                exitCode: code
               },
               { status: 500 }
             ));
-} catch (dbError) {
-          console.error('❌ Database error in patch backtest:', dbError);
+          }
+        } catch (error) {
+          console.error('❌ Error processing patch backtest results:', error);
+          
+          // Cập nhật trạng thái lỗi
+          await supabase
+            .from('research_experiments')
+            .update({
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'Unknown error',
+              completed_at: new Date().toISOString()
+            })
+            .eq('id', experimentId);
+
           resolve(NextResponse.json(
-            { error: 'Database error after patch backtest', details: (dbError as Error).message },
+            { error: 'Failed to process backtest results', details: error instanceof Error ? error.message : 'Unknown error' },
             { status: 500 }
           ));
-});
+        }
+      });
 
       // Handle process errors
       pythonProcess.on('error', async (error) => {
-        console.error('❌ Error spawning patch backtest Python process:', error);
+        console.error('❌ Python process error:', error);
         
+        // Cập nhật trạng thái lỗi
         await supabase
           .from('research_experiments')
-          .update({ status: 'failed' })
+          .update({
+            status: 'failed',
+            error: error.message,
+            completed_at: new Date().toISOString()
+          })
           .eq('id', experimentId);
 
         resolve(NextResponse.json(
-          { error: 'Failed to run patch backtest Python script', details: error.message },
+          { error: 'Failed to start Python process', details: error.message },
           { status: 500 }
         ));
       });
@@ -350,53 +376,53 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('❌ Patch backtest error:', error);
     
-    // Cập nhật trạng thái experiment thành 'failed'
-    try {
+    // Cập nhật trạng thái lỗi nếu có experimentId
+    if (experimentId && supabase) {
       await supabase
         .from('research_experiments')
-        .update({ status: 'failed' })
+        .update({
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          completed_at: new Date().toISOString()
+        })
         .eq('id', experimentId);
-    } catch (dbError) {
-      console.error('❌ Failed to update experiment status:', dbError);
     }
 
     return NextResponse.json(
-      { error: 'Failed to run patch-based backtest', details: (error as Error).message },
+      { error: 'Patch backtest failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
+  }
 }
 
 async function savePatchBacktestResults(experimentId: string, totalResults: any, patches: PatchResult[], allTrades: any[], indicators: any) {
   try {
-    // Cập nhật experiment với kết quả patch-based backtest
+    if (!supabase) {
+      console.error('❌ Supabase client not available for saving results');
+      return;
+    }
+
+    const { error } = await supabase
       .from('research_experiments')
       .update({
         status: 'completed',
         results: {
-          ...totalResults,
-          patch_based: true,
-          patch_count: patches.length,
-          final_capital: totalResults.finalCapital,
-          total_return: totalResults.totalReturn,
-          win_rate: totalResults.winRate,
-          total_trades: totalResults.totalTrades,
-          avg_win: totalResults.avgWin,
-          avg_loss: totalResults.avgLoss,
-          max_drawdown: totalResults.maxDrawdown,
-          sharpe_ratio: totalResults.sharpeRatio,
+          totalResults,
+          patches,
+          allTrades,
+          indicators,
           completed_at: new Date().toISOString()
         },
-        trades: allTrades, // Lưu trades vào cột trades
-        indicators: indicators // Lưu indicators vào cột indicators
+        completed_at: new Date().toISOString()
       })
       .eq('id', experimentId);
 
     if (error) {
-      console.error('Error saving patch backtest results:', error);
+      console.error('❌ Error saving patch backtest results:', error);
     } else {
-      console.log('✅ Patch backtest results saved to database');
-      console.log(`📊 Saved ${allTrades.length} trades and indicators data`);
-} catch (error) {
-    console.error('Error saving results:', error);
-}
+      console.log('✅ Patch backtest results saved successfully');
+    }
+  } catch (error) {
+    console.error('❌ Error in savePatchBacktestResults:', error);
+  }
 }

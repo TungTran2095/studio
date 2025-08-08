@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { 
   CorrelationTest, 
@@ -20,6 +20,8 @@ const supabase = supabaseUrl && supabaseKey
   : null;
 
 export async function POST(req: Request) {
+  let experimentId = '';
+  
   try {
     // Check if Supabase client is available
     if (!supabase) {
@@ -34,9 +36,6 @@ export async function POST(req: Request) {
       );
     }
 
-  let experimentId = '';
-  
-  try {
     const { experimentId: id, config } = await req.json();
     experimentId = id;
     
@@ -51,6 +50,7 @@ export async function POST(req: Request) {
       .eq('id', experimentId);
 
     // Lấy dữ liệu thị trường dựa trên cấu hình
+    const { data: marketData, error: dataError } = await supabase
       .from('OHLCV_BTC_USDT_1m')
       .select('*')
       .gte('open_time', config.startDate)
@@ -139,64 +139,82 @@ export async function POST(req: Request) {
             std: calculateStd(volatilities),
             min: Math.min(...volatilities),
             max: Math.max(...volatilities)
-};
+          }
+        }
+      }
+    };
 
     // Cập nhật experiment với kết quả
     await supabase
       .from('research_experiments')
-      .update({ 
+      .update({
         status: 'completed',
-        progress: 100,
         results,
+        progress: 100,
         completed_at: new Date().toISOString()
       })
       .eq('id', experimentId);
 
-    return NextResponse.json({ success: true, results });
+    return NextResponse.json({
+      success: true,
+      message: 'Hypothesis test completed successfully',
+      results
+    });
+
   } catch (error) {
-    console.error('Error running hypothesis test:', error);
+    console.error('Hypothesis test error:', error);
     
-    // Cập nhật trạng thái lỗi
-    if (experimentId) {
+    // Cập nhật trạng thái lỗi nếu có experimentId
+    if (experimentId && supabase) {
       await supabase
         .from('research_experiments')
-        .update({ 
+        .update({
           status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
+          completed_at: new Date().toISOString()
         })
         .eq('id', experimentId);
     }
 
     return NextResponse.json(
-      { error: 'Failed to run hypothesis test' },
+      { error: 'Hypothesis test failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
+}
 
-// Utility functions
+// Helper functions
 function calculateReturns(data: any[]): number[] {
-  return data.map((d, i) => {
-    if (i === 0) return 0;
-    return (d.close_price - data[i-1].close_price) / data[i-1].close_price;
-  });
+  const returns = [];
+  for (let i = 1; i < data.length; i++) {
+    const currentPrice = data[i].close_price;
+    const previousPrice = data[i - 1].close_price;
+    returns.push((currentPrice - previousPrice) / previousPrice);
+  }
+  return returns;
 }
 
 function calculateVolatilities(data: any[], windowSize: number): number[] {
-  return returns.map((_, i) => {
-    if (i < windowSize) return 0;
-    const window = returns.slice(i - windowSize, i);
-    return calculateStd(window);
-  });
+  const volatilities = [];
+  for (let i = windowSize; i < data.length; i++) {
+    const window = data.slice(i - windowSize, i);
+    const returns = calculateReturns(window);
+    const mean = calculateMean(returns);
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+    volatilities.push(Math.sqrt(variance));
+  }
+  return volatilities;
 }
 
 function splitByTimeGroups(data: any[], returns: number[], numGroups: number): number[][] {
   const groupSize = Math.floor(data.length / numGroups);
-  const groups: number[][] = [];
+  const groups = [];
   
   for (let i = 0; i < numGroups; i++) {
     const start = i * groupSize;
-    const end = i === numGroups - 1 ? data.length : (i + 1) * groupSize;
-    groups.push(returns.slice(start, end));
+    const end = i === numGroups - 1 ? data.length : start + groupSize;
+    const groupReturns = returns.slice(start, end);
+    groups.push(groupReturns);
   }
   
   return groups;
@@ -207,15 +225,15 @@ function createReturnDistribution(returns: number[], numBins: number): number[][
   const max = Math.max(...returns);
   const binSize = (max - min) / numBins;
   
-  const distribution = Array(numBins).fill(0).map(() => Array(numBins).fill(0));
+  const observed = Array(numBins).fill(0);
+  const expected = Array(numBins).fill(returns.length / numBins);
   
-  returns.forEach(r => {
-    const binX = Math.min(Math.floor((r - min) / binSize), numBins - 1);
-    const binY = Math.min(Math.floor((r - min) / binSize), numBins - 1);
-    distribution[binX][binY]++;
-  });
+  for (const ret of returns) {
+    const binIndex = Math.min(Math.floor((ret - min) / binSize), numBins - 1);
+    observed[binIndex]++;
+  }
   
-  return distribution;
+  return [observed, expected];
 }
 
 function calculateMean(data: number[]): number {
@@ -224,7 +242,6 @@ function calculateMean(data: number[]): number {
 
 function calculateStd(data: number[]): number {
   const mean = calculateMean(data);
-  const variance = data.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (data.length - 1);
+  const variance = data.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / data.length;
   return Math.sqrt(variance);
-}
 }

@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    }, { status: 500 }    );
   }
 }
 
@@ -200,10 +200,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    
-  return NextResponse.json({ 
-    message: 'Database setup endpoint',
-    instructions: 'Send POST request to create tables',
-    sql_script: setupSQL
-  });
+    return NextResponse.json({ 
+      message: 'Database setup endpoint',
+      instructions: 'Send POST request to create tables',
+      sql_script: setupSQL
+    });
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
 } 

@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       error: 'Failed to fetch projects',
       projects: [],
       total: 0
-    }, { status: 500 });
+    }, { status: 500 }    );
   }
 }
 
@@ -91,8 +91,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    
-  try {
+    try {
     const body = await request.json();
     console.log('📁 [Projects API] POST - Creating project in database:', body);
 
