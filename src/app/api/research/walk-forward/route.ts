@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { WalkForwardService } from '@/lib/trading/walk-forward-service';
 
 // Check if environment variables are available
@@ -12,21 +12,19 @@ const supabase = supabaseUrl && supabaseKey
   : null;
 
 export async function POST(request: NextRequest) {
-  try {
-    // Check if Supabase client is available
-    if (!supabase) {
-      console.log('⚠️ Supabase client not available - environment variables missing');
-      return NextResponse.json(
-        { 
-          error: 'Database connection not available',
-          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
-          success: false
-        },
-        { status: 503 }
-      );
-    }
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.log('⚠️ Supabase client not available - environment variables missing');
+    return NextResponse.json(
+      { 
+        error: 'Database connection not available',
+        details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+        success: false
+      },
+      { status: 503 }
+    );
+  }
 
-    
   try {
     const body = await request.json();
     const { experiment_id, config } = body;
@@ -58,7 +56,8 @@ export async function POST(request: NextRequest) {
     });
 
     // Save results to database
-    await saveWalkForwardResults(experiment_id, config, results);
+    const db: SupabaseClient = supabase as SupabaseClient;
+    await saveWalkForwardResults(db, experiment_id, config, results);
 
     return NextResponse.json({
       success: true,
@@ -79,9 +78,9 @@ export async function POST(request: NextRequest) {
 
 // All mock functions have been replaced by WalkForwardService
 
-async function saveWalkForwardResults(experimentId: string, config: any, results: any) {
+async function saveWalkForwardResults(client: SupabaseClient, experimentId: string, config: any, results: any) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('research_experiments')
       .insert({
         experiment_id: experimentId,

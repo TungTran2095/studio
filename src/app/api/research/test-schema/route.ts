@@ -11,21 +11,19 @@ const supabase = supabaseUrl && supabaseKey
   : null;
 
 export async function GET(request: NextRequest) {
-  try {
-    // Check if Supabase client is available
-    if (!supabase) {
-      console.log('⚠️ Supabase client not available - environment variables missing');
-      return NextResponse.json(
-        { 
-          error: 'Database connection not available',
-          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
-          success: false
-        },
-        { status: 503 }
-      );
-    }
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.log('⚠️ Supabase client not available - environment variables missing');
+    return NextResponse.json(
+      { 
+        error: 'Database connection not available',
+        details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+        success: false
+      },
+      { status: 503 }
+    );
+  }
 
-    
   try {
     console.log('🔍 [Test Schema] Checking research_models table schema...');
     
@@ -85,4 +83,4 @@ export async function GET(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}
