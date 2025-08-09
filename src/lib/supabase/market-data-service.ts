@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
   OHLCData, 
   VolumeData, 
@@ -9,15 +9,21 @@ import {
   DataQualityMetrics 
 } from '@/types/market-data';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// Sử dụng Service Role Key để có quyền ghi dữ liệu từ server-side
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY; 
+let cachedClient: SupabaseClient | null = null;
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Supabase URL and Service Role Key are required.');
+export function getSupabaseClient(): SupabaseClient {
+  if (cachedClient) return cachedClient;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Ưu tiên SERVICE_ROLE ở server-side, fallback sang ANON nếu có
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Supabase URL and Service Role Key are required.');
+  }
+
+  cachedClient = createClient(supabaseUrl, supabaseKey);
+  return cachedClient;
 }
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export class MarketDataService {
   // OHLC Data Management
@@ -48,7 +54,8 @@ export class MarketDataService {
       }));
 
       // Upsert dữ liệu
-      const { error } = await supabase
+      const client = getSupabaseClient();
+      const { error } = await client
         .from(tableName)
         .upsert(recordsToInsert, { onConflict: 'timestamp,symbol,interval' });
 
@@ -66,7 +73,8 @@ export class MarketDataService {
     to?: Date
   ): Promise<OHLCData[]> {
     try {
-      let query = supabase
+      const client = getSupabaseClient();
+      let query = client
         .from('ohlc_data')
         .select('*')
         .eq('symbol', symbol)
@@ -118,7 +126,8 @@ export class MarketDataService {
 
   async getDataSources(): Promise<DataSource[]> {
     try {
-      const { data, error } = await supabase
+      const client = getSupabaseClient();
+      const { data, error } = await client
         .from('data_sources')
         .select('*')
         .order('name');
@@ -147,7 +156,8 @@ export class MarketDataService {
   // Data Collection Jobs Management
   async saveDataCollectionJob(job: DataCollectionJob): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const client = getSupabaseClient();
+      const { error } = await client
         .from('data_collection_jobs')
         .upsert({
           id: job.id,
@@ -173,7 +183,8 @@ export class MarketDataService {
 
   async getDataCollectionJobs(): Promise<DataCollectionJob[]> {
     try {
-      const { data, error } = await supabase
+      const client = getSupabaseClient();
+      const { data, error } = await client
         .from('data_collection_jobs')
         .select('*')
         .order('name');
@@ -203,7 +214,8 @@ export class MarketDataService {
   // Alternative Data Management
   async saveAlternativeData(data: AlternativeData[]): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const client = getSupabaseClient();
+      const { error } = await client
         .from('alternative_data')
         .upsert(data.map(d => ({
           id: d.id,
@@ -225,7 +237,8 @@ export class MarketDataService {
   // Macro Economic Data Management
   async saveMacroEconomicData(data: MacroEconomicData[]): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const client = getSupabaseClient();
+      const { error } = await client
         .from('macro_economic_data')
         .upsert(data.map(d => ({
           id: d.id,
@@ -247,7 +260,8 @@ export class MarketDataService {
   // Data Quality Metrics
   async saveDataQualityMetrics(metrics: DataQualityMetrics): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const client = getSupabaseClient();
+      const { error } = await client
         .from('data_quality_metrics')
         .insert({
           symbol: metrics.symbol,
@@ -270,7 +284,8 @@ export class MarketDataService {
 
   // Real-time subscriptions
   subscribeToDataUpdates(callback: (payload: any) => void) {
-    return supabase
+    const client = getSupabaseClient();
+    return client
       .channel('market-data-updates')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'ohlc_data' }, 

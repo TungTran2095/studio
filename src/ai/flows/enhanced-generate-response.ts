@@ -1,7 +1,7 @@
 'use server';
 
 import { ai } from '@/ai/ai-instance';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { enhancedRealDataService } from '@/lib/market-data/enhanced-real-data-service';
 import { getCryptoPrice } from '@/lib/services/coinmarketcap-service';
 

@@ -1,5 +1,5 @@
 // src/ai/tools/binance-tools.ts
-import { z } from 'genkit';
+import { z } from 'zod';
 import { placeBuyOrder, placeSellOrder } from '@/actions/trade';
 
 // Input schema cho trading tool phải khớp với PlaceOrderInput từ actions/trade.ts
