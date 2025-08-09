@@ -22,8 +22,13 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
 
-# Install Python for Flask backend
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*
+# Install Python for Flask backend (use venv to avoid PEP 668)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/venv && /opt/venv/bin/python -m ensurepip --upgrade
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Copy runtime app artifacts
 COPY --from=builder /app/.next ./.next
@@ -37,16 +42,17 @@ COPY --from=builder /app/requirements.txt ./requirements.txt
 # Install production Node deps
 RUN npm ci --omit=dev
 
-# Install Python dependencies (backend + optional root) and gunicorn
-RUN pip3 install --no-cache-dir gunicorn \
-    && if [ -f backend/requirements.txt ]; then pip3 install --no-cache-dir -r backend/requirements.txt; fi \
-    && if [ -f requirements.txt ]; then pip3 install --no-cache-dir -r requirements.txt; fi
+# Install Python dependencies (backend + optional root) and gunicorn inside venv
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir gunicorn \
+    && if [ -f backend/requirements.txt ]; then pip install --no-cache-dir -r backend/requirements.txt; fi \
+    && if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
 
 # Create start script to run Flask (internal) + Next.js (public)
 RUN printf '#!/usr/bin/env bash\nset -e\n# Render sets $PORT for the public web service.\n# Run Flask on a fixed internal port to avoid collision with $PORT.\nexport NEXT_PUBLIC_NODE_ENV=${NODE_ENV}\n( if command -v gunicorn >/dev/null 2>&1; then \
     gunicorn -w 1 -b 0.0.0.0:5001 backend.app:app; \
   else \
-    PORT=5001 python3 backend/app.py; \
+    PORT=5001 python backend/app.py; \
   fi ) &\nexec npx next start -H 0.0.0.0 -p "${PORT:-9002}"\n' > /start.sh \
     && chmod +x /start.sh
 
