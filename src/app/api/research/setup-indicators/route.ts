@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Khởi tạo Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // Check if environment variables are available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -14,21 +11,19 @@ const supabase = supabaseUrl && supabaseKey
   : null;
 
 export async function POST() {
-  try {
-    // Check if Supabase client is available
-    if (!supabase) {
-      console.log('⚠️ Supabase client not available - environment variables missing');
-      return NextResponse.json(
-        { 
-          error: 'Database connection not available',
-          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
-          success: false
-        },
-        { status: 503 }
-      );
-    }
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.log('⚠️ Supabase client not available - environment variables missing');
+    return NextResponse.json(
+      { 
+        error: 'Database connection not available',
+        details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+        success: false
+      },
+      { status: 503 }
+    );
+  }
 
-    
   try {
     console.log('🔧 Adding indicators column to research_experiments table...');
 
@@ -79,7 +74,6 @@ export async function POST() {
       message: 'Indicators column added to research_experiments table successfully! 📊',
       column_exists: columns && columns.length > 0
     });
-
   } catch (error) {
     console.error('Error in setup indicators:', error);
     return NextResponse.json(
@@ -87,4 +81,4 @@ export async function POST() {
       { status: 500 }
     );
   }
-} 
+}

@@ -11,7 +11,6 @@ const supabase = supabaseUrl && supabaseKey
   : null;
 
 export async function GET(request: NextRequest) {
-  try {
     // Check if Supabase client is available
     if (!supabase) {
       console.log('⚠️ Supabase client not available - environment variables missing');
@@ -77,7 +76,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
+  
     // Check if Supabase client is available
     if (!supabase) {
       console.log('⚠️ Supabase client not available - environment variables missing');
@@ -148,6 +147,7 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 
 export async function PUT(request: NextRequest) {
   try {

@@ -11,21 +11,19 @@ const supabase = supabaseUrl && supabaseKey
   : null;
 
 export async function POST(request: NextRequest) {
-  try {
-    // Check if Supabase client is available
-    if (!supabase) {
-      console.log('⚠️ Supabase client not available - environment variables missing');
-      return NextResponse.json(
-        { 
-          error: 'Database connection not available',
-          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
-          success: false
-        },
-        { status: 503 }
-      );
-    }
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.log('⚠️ Supabase client not available - environment variables missing');
+    return NextResponse.json(
+      { 
+        error: 'Database connection not available',
+        details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+        success: false
+      },
+      { status: 503 }
+    );
+  }
 
-    
   try {
     console.log('🔧 Setting up research database...');
 
@@ -181,29 +179,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }    );
+    }, { status: 500 });
   }
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    // Check if Supabase client is available
-    if (!supabase) {
-      console.log('⚠️ Supabase client not available - environment variables missing');
-      return NextResponse.json(
-        { 
-          error: 'Database connection not available',
-          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
-          success: false
-        },
-        { status: 503 }
-      );
-    }
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.log('⚠️ Supabase client not available - environment variables missing');
+    return NextResponse.json(
+      { 
+        error: 'Database connection not available',
+        details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+        success: false
+      },
+      { status: 503 }
+    );
+  }
 
+  try {
     return NextResponse.json({ 
       message: 'Database setup endpoint',
-      instructions: 'Send POST request to create tables',
-      sql_script: setupSQL
+      instructions: 'Send POST request to create tables'
     });
   } catch (error) {
     console.error('API Error:', error);
@@ -212,4 +209,4 @@ export async function GET(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}
