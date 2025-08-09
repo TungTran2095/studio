@@ -42,8 +42,8 @@ WORKDIR /app
 # Sao chép từ stage builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
-# Thư mục public có thể không tồn tại trong repo; tạo mới ở runtime thay vì COPY
-RUN mkdir -p ./public
+# Sao chép thư mục public đã được tạo ở build stage (nếu có)
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/next.config.mjs ./
 COPY --from=builder /app/requirements.txt ./
