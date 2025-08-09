@@ -21,6 +21,9 @@ RUN npm ci
 # Sao chép mã nguồn
 COPY . .
 
+# Đảm bảo thư mục public tồn tại để tránh lỗi COPY ở runtime stage
+RUN mkdir -p public
+
 # Build ứng dụng Next.js
 RUN npm run build
 
