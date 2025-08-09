@@ -1,10 +1,25 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { OhlcvHistory } from '@/lib/supabase-client';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+let cachedSupabaseClient: SupabaseClient | null = null;
+
+function getSupabaseClient(): SupabaseClient {
+  if (cachedSupabaseClient) return cachedSupabaseClient;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('⚠️ Supabase environment variables not available - client not initialized');
+    console.warn('Missing environment variable NEXT_PUBLIC_SUPABASE_URL');
+    console.warn('Missing environment variable NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    console.warn('Supabase client could not be initialized. Check environment variables and URL format.');
+    throw new Error('Supabase environment variables not configured');
+  }
+
+  cachedSupabaseClient = createClient(supabaseUrl, supabaseKey);
+  return cachedSupabaseClient;
+}
 
 // Interface cho dữ liệu OHLCV đã được xử lý
 export interface ProcessedCandle {
@@ -74,7 +89,8 @@ export class WalkForwardService {
    */
   async fetchOHLCVData(startDate: string, endDate: string): Promise<ProcessedCandle[]> {
     try {
-      const { data, error } = await supabase
+      const client = getSupabaseClient();
+      const { data, error } = await client
         .from('OHLCV_BTC_USDT_1m')
         .select('*')
         .gte('open_time', startDate)
@@ -389,6 +405,8 @@ export class WalkForwardService {
     };
   }> {
     console.log('🔄 Starting real walk-forward analysis...');
+    // Ensure Supabase client is configured at runtime; throws if not configured
+    getSupabaseClient();
     
     const periods = this.generateWalkForwardPeriods(
       config.totalPeriod,
