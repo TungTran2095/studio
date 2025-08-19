@@ -202,6 +202,83 @@ export default function BacktestingPage() {
         { name: 'multiplier', label: 'Hệ số nhân', type: 'number', default: 2 },
         { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
       ]
+    },
+    {
+      id: 'stochastic',
+      name: 'Stochastic Oscillator',
+      description: 'Chiến lược giao dịch dựa trên Stochastic Oscillator',
+      parameters: [
+        { name: 'k_period', label: 'Chu kỳ %K', type: 'number', default: 14 },
+        { name: 'd_period', label: 'Chu kỳ %D', type: 'number', default: 3 },
+        { name: 'overbought', label: 'Ngưỡng quá mua', type: 'number', default: 80 },
+        { name: 'oversold', label: 'Ngưỡng quá bán', type: 'number', default: 20 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'williams_r',
+      name: 'Williams %R Strategy',
+      description: 'Chiến lược giao dịch dựa trên Williams %R',
+      parameters: [
+        { name: 'period', label: 'Chu kỳ', type: 'number', default: 14 },
+        { name: 'overbought', label: 'Ngưỡng quá mua', type: 'number', default: -20 },
+        { name: 'oversold', label: 'Ngưỡng quá bán', type: 'number', default: -80 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'adx',
+      name: 'ADX Strategy',
+      description: 'Chiến lược giao dịch dựa trên ADX (Average Directional Index)',
+      parameters: [
+        { name: 'adx_period', label: 'Chu kỳ ADX', type: 'number', default: 14 },
+        { name: 'adx_threshold', label: 'Ngưỡng ADX', type: 'number', default: 25 },
+        { name: 'trend_strength', label: 'Độ mạnh xu hướng', type: 'number', default: 30 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'ichimoku',
+      name: 'Ichimoku Cloud Strategy',
+      description: 'Chiến lược giao dịch dựa trên Ichimoku Cloud',
+      parameters: [
+        { name: 'tenkan_period', label: 'Chu kỳ Tenkan', type: 'number', default: 10 },
+        { name: 'kijun_period', label: 'Chu kỳ Kijun', type: 'number', default: 26 },
+        { name: 'senkou_span_b_period', label: 'Chu kỳ Senkou Span B', type: 'number', default: 52 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'parabolic_sar',
+      name: 'Parabolic SAR Strategy',
+      description: 'Chiến lược giao dịch dựa trên Parabolic SAR',
+      parameters: [
+        { name: 'acceleration', label: 'Gia tốc', type: 'number', default: 0.02 },
+        { name: 'maximum', label: 'Tối đa', type: 'number', default: 0.2 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'keltner_channel',
+      name: 'Keltner Channel Strategy',
+      description: 'Chiến lược giao dịch dựa trên Keltner Channel',
+      parameters: [
+        { name: 'ema_period', label: 'Chu kỳ EMA', type: 'number', default: 20 },
+        { name: 'atr_period', label: 'Chu kỳ ATR', type: 'number', default: 10 },
+        { name: 'multiplier', label: 'Hệ số nhân', type: 'number', default: 2.0 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
+    },
+    {
+      id: 'vwap',
+      name: 'VWAP Strategy',
+      description: 'Chiến lược giao dịch dựa trên VWAP (Volume Weighted Average Price)',
+      parameters: [
+        { name: 'vwap_period', label: 'Chu kỳ VWAP', type: 'number', default: 20 },
+        { name: 'std_dev_multiplier', label: 'Hệ số độ lệch chuẩn', type: 'number', default: 2.0 },
+        { name: 'volume_threshold', label: 'Ngưỡng khối lượng', type: 'number', default: 1.5 },
+        { name: 'quantity', label: 'Số lượng giao dịch', type: 'number', default: 1 }
+      ]
     }
   ];
 

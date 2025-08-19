@@ -177,6 +177,17 @@ export function BacktestingTab() {
                   <SelectItem value="momentum">Momentum Strategy</SelectItem>
                   <SelectItem value="mean_reversion">Mean Reversion</SelectItem>
                   <SelectItem value="breakout">Breakout Strategy</SelectItem>
+                  <SelectItem value="rsi">RSI Strategy</SelectItem>
+                  <SelectItem value="macd">MACD Strategy</SelectItem>
+                  <SelectItem value="ma_crossover">Moving Average Crossover</SelectItem>
+                  <SelectItem value="bollinger_bands">Bollinger Bands</SelectItem>
+                  <SelectItem value="stochastic">Stochastic Oscillator</SelectItem>
+                  <SelectItem value="williams_r">Williams %R</SelectItem>
+                  <SelectItem value="adx">ADX Strategy</SelectItem>
+                  <SelectItem value="ichimoku">Ichimoku Cloud</SelectItem>
+                  <SelectItem value="parabolic_sar">Parabolic SAR</SelectItem>
+                  <SelectItem value="keltner_channel">Keltner Channel</SelectItem>
+                  <SelectItem value="vwap">VWAP Strategy</SelectItem>
                 </SelectContent>
               </Select>
             </div>

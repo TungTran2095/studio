@@ -111,6 +111,54 @@ const strategies = [
     name: 'Moving Average Crossover',
     description: 'Dual moving average crossover system',
     features: ['Trend Following', 'Crossover Signals', 'Filtering']
+  },
+  {
+    id: 'stochastic',
+    name: 'Stochastic Oscillator',
+    description: 'Stochastic với %K và %D lines',
+    features: ['Oscillator', 'Overbought/Oversold', 'Signal Crossover']
+  },
+  {
+    id: 'williams_r',
+    name: 'Williams %R Strategy',
+    description: 'Williams %R oscillator',
+    features: ['Momentum', 'Overbought/Oversold', 'Trend Reversal']
+  },
+  {
+    id: 'adx',
+    name: 'ADX Strategy',
+    description: 'Average Directional Index với +DI và -DI',
+    features: ['Trend Strength', 'Directional Movement', 'Signal Confirmation']
+  },
+  {
+    id: 'ichimoku',
+    name: 'Ichimoku Cloud Strategy',
+    description: 'Ichimoku Cloud với các thành phần đa dạng',
+    features: ['Cloud Analysis', 'Multiple Timeframes', 'Support/Resistance']
+  },
+  {
+    id: 'parabolic_sar',
+    name: 'Parabolic SAR Strategy',
+    description: 'Parabolic Stop and Reverse',
+    features: ['Trend Following', 'Stop Loss', 'Reversal Signals']
+  },
+  {
+    id: 'keltner_channel',
+    name: 'Keltner Channel Strategy',
+    description: 'Keltner Channel với ATR bands',
+    features: ['Volatility Channels', 'Trend Following', 'Breakout Detection']
+  },
+  {
+    id: 'vwap',
+    name: 'VWAP Strategy',
+    description: 'Volume Weighted Average Price',
+    features: ['Volume Analysis', 'Price Levels', 'Intraday Trading']
+  },
+  {
+    id: 'breakout_strategy',
+    name: 'Breakout Strategy',
+    description: 'Giao dịch đột phá kênh giá',
+    features: ['Channel Breakout', 'Volatility Expansion', 'Trend Continuation']
   }
 ];
 

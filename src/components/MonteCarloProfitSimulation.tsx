@@ -47,6 +47,7 @@ interface MonteCarloProfitSimulationProps {
     totalReturn?: number;
     maxDrawdown?: number;
     totalProfit?: number;
+    positionSize?: number; // Thêm position size từ backtest config
   };
   onSimulationComplete?: (results: MonteCarloSimulation[]) => void;
   experimentId?: string; // Thêm experiment ID để track
@@ -88,12 +89,18 @@ export default function MonteCarloProfitSimulation({
         if (isWin) {
           wins++;
           // Lãi dựa trên avg win net + một chút randomness để mô phỏng thực tế
-          const winAmount = metrics.avgWinNet + (Math.random() - 0.5) * (metrics.avgWinNet * 0.1); // ±5% randomness
-          equity *= (1 + winAmount / 100);
+          // avgWinNet là tỷ lệ lãi trên giá trị giao dịch, cần chuyển thành tỷ lệ tăng vốn
+          // Sử dụng position size từ backtest config hoặc mặc định 10%
+          const positionSize = backtestResult?.positionSize || 0.1;
+          const winAmount = (metrics.avgWinNet / 100) * positionSize + (Math.random() - 0.5) * 0.001; // ±0.1% randomness
+          equity *= (1 + winAmount);
         } else {
           // Lỗ dựa trên avg loss net + một chút randomness
-          const lossAmount = metrics.avgLossNet + (Math.random() - 0.5) * (Math.abs(metrics.avgLossNet) * 0.1); // ±5% randomness
-          equity *= (1 + lossAmount / 100);
+          // avgLossNet là tỷ lệ lỗ trên giá trị giao dịch, cần chuyển thành tỷ lệ giảm vốn
+          // Sử dụng position size từ backtest config hoặc mặc định 10%
+          const positionSize = backtestResult?.positionSize || 0.1;
+          const lossAmount = (Math.abs(metrics.avgLossNet) / 100) * positionSize + (Math.random() - 0.5) * 0.001; // ±0.1% randomness
+          equity *= (1 - lossAmount);
         }
         
         // Lưu equity curve
