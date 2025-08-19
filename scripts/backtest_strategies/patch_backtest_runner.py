@@ -14,6 +14,13 @@ from ma_crossover_strategy import MACrossoverStrategy
 from macd_strategy import MACDStrategy
 from bollinger_bands_strategy import BollingerBandsStrategy
 from breakout_strategy import BreakoutStrategy
+from stochastic_strategy import StochasticStrategy
+from williams_r_strategy import WilliamsRStrategy
+from adx_strategy import ADXStrategy
+from ichimoku_strategy import IchimokuStrategy
+from parabolic_sar_strategy import ParabolicSARStrategy
+from keltner_channel_strategy import KeltnerChannelStrategy
+from vwap_strategy import VWAPStrategy
 
 def convert_datetime_to_string(obj):
     """Convert datetime objects to string for JSON serialization"""
@@ -168,7 +175,14 @@ def run_patch_backtest_with_strategy(patch_data: pd.DataFrame, config: Dict[str,
         'rsi': RSIStrategy,
         'macd': MACDStrategy,
         'bollinger_bands': BollingerBandsStrategy,
-        'breakout': BreakoutStrategy
+        'breakout': BreakoutStrategy,
+        'stochastic': StochasticStrategy,
+        'williams_r': WilliamsRStrategy,
+        'adx': ADXStrategy,
+        'ichimoku': IchimokuStrategy,
+        'parabolic_sar': ParabolicSARStrategy,
+        'keltner_channel': KeltnerChannelStrategy,
+        'vwap': VWAPStrategy
     }
     
     # Get strategy class
@@ -201,18 +215,47 @@ def run_patch_backtest_with_strategy(patch_data: pd.DataFrame, config: Dict[str,
         'strategy': {
             'type': strategy_type,
             'parameters': {
+                # RSI parameters
                 'period': config.get('rsiPeriod', 14),
                 'overbought': config.get('overbought', 70),
                 'oversold': config.get('oversold', 30),
+                # MA Crossover parameters
                 'fastPeriod': config.get('fastPeriod', 10),
                 'slowPeriod': config.get('slowPeriod', 20),
+                # MACD parameters
                 'fastEMA': config.get('fastEMA', 12),
                 'slowEMA': config.get('slowEMA', 26),
                 'signalPeriod': config.get('signalPeriod', 9),
+                # Bollinger Bands parameters
                 'bbPeriod': config.get('bbPeriod', 20),
                 'bbStdDev': config.get('bbStdDev', 2),
+                # Breakout parameters
                 'channelPeriod': config.get('channelPeriod', 20),
-                'multiplier': config.get('multiplier', 2)
+                'multiplier': config.get('multiplier', 2),
+                # Stochastic parameters
+                'k_period': config.get('stochasticKPeriod', 14),
+                'd_period': config.get('stochasticDPeriod', 3),
+                'smooth_k': config.get('stochasticSmoothPeriod', 3),
+                'smooth_d': config.get('stochasticSmoothPeriod', 3),
+                # Williams %R parameters
+                'period': config.get('williamsRPeriod', 14),
+                'oversold': config.get('williamsROversold', -80),
+                # ADX parameters
+                'adx_period': config.get('adxPeriod', 14),
+                'adx_threshold': config.get('adxThreshold', 25),
+                # Ichimoku parameters
+                'tenkan_period': config.get('ichimokuTenkan', 9),
+                'kijun_period': config.get('ichimokuKijun', 26),
+                # Parabolic SAR parameters
+                'acceleration': config.get('parabolicSARAcceleration', 0.02),
+                'maximum': config.get('parabolicSARMaxAcceleration', 0.2),
+                # Keltner Channel parameters
+                'ema_period': config.get('keltnerChannelPeriod', 20),
+                'atr_period': config.get('keltnerChannelPeriod', 10),
+                'multiplier': config.get('keltnerChannelMultiplier', 2.0),
+                # VWAP parameters
+                'vwap_period': config.get('vwapPeriod', 20),
+                'std_dev_multiplier': config.get('vwapStdDev', 2.0)
             }
         }
     }
@@ -352,6 +395,68 @@ def extract_indicators_data(strategy, patch_data: pd.DataFrame, strategy_type: s
                 indicators['indicators']['middle'] = signals_data['middle'].tolist()
             if 'lower' in signals_data.columns:
                 indicators['indicators']['lower'] = signals_data['lower'].tolist()
+                
+        elif strategy_type == 'breakout':
+            if 'upper_channel' in signals_data.columns:
+                indicators['indicators']['upper_channel'] = signals_data['upper_channel'].tolist()
+            if 'lower_channel' in signals_data.columns:
+                indicators['indicators']['lower_channel'] = signals_data['lower_channel'].tolist()
+                
+        elif strategy_type == 'stochastic':
+            if 'stoch_k' in signals_data.columns:
+                indicators['indicators']['stoch_k'] = signals_data['stoch_k'].tolist()
+            if 'stoch_d' in signals_data.columns:
+                indicators['indicators']['stoch_d'] = signals_data['stoch_d'].tolist()
+                
+        elif strategy_type == 'williams_r':
+            if 'williams_r' in signals_data.columns:
+                indicators['indicators']['williams_r'] = signals_data['williams_r'].tolist()
+                
+        elif strategy_type == 'adx':
+            if 'adx' in signals_data.columns:
+                indicators['indicators']['adx'] = signals_data['adx'].tolist()
+            if 'di_plus' in signals_data.columns:
+                indicators['indicators']['di_plus'] = signals_data['di_plus'].tolist()
+            if 'di_minus' in signals_data.columns:
+                indicators['indicators']['di_minus'] = signals_data['di_minus'].tolist()
+                
+        elif strategy_type == 'ichimoku':
+            if 'tenkan' in signals_data.columns:
+                indicators['indicators']['tenkan'] = signals_data['tenkan'].tolist()
+            if 'kijun' in signals_data.columns:
+                indicators['indicators']['kijun'] = signals_data['kijun'].tolist()
+            if 'senkou_span_a' in signals_data.columns:
+                indicators['indicators']['senkou_span_a'] = signals_data['senkou_span_a'].tolist()
+            if 'senkou_span_b' in signals_data.columns:
+                indicators['indicators']['senkou_span_b'] = signals_data['senkou_span_b'].tolist()
+            if 'chikou' in signals_data.columns:
+                indicators['indicators']['chikou'] = signals_data['chikou'].tolist()
+                
+        elif strategy_type == 'parabolic_sar':
+            if 'parabolic_sar' in signals_data.columns:
+                indicators['indicators']['parabolic_sar'] = signals_data['parabolic_sar'].tolist()
+            if 'trend' in signals_data.columns:
+                indicators['indicators']['trend'] = signals_data['trend'].tolist()
+                
+        elif strategy_type == 'keltner_channel':
+            if 'keltner_ema' in signals_data.columns:
+                indicators['indicators']['keltner_ema'] = signals_data['keltner_ema'].tolist()
+            if 'keltner_upper' in signals_data.columns:
+                indicators['indicators']['keltner_upper'] = signals_data['keltner_upper'].tolist()
+            if 'keltner_lower' in signals_data.columns:
+                indicators['indicators']['keltner_lower'] = signals_data['keltner_lower'].tolist()
+            if 'keltner_atr' in signals_data.columns:
+                indicators['indicators']['keltner_atr'] = signals_data['keltner_atr'].tolist()
+                
+        elif strategy_type == 'vwap':
+            if 'vwap' in signals_data.columns:
+                indicators['indicators']['vwap'] = signals_data['vwap'].tolist()
+            if 'vwap_upper' in signals_data.columns:
+                indicators['indicators']['vwap_upper'] = signals_data['vwap_upper'].tolist()
+            if 'vwap_lower' in signals_data.columns:
+                indicators['indicators']['vwap_lower'] = signals_data['vwap_lower'].tolist()
+            if 'vwap_std' in signals_data.columns:
+                indicators['indicators']['vwap_std'] = signals_data['vwap_std'].tolist()
         
         return indicators
         

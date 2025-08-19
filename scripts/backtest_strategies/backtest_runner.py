@@ -17,12 +17,27 @@ from backtest_strategies.rsi_strategy import RSIStrategy
 from backtest_strategies.macd_strategy import MACDStrategy
 from backtest_strategies.bollinger_bands_strategy import BollingerBandsStrategy
 from backtest_strategies.breakout_strategy import BreakoutStrategy
+from backtest_strategies.stochastic_strategy import StochasticStrategy
+from backtest_strategies.williams_r_strategy import WilliamsRStrategy
+from backtest_strategies.adx_strategy import ADXStrategy
+from backtest_strategies.ichimoku_strategy import IchimokuStrategy
+from backtest_strategies.parabolic_sar_strategy import ParabolicSARStrategy
+from backtest_strategies.keltner_channel_strategy import KeltnerChannelStrategy
+from backtest_strategies.vwap_strategy import VWAPStrategy
 
-# Khởi tạo Supabase client
-supabase: Client = create_client(
-    os.getenv('NEXT_PUBLIC_SUPABASE_URL', ''),
-    os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
-)
+# Khởi tạo Supabase client (chỉ khi cần thiết)
+supabase: Client = None
+
+def get_supabase_client():
+    """Lazy initialization of Supabase client"""
+    global supabase
+    if supabase is None:
+        supabase_url = os.getenv('NEXT_PUBLIC_SUPABASE_URL')
+        supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        if not supabase_url or not supabase_key:
+            raise ValueError("Missing Supabase environment variables")
+        supabase = create_client(supabase_url, supabase_key)
+    return supabase
 
 def load_data(symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
     """Load historical price data for backtesting from Supabase"""
@@ -33,8 +48,11 @@ def load_data(symbol: str, timeframe: str, start_date: str, end_date: str) -> pd
         table_name = f"OHLCV_BTC_USDT_1m"
         print(f"INFO: Attempting to load data from table '{table_name}'")
 
+        # Lấy Supabase client
+        supabase_client = get_supabase_client()
+
         # Lấy dữ liệu từ bảng được xây dựng động
-        response = supabase.table(table_name) \
+        response = supabase_client.table(table_name) \
             .select('*') \
             .gte('open_time', start_date) \
             .lte('open_time', end_date) \
@@ -115,7 +133,14 @@ def run_backtest(config: Dict[str, Any], experiment_id: str) -> Dict[str, Any]:
         'rsi': RSIStrategy,
         'macd': MACDStrategy,
         'bollinger_bands': BollingerBandsStrategy,
-        'breakout': BreakoutStrategy
+        'breakout': BreakoutStrategy,
+        'stochastic': StochasticStrategy,
+        'williams_r': WilliamsRStrategy,
+        'adx': ADXStrategy,
+        'ichimoku': IchimokuStrategy,
+        'parabolic_sar': ParabolicSARStrategy,
+        'keltner_channel': KeltnerChannelStrategy,
+        'vwap': VWAPStrategy
     }
 
     # Get strategy class
@@ -155,6 +180,34 @@ def run_backtest(config: Dict[str, Any], experiment_id: str) -> Dict[str, Any]:
         indicators_data['indicators']['upper'] = [convert_datetime(x) for x in signals_data['upper'].tolist()]
         indicators_data['indicators']['middle'] = [convert_datetime(x) for x in signals_data['middle'].tolist()]
         indicators_data['indicators']['lower'] = [convert_datetime(x) for x in signals_data['lower'].tolist()]
+    elif strategy_type == 'stochastic':
+        indicators_data['indicators']['stoch_k'] = [convert_datetime(x) for x in signals_data['stoch_k'].tolist()]
+        indicators_data['indicators']['stoch_d'] = [convert_datetime(x) for x in signals_data['stoch_d'].tolist()]
+    elif strategy_type == 'williams_r':
+        indicators_data['indicators']['williams_r'] = [convert_datetime(x) for x in signals_data['williams_r'].tolist()]
+    elif strategy_type == 'adx':
+        indicators_data['indicators']['adx'] = [convert_datetime(x) for x in signals_data['adx'].tolist()]
+        indicators_data['indicators']['di_plus'] = [convert_datetime(x) for x in signals_data['di_plus'].tolist()]
+        indicators_data['indicators']['di_minus'] = [convert_datetime(x) for x in signals_data['di_minus'].tolist()]
+    elif strategy_type == 'ichimoku':
+        indicators_data['indicators']['tenkan'] = [convert_datetime(x) for x in signals_data['tenkan'].tolist()]
+        indicators_data['indicators']['kijun'] = [convert_datetime(x) for x in signals_data['kijun'].tolist()]
+        indicators_data['indicators']['senkou_span_a'] = [convert_datetime(x) for x in signals_data['senkou_span_a'].tolist()]
+        indicators_data['indicators']['senkou_span_b'] = [convert_datetime(x) for x in signals_data['senkou_span_b'].tolist()]
+        indicators_data['indicators']['chikou'] = [convert_datetime(x) for x in signals_data['chikou'].tolist()]
+    elif strategy_type == 'parabolic_sar':
+        indicators_data['indicators']['parabolic_sar'] = [convert_datetime(x) for x in signals_data['parabolic_sar'].tolist()]
+        indicators_data['indicators']['trend'] = [convert_datetime(x) for x in signals_data['trend'].tolist()]
+    elif strategy_type == 'keltner_channel':
+        indicators_data['indicators']['keltner_ema'] = [convert_datetime(x) for x in signals_data['keltner_ema'].tolist()]
+        indicators_data['indicators']['keltner_upper'] = [convert_datetime(x) for x in signals_data['keltner_upper'].tolist()]
+        indicators_data['indicators']['keltner_lower'] = [convert_datetime(x) for x in signals_data['keltner_lower'].tolist()]
+        indicators_data['indicators']['keltner_atr'] = [convert_datetime(x) for x in signals_data['keltner_atr'].tolist()]
+    elif strategy_type == 'vwap':
+        indicators_data['indicators']['vwap'] = [convert_datetime(x) for x in signals_data['vwap'].tolist()]
+        indicators_data['indicators']['vwap_upper'] = [convert_datetime(x) for x in signals_data['vwap_upper'].tolist()]
+        indicators_data['indicators']['vwap_lower'] = [convert_datetime(x) for x in signals_data['vwap_lower'].tolist()]
+        indicators_data['indicators']['vwap_std'] = [convert_datetime(x) for x in signals_data['vwap_std'].tolist()]
 
     # Save results
     save_results(results, results_dir, strategy_type)

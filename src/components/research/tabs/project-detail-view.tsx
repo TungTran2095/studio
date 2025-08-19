@@ -2089,6 +2089,22 @@ interface BacktestConfig {
   useTakeProfit?: boolean;
   usePatchBacktest?: boolean; // Thêm tùy chọn patch-based backtest
   patchDays?: number; // Độ dài mỗi patch (ngày)
+  // Parameters cho các chiến lược mới
+  stochasticKPeriod?: number;
+  stochasticDPeriod?: number;
+  stochasticSmoothPeriod?: number;
+  williamsRPeriod?: number;
+  williamsROversold?: number;
+  adxPeriod?: number;
+  adxThreshold?: number;
+  ichimokuTenkan?: number;
+  ichimokuKijun?: number;
+  parabolicSARAcceleration?: number;
+  parabolicSARMaxAcceleration?: number;
+  keltnerChannelPeriod?: number;
+  keltnerChannelMultiplier?: number;
+  vwapPeriod?: number;
+  vwapStdDev?: number;
 }
 
 interface OHLCV {
@@ -2139,6 +2155,22 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     taker_fee: 0.1,
     usePatchBacktest: false, // Thêm tùy chọn patch-based backtest
     patchDays: 30, // Độ dài mỗi patch (ngày)
+    // Giá trị mặc định cho các chiến lược mới
+    stochasticKPeriod: 14,
+    stochasticDPeriod: 3,
+    stochasticSmoothPeriod: 3,
+    williamsRPeriod: 14,
+    williamsROversold: -80,
+    adxPeriod: 14,
+    adxThreshold: 25,
+    ichimokuTenkan: 9,
+    ichimokuKijun: 26,
+    parabolicSARAcceleration: 0.02,
+    parabolicSARMaxAcceleration: 0.2,
+    keltnerChannelPeriod: 20,
+    keltnerChannelMultiplier: 2,
+    vwapPeriod: 20,
+    vwapStdDev: 2,
   });
   const [chartData, setChartData] = useState<OHLCV[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -2268,6 +2300,70 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
             }
           };
           break;
+        case 'stochastic':
+          strategyConfig = {
+            type: 'stochastic',
+            parameters: {
+              kPeriod: backtestConfig.stochasticKPeriod || 14,
+              dPeriod: backtestConfig.stochasticDPeriod || 3,
+              smoothPeriod: backtestConfig.stochasticSmoothPeriod || 3
+            }
+          };
+          break;
+        case 'williams_r':
+          strategyConfig = {
+            type: 'williams_r',
+            parameters: {
+              period: backtestConfig.williamsRPeriod || 14,
+              oversold: backtestConfig.williamsROversold || -80
+            }
+          };
+          break;
+        case 'adx':
+          strategyConfig = {
+            type: 'adx',
+            parameters: {
+              period: backtestConfig.adxPeriod || 14,
+              threshold: backtestConfig.adxThreshold || 25
+            }
+          };
+          break;
+        case 'ichimoku':
+          strategyConfig = {
+            type: 'ichimoku',
+            parameters: {
+              tenkanPeriod: backtestConfig.ichimokuTenkan || 9,
+              kijunPeriod: backtestConfig.ichimokuKijun || 26
+            }
+          };
+          break;
+        case 'parabolic_sar':
+          strategyConfig = {
+            type: 'parabolic_sar',
+            parameters: {
+              acceleration: backtestConfig.parabolicSARAcceleration || 0.02,
+              maxAcceleration: backtestConfig.parabolicSARMaxAcceleration || 0.2
+            }
+          };
+          break;
+        case 'keltner_channel':
+          strategyConfig = {
+            type: 'keltner_channel',
+            parameters: {
+              period: backtestConfig.keltnerChannelPeriod || 20,
+              multiplier: backtestConfig.keltnerChannelMultiplier || 2
+            }
+          };
+          break;
+        case 'vwap':
+          strategyConfig = {
+            type: 'vwap',
+            parameters: {
+              period: backtestConfig.vwapPeriod || 20,
+              stdDev: backtestConfig.vwapStdDev || 2
+            }
+          };
+          break;
       }
 
       // Chuẩn bị cấu hình đầy đủ cho backtest
@@ -2386,6 +2482,22 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         taker_fee: 0.1,
         usePatchBacktest: false,
         patchDays: 30,
+        // Reset các parameters cho chiến lược mới
+        stochasticKPeriod: 14,
+        stochasticDPeriod: 3,
+        stochasticSmoothPeriod: 3,
+        williamsRPeriod: 14,
+        williamsROversold: -80,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        ichimokuTenkan: 9,
+        ichimokuKijun: 26,
+        parabolicSARAcceleration: 0.02,
+        parabolicSARMaxAcceleration: 0.2,
+        keltnerChannelPeriod: 20,
+        keltnerChannelMultiplier: 2,
+        vwapPeriod: 20,
+        vwapStdDev: 2,
       });
 
       toast({
@@ -3345,6 +3457,14 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                           <SelectItem value="rsi">RSI</SelectItem>
                           <SelectItem value="bollinger_bands">Bollinger Bands</SelectItem>
                           <SelectItem value="breakout">Breakout</SelectItem>
+                          <div className="px-2 py-1 text-xs text-muted-foreground">Chiến lược nâng cao</div>
+                          <SelectItem value="stochastic">Stochastic Oscillator</SelectItem>
+                          <SelectItem value="williams_r">Williams %R</SelectItem>
+                          <SelectItem value="adx">ADX Strategy</SelectItem>
+                          <SelectItem value="ichimoku">Ichimoku Cloud</SelectItem>
+                          <SelectItem value="parabolic_sar">Parabolic SAR</SelectItem>
+                          <SelectItem value="keltner_channel">Keltner Channel</SelectItem>
+                          <SelectItem value="vwap">VWAP Strategy</SelectItem>
                           <div className="px-2 py-1 text-xs text-muted-foreground">Chiến lược nâng cao (AI)</div>
                           {/* Lấy danh sách model đã train từ models */}
                           {models.filter((m: any) => m.status === 'completed').map((m: any) => (
@@ -3498,6 +3618,197 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                             step="0.1"
                             value={backtestConfig.multiplier || 2}
                             onChange={(e) => handleBacktestConfigChange('multiplier', parseFloat(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'stochastic' && (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ %K</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.stochasticKPeriod || 14}
+                            onChange={(e) => handleBacktestConfigChange('stochasticKPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Chu kỳ %D</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.stochasticDPeriod || 3}
+                            onChange={(e) => handleBacktestConfigChange('stochasticDPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Chu kỳ smoothing</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.stochasticSmoothPeriod || 3}
+                            onChange={(e) => handleBacktestConfigChange('stochasticSmoothPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'williams_r' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ Williams %R</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.williamsRPeriod || 14}
+                            onChange={(e) => handleBacktestConfigChange('williamsRPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Ngưỡng quá bán</Label>
+                          <Input
+                            type="number"
+                            min="-100"
+                            max="-1"
+                            value={backtestConfig.williamsROversold || -80}
+                            onChange={(e) => handleBacktestConfigChange('williamsROversold', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'adx' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ ADX</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.adxPeriod || 14}
+                            onChange={(e) => handleBacktestConfigChange('adxPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Ngưỡng xu hướng</Label>
+                          <Input
+                            type="number"
+                            min="10"
+                            max="50"
+                            value={backtestConfig.adxThreshold || 25}
+                            onChange={(e) => handleBacktestConfigChange('adxThreshold', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'ichimoku' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ Tenkan-sen</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.ichimokuTenkan || 9}
+                            onChange={(e) => handleBacktestConfigChange('ichimokuTenkan', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Chu kỳ Kijun-sen</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.ichimokuKijun || 26}
+                            onChange={(e) => handleBacktestConfigChange('ichimokuKijun', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'parabolic_sar' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Gia tốc ban đầu</Label>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={backtestConfig.parabolicSARAcceleration || 0.02}
+                            onChange={(e) => handleBacktestConfigChange('parabolicSARAcceleration', parseFloat(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Gia tốc tối đa</Label>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={backtestConfig.parabolicSARMaxAcceleration || 0.2}
+                            onChange={(e) => handleBacktestConfigChange('parabolicSARMaxAcceleration', parseFloat(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'keltner_channel' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ EMA</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.keltnerChannelPeriod || 20}
+                            onChange={(e) => handleBacktestConfigChange('keltnerChannelPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Hệ số ATR</Label>
+                          <Input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={backtestConfig.keltnerChannelMultiplier || 2}
+                            onChange={(e) => handleBacktestConfigChange('keltnerChannelMultiplier', parseFloat(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {backtestConfig.strategyType === 'vwap' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Chu kỳ VWAP</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={backtestConfig.vwapPeriod || 20}
+                            onChange={(e) => handleBacktestConfigChange('vwapPeriod', parseInt(e.target.value))}
+                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Độ lệch chuẩn</Label>
+                          <Input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={backtestConfig.vwapStdDev || 2}
+                            onChange={(e) => handleBacktestConfigChange('vwapStdDev', parseFloat(e.target.value))}
                             className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
                           />
                         </div>
@@ -4771,7 +5082,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                           backtestResult={{
                                             totalReturn: resultObj.total_return,
                                             maxDrawdown: resultObj.max_drawdown,
-                                            totalProfit: resultObj.total_profit || resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0
+                                            totalProfit: resultObj.total_profit || resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0,
+                                            positionSize: selectedExperiment.config?.trading?.positionSize || 0.1
                                           }}
                                           onSimulationComplete={setMonteCarloResults}
                                           experimentId={selectedExperiment.id}
