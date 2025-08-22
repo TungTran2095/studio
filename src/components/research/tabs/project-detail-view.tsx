@@ -5164,21 +5164,21 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
 
                                       // Chỉ hiển thị Monte Carlo khi có đủ dữ liệu cơ bản
                                       if (metrics.totalTrades > 0 && metrics.winRate > 0) {
-                                        return (
-                                          <MonteCarloProfitSimulation 
-                                            backtestMetrics={metrics}
-                                            initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
-                                            simulations={1000}
-                                            backtestResult={{
-                                              totalReturn: resultObj.total_return,
-                                              maxDrawdown: resultObj.max_drawdown,
+                                      return (
+                                        <MonteCarloProfitSimulation 
+                                          backtestMetrics={metrics}
+                                          initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
+                                          simulations={1000}
+                                          backtestResult={{
+                                            totalReturn: resultObj.total_return,
+                                            maxDrawdown: resultObj.max_drawdown,
                                               totalProfit: resultObj.total_profit || resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0,
                                               positionSize: selectedExperiment.config?.trading?.positionSize || 0.1
-                                            }}
-                                            onSimulationComplete={setMonteCarloResults}
-                                            experimentId={selectedExperiment.id}
-                                          />
-                                        );
+                                          }}
+                                          onSimulationComplete={setMonteCarloResults}
+                                          experimentId={selectedExperiment.id}
+                                        />
+                                      );
                                       } else {
                                         return (
                                           <div className="text-center text-muted-foreground py-8">

@@ -285,11 +285,11 @@ class BaseStrategy(ABC):
                 entry_value = trade['entry_price'] * trade['size']
                 net_pnl = trade['pnl']  # Đã trừ phí
                 
-                # Tính tỷ lệ lợi nhuận dựa trên giá entry (không phụ thuộc vào position_size)
+                # Tính tỷ lệ lợi nhuận NET dựa trên pnl thực tế (đã trừ phí)
                 if entry_value > 0:
-                    # Sử dụng pnl_pct đã có sẵn (tỷ lệ thay đổi giá)
-                    # pnl_pct là tỷ lệ thay đổi giá (0.05 = 5%), chuyển thành phần trăm
-                    trade['profit_ratio'] = trade['pnl_pct'] * 100
+                    # profit_ratio = (net_pnl / entry_value) * 100
+                    # net_pnl đã trừ phí, entry_value = entry_price * size
+                    trade['profit_ratio'] = (net_pnl / entry_value) * 100
                 else:
                     trade['profit_ratio'] = 0
             
@@ -309,9 +309,20 @@ class BaseStrategy(ABC):
             print(f"Debug - Avg win net: {avg_win_net:.4f}%")
             print(f"Debug - Avg loss net: {avg_loss_net:.4f}%")
             
-            # In ra một số trade để kiểm tra
-            if len(trades) > 0:
-                print(f"Debug - First trade: entry_price={trades[0]['entry_price']}, exit_price={trades[0]['exit_price']}, pnl={trades[0]['pnl']}, pnl_pct={trades[0]['pnl_pct']}, profit_ratio={trades[0]['profit_ratio']}")
+            # In ra chi tiết từng trade để kiểm tra
+            print("\n=== DEBUG TRADES ===")
+            for i, trade in enumerate(trades[:5]):  # Chỉ in 5 trades đầu
+                entry_value = trade['entry_price'] * trade['size']
+                net_pnl = trade['pnl']
+                profit_ratio = trade['profit_ratio']
+                print(f"Trade {i+1}: entry_price={trade['entry_price']:.2f}, exit_price={trade['exit_price']:.2f}, size={trade['size']:.6f}")
+                print(f"  entry_value={entry_value:.2f}, net_pnl={net_pnl:.4f}, profit_ratio={profit_ratio:.4f}%")
+                print(f"  pnl_pct={trade['pnl_pct']:.6f}, pnl_pct%={trade['pnl_pct']*100:.4f}%")
+                print(f"  Check: profit_ratio = ({net_pnl:.4f} / {entry_value:.2f}) * 100 = {profit_ratio:.4f}%")
+                print("---")
+            
+            if len(trades) > 5:
+                print(f"... và {len(trades)-5} trades khác")
         
         total_return = (current_capital - self.initial_capital) / self.initial_capital * 100
         
