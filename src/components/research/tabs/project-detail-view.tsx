@@ -34,6 +34,50 @@ function getBuySignalText(experiment: any, trade: any): string {
       return `Momentum tăng > 2%`;
     case 'mean_reversion':
       return `Giá < SMA${params.period || 20} - 3%`;
+    case 'stochastic':
+      const buyStochK = trade.entry_stoch_k || trade.stoch_k;
+      const buyStochD = trade.entry_stoch_d || trade.stoch_d;
+      if (buyStochK !== undefined && buyStochD !== undefined) {
+        return `Stoch K(${buyStochK.toFixed(1)}) > D(${buyStochD.toFixed(1)}) (Quá bán)`;
+      }
+      return `Stoch < ${params.oversold || 20} (Quá bán)`;
+    case 'williams_r':
+      const buyWilliamsR = trade.entry_williams_r || trade.williams_r;
+      if (buyWilliamsR !== undefined) {
+        return `Williams %R = ${buyWilliamsR.toFixed(1)} (Quá bán)`;
+      }
+      return `Williams %R < ${params.oversold || -80} (Quá bán)`;
+    case 'adx':
+      const buyAdx = trade.entry_adx || trade.adx;
+      if (buyAdx !== undefined) {
+        return `ADX = ${buyAdx.toFixed(1)} (Xu hướng mạnh)`;
+      }
+      return `ADX > ${params.adxThreshold || 25} (Xu hướng mạnh)`;
+    case 'ichimoku':
+      const buyTenkan = trade.entry_ichimoku_tenkan || trade.ichimoku_tenkan;
+      const buyKijun = trade.entry_ichimoku_kijun || trade.ichimoku_kijun;
+      if (buyTenkan !== undefined && buyKijun !== undefined) {
+        return `Tenkan(${buyTenkan.toFixed(2)}) > Kijun(${buyKijun.toFixed(2)})`;
+      }
+      return `Tenkan cắt lên Kijun`;
+    case 'parabolic_sar':
+      const buySar = trade.entry_parabolic_sar || trade.parabolic_sar;
+      if (buySar !== undefined) {
+        return `Giá > SAR(${buySar.toFixed(2)})`;
+      }
+      return `Giá > Parabolic SAR`;
+    case 'keltner_channel':
+      const buyKcLower = trade.entry_keltner_lower || trade.keltner_lower;
+      if (buyKcLower !== undefined) {
+        return `Giá < KC Lower(${buyKcLower.toFixed(2)})`;
+      }
+      return `Giá < Keltner Channel Lower`;
+    case 'vwap':
+      const buyVwap = trade.entry_vwap || trade.vwap;
+      if (buyVwap !== undefined) {
+        return `Giá > VWAP(${buyVwap.toFixed(2)})`;
+      }
+      return `Giá > VWAP`;
     default:
       return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
   }
@@ -82,6 +126,50 @@ function getSellSignalText(experiment: any, trade: any): string {
       return `Momentum giảm > 1%`;
     case 'mean_reversion':
       return `Giá > SMA${params.period || 20}`;
+    case 'stochastic':
+      const sellStochK = trade.exit_stoch_k || trade.stoch_k;
+      const sellStochD = trade.exit_stoch_d || trade.stoch_d;
+      if (sellStochK !== undefined && sellStochD !== undefined) {
+        return `Stoch K(${sellStochK.toFixed(1)}) < D(${sellStochD.toFixed(1)}) (Quá mua)`;
+      }
+      return `Stoch > ${params.overbought || 80} (Quá mua)`;
+    case 'williams_r':
+      const sellWilliamsR = trade.exit_williams_r || trade.williams_r;
+      if (sellWilliamsR !== undefined) {
+        return `Williams %R = ${sellWilliamsR.toFixed(1)} (Quá mua)`;
+      }
+      return `Williams %R > ${params.oversold || -20} (Quá mua)`;
+    case 'adx':
+      const sellAdx = trade.exit_adx || trade.adx;
+      if (sellAdx !== undefined) {
+        return `ADX = ${sellAdx.toFixed(1)} (Xu hướng yếu)`;
+      }
+      return `ADX < ${params.adxThreshold || 25} (Xu hướng yếu)`;
+    case 'ichimoku':
+      const sellTenkan = trade.exit_ichimoku_tenkan || trade.ichimoku_tenkan;
+      const sellKijun = trade.exit_ichimoku_kijun || trade.ichimoku_kijun;
+      if (sellTenkan !== undefined && sellKijun !== undefined) {
+        return `Tenkan(${sellTenkan.toFixed(2)}) < Kijun(${sellKijun.toFixed(2)})`;
+      }
+      return `Tenkan cắt xuống Kijun`;
+    case 'parabolic_sar':
+      const sellSar = trade.exit_parabolic_sar || trade.parabolic_sar;
+      if (sellSar !== undefined) {
+        return `Giá < SAR(${sellSar.toFixed(2)})`;
+      }
+      return `Giá < Parabolic SAR`;
+    case 'keltner_channel':
+      const sellKcUpper = trade.exit_keltner_upper || trade.keltner_upper;
+      if (sellKcUpper !== undefined) {
+        return `Giá > KC Upper(${sellKcUpper.toFixed(2)})`;
+      }
+      return `Giá > Keltner Channel Upper`;
+    case 'vwap':
+      const sellVwap = trade.exit_vwap || trade.vwap;
+      if (sellVwap !== undefined) {
+        return `Giá < VWAP(${sellVwap.toFixed(2)})`;
+      }
+      return `Giá < VWAP`;
     default:
       return trade.sell_signal || '-';
   }
@@ -5070,25 +5158,35 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                       const metrics = {
                                         totalTrades: Number(resultObj.total_trades) || 0,
                                         winRate: Number(resultObj.win_rate) || 0,
-                                        avgWinNet: Number(resultObj.avg_win_net) || 2.0,
-                                        avgLossNet: Number(resultObj.avg_loss_net) || -1.5
+                                        avgWinNet: Number(resultObj.avg_win_net) || 0,
+                                        avgLossNet: Number(resultObj.avg_loss_net) || 0
                                       };
 
-                                      return (
-                                        <MonteCarloProfitSimulation 
-                                          backtestMetrics={metrics}
-                                          initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
-                                          simulations={1000}
-                                          backtestResult={{
-                                            totalReturn: resultObj.total_return,
-                                            maxDrawdown: resultObj.max_drawdown,
-                                            totalProfit: resultObj.total_profit || resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0,
-                                            positionSize: selectedExperiment.config?.trading?.positionSize || 0.1
-                                          }}
-                                          onSimulationComplete={setMonteCarloResults}
-                                          experimentId={selectedExperiment.id}
-                                        />
-                                      );
+                                      // Chỉ hiển thị Monte Carlo khi có dữ liệu thực
+                                      if (metrics.totalTrades > 0 && (metrics.avgWinNet !== 0 || metrics.avgLossNet !== 0)) {
+                                        return (
+                                          <MonteCarloProfitSimulation 
+                                            backtestMetrics={metrics}
+                                            initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
+                                            simulations={1000}
+                                            backtestResult={{
+                                              totalReturn: resultObj.total_return,
+                                              maxDrawdown: resultObj.max_drawdown,
+                                              totalProfit: resultObj.total_profit || resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0,
+                                              positionSize: selectedExperiment.config?.trading?.positionSize || 0.1
+                                            }}
+                                            onSimulationComplete={setMonteCarloResults}
+                                            experimentId={selectedExperiment.id}
+                                          />
+                                        );
+                                      } else {
+                                        return (
+                                          <div className="text-center text-muted-foreground py-8">
+                                            <p>Không đủ dữ liệu để chạy Monte Carlo simulation</p>
+                                            <p className="text-sm">Cần có ít nhất 1 trade với thông tin lãi/lỗ</p>
+                                          </div>
+                                        );
+                                      }
                                     })()}
                                     
 

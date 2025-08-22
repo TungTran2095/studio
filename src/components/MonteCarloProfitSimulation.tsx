@@ -180,6 +180,17 @@ export default function MonteCarloProfitSimulation({
 
   // Chạy Monte Carlo simulation
   const runMonteCarloSimulation = useCallback(async () => {
+    // Kiểm tra dữ liệu trước khi chạy
+    if (backtestMetrics.totalTrades === 0) {
+      console.warn('Không có trades để chạy Monte Carlo simulation');
+      return;
+    }
+    
+    if (backtestMetrics.avgWinNet === 0 && backtestMetrics.avgLossNet === 0) {
+      console.warn('Không có dữ liệu lãi/lỗ để chạy Monte Carlo simulation');
+      return;
+    }
+    
     setIsCalculating(true);
     
     // Simulate delay để hiển thị loading
@@ -198,18 +209,46 @@ export default function MonteCarloProfitSimulation({
 
   // Auto-run chỉ một lần khi component mount hoặc khi backtestMetrics thay đổi đáng kể
   useEffect(() => {
-    // Validate metrics
-    const isValid = backtestMetrics.totalTrades > 0 && 
-                   backtestMetrics.winRate > 0 && 
-                   backtestMetrics.winRate <= 100 &&
-                   !isNaN(backtestMetrics.avgWinNet) &&
-                   !isNaN(backtestMetrics.avgLossNet);
-    
-    if (isValid && !hasRunSimulation) {
-      setHasRunSimulation(true);
+    // Chỉ auto-run khi có đủ dữ liệu
+    if (backtestMetrics.totalTrades > 0 && 
+        (backtestMetrics.avgWinNet !== 0 || backtestMetrics.avgLossNet !== 0) &&
+        !hasRunSimulation) {
       runMonteCarloSimulation();
+      setHasRunSimulation(true);
     }
-  }, [backtestMetrics.totalTrades, backtestMetrics.winRate, backtestMetrics.avgWinNet, backtestMetrics.avgLossNet, hasRunSimulation]);
+  }, [backtestMetrics, runMonteCarloSimulation, hasRunSimulation]);
+
+  // Kiểm tra xem có thể chạy simulation không
+  const canRunSimulation = backtestMetrics.totalTrades > 0 && 
+                          (backtestMetrics.avgWinNet !== 0 || backtestMetrics.avgLossNet !== 0);
+
+  if (!canRunSimulation) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Monte Carlo Profit Simulation
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-muted-foreground py-8">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
+            <p className="font-medium mb-2">Không thể chạy Monte Carlo Simulation</p>
+            <p className="text-sm">
+              {backtestMetrics.totalTrades === 0 
+                ? 'Không có trades nào được thực hiện'
+                : 'Thiếu dữ liệu lãi/lỗ từ backtest'
+              }
+            </p>
+            <p className="text-xs mt-2">
+              Cần có ít nhất 1 trade với thông tin lãi/lỗ để chạy simulation
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // Reset simulation khi experiment thay đổi
   useEffect(() => {
@@ -494,25 +533,6 @@ export default function MonteCarloProfitSimulation({
     a.click();
     window.URL.revokeObjectURL(url);
   };
-
-  if (!backtestMetrics.totalTrades) {
-    return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Monte Carlo Simulation
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center text-muted-foreground py-8">
-            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
-            <p>Không có dữ liệu backtest để thực hiện Monte Carlo simulation</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card className={className}>
