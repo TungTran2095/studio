@@ -2924,8 +2924,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         let avgLossNet = 0;
         
         // Sử dụng dữ liệu thực từ database
-        avgWinNet = Number(exp.results?.avg_win_net || 0);
-        avgLossNet = Number(exp.results?.avg_loss_net || 0);
+        avgWinNet = Number(exp.results?.performance?.avg_win_net || exp.results?.avg_win_net || 0);
+        avgLossNet = Number(exp.results?.performance?.avg_loss_net || exp.results?.avg_loss_net || 0);
         
         // Filter theo tỷ lệ lãi net trung bình
         if (filter.minAvgWinNet && avgWinNet < Number(filter.minAvgWinNet)) return false;
@@ -4337,8 +4337,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         let avgLossNet = 0;
                         
                         // Sử dụng dữ liệu thực từ database
-                        avgWinNet = Number(experiment.results?.avg_win_net || 0);
-                        avgLossNet = Number(experiment.results?.avg_loss_net || 0);
+                                avgWinNet = Number(experiment.results?.performance?.avg_win_net || experiment.results?.avg_win_net || 0);
+        avgLossNet = Number(experiment.results?.performance?.avg_loss_net || experiment.results?.avg_loss_net || 0);
                         
                         return (
                           <>
@@ -5158,12 +5158,12 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                       const metrics = {
                                         totalTrades: Number(resultObj.total_trades) || 0,
                                         winRate: Number(resultObj.win_rate) || 0,
-                                        avgWinNet: Number(resultObj.avg_win_net) || 0,
-                                        avgLossNet: Number(resultObj.avg_loss_net) || 0
+                                        avgWinNet: Number(resultObj.performance?.avg_win_net || resultObj.avg_win_net || 0),
+                                        avgLossNet: Number(resultObj.performance?.avg_loss_net || resultObj.avg_loss_net || 0)
                                       };
 
-                                      // Chỉ hiển thị Monte Carlo khi có dữ liệu thực
-                                      if (metrics.totalTrades > 0 && (metrics.avgWinNet !== 0 || metrics.avgLossNet !== 0)) {
+                                      // Chỉ hiển thị Monte Carlo khi có đủ dữ liệu cơ bản
+                                      if (metrics.totalTrades > 0 && metrics.winRate > 0) {
                                         return (
                                           <MonteCarloProfitSimulation 
                                             backtestMetrics={metrics}

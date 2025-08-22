@@ -88,18 +88,28 @@ export default function MonteCarloProfitSimulation({
         
         if (isWin) {
           wins++;
-          // Lãi dựa trên avg win net + một chút randomness để mô phỏng thực tế
-          // avgWinNet là tỷ lệ lãi trên giá trị giao dịch, cần chuyển thành tỷ lệ tăng vốn
-          // Sử dụng position size từ backtest config hoặc mặc định 10%
-          const positionSize = backtestResult?.positionSize || 0.1;
-          const winAmount = (metrics.avgWinNet / 100) * positionSize + (Math.random() - 0.5) * 0.001; // ±0.1% randomness
+          // Sử dụng avgWinNet thực từ backtest nếu có, nếu không thì sử dụng giá trị mặc định
+          let winAmount;
+          if (metrics.avgWinNet > 0) {
+            // Sử dụng giá trị thực từ backtest
+            const positionSize = backtestResult?.positionSize || 0.1;
+            winAmount = (metrics.avgWinNet / 100) * positionSize + (Math.random() - 0.5) * 0.001;
+          } else {
+            // Sử dụng giá trị mặc định nếu không có dữ liệu thực
+            winAmount = 0.02 + (Math.random() - 0.5) * 0.005; // 2% ± 0.25%
+          }
           equity *= (1 + winAmount);
         } else {
-          // Lỗ dựa trên avg loss net + một chút randomness
-          // avgLossNet là tỷ lệ lỗ trên giá trị giao dịch, cần chuyển thành tỷ lệ giảm vốn
-          // Sử dụng position size từ backtest config hoặc mặc định 10%
-          const positionSize = backtestResult?.positionSize || 0.1;
-          const lossAmount = (Math.abs(metrics.avgLossNet) / 100) * positionSize + (Math.random() - 0.5) * 0.001; // ±0.1% randomness
+          // Sử dụng avgLossNet thực từ backtest nếu có, nếu không thì sử dụng giá trị mặc định
+          let lossAmount;
+          if (Math.abs(metrics.avgLossNet) > 0) {
+            // Sử dụng giá trị thực từ backtest
+            const positionSize = backtestResult?.positionSize || 0.1;
+            lossAmount = (Math.abs(metrics.avgLossNet) / 100) * positionSize + (Math.random() - 0.5) * 0.001;
+          } else {
+            // Sử dụng giá trị mặc định nếu không có dữ liệu thực
+            lossAmount = 0.015 + (Math.random() - 0.5) * 0.005; // 1.5% ± 0.25%
+          }
           equity *= (1 - lossAmount);
         }
         
@@ -180,14 +190,14 @@ export default function MonteCarloProfitSimulation({
 
   // Chạy Monte Carlo simulation
   const runMonteCarloSimulation = useCallback(async () => {
-    // Kiểm tra dữ liệu trước khi chạy
+    // Kiểm tra dữ liệu cơ bản trước khi chạy
     if (backtestMetrics.totalTrades === 0) {
       console.warn('Không có trades để chạy Monte Carlo simulation');
       return;
     }
     
-    if (backtestMetrics.avgWinNet === 0 && backtestMetrics.avgLossNet === 0) {
-      console.warn('Không có dữ liệu lãi/lỗ để chạy Monte Carlo simulation');
+    if (backtestMetrics.winRate === 0) {
+      console.warn('Không có win rate để chạy Monte Carlo simulation');
       return;
     }
     
@@ -209,9 +219,9 @@ export default function MonteCarloProfitSimulation({
 
   // Auto-run chỉ một lần khi component mount hoặc khi backtestMetrics thay đổi đáng kể
   useEffect(() => {
-    // Chỉ auto-run khi có đủ dữ liệu
+    // Chỉ auto-run khi có đủ dữ liệu cơ bản
     if (backtestMetrics.totalTrades > 0 && 
-        (backtestMetrics.avgWinNet !== 0 || backtestMetrics.avgLossNet !== 0) &&
+        backtestMetrics.winRate > 0 &&
         !hasRunSimulation) {
       runMonteCarloSimulation();
       setHasRunSimulation(true);
@@ -220,7 +230,7 @@ export default function MonteCarloProfitSimulation({
 
   // Kiểm tra xem có thể chạy simulation không
   const canRunSimulation = backtestMetrics.totalTrades > 0 && 
-                          (backtestMetrics.avgWinNet !== 0 || backtestMetrics.avgLossNet !== 0);
+                          backtestMetrics.winRate > 0;
 
   if (!canRunSimulation) {
     return (
@@ -238,11 +248,13 @@ export default function MonteCarloProfitSimulation({
             <p className="text-sm">
               {backtestMetrics.totalTrades === 0 
                 ? 'Không có trades nào được thực hiện'
-                : 'Thiếu dữ liệu lãi/lỗ từ backtest'
+                : backtestMetrics.winRate === 0
+                ? 'Không có win rate từ backtest'
+                : 'Thiếu dữ liệu để chạy simulation'
               }
             </p>
             <p className="text-xs mt-2">
-              Cần có ít nhất 1 trade với thông tin lãi/lỗ để chạy simulation
+              Cần có ít nhất 1 trade và win rate {'>'} 0 để chạy simulation
             </p>
           </div>
         </CardContent>
