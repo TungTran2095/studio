@@ -5155,12 +5155,20 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                 {resultObj.total_trades && resultObj.win_rate && (
                                   <div className="mt-6 space-y-6">
                                     {(() => {
+                                      // Debug: kiểm tra dữ liệu thực tế từ backend
+                                      console.log('🔍 DEBUG resultObj:', resultObj);
+                                      console.log('🔍 DEBUG resultObj.performance:', resultObj.performance);
+                                      console.log('🔍 DEBUG resultObj.avg_win_net:', resultObj.avg_win_net);
+                                      console.log('🔍 DEBUG resultObj.avg_loss_net:', resultObj.avg_loss_net);
+                                      
                                       const metrics = {
                                         totalTrades: Number(resultObj.total_trades) || 0,
                                         winRate: Number(resultObj.win_rate) || 0,
                                         avgWinNet: Number(resultObj.performance?.avg_win_net || resultObj.avg_win_net || 0),
                                         avgLossNet: Number(resultObj.performance?.avg_loss_net || resultObj.avg_loss_net || 0)
                                       };
+                                      
+                                      console.log('🔍 DEBUG metrics:', metrics);
 
                                       // Chỉ hiển thị Monte Carlo khi có đủ dữ liệu cơ bản
                                       if (metrics.totalTrades > 0 && metrics.winRate > 0) {
