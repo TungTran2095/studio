@@ -106,7 +106,7 @@ class BaseStrategy(ABC):
                 if should_exit:
                     # Calculate profit/loss
                     pnl = (current_price - entry_price) * position_size
-                    pnl_pct = (current_price - entry_price) / entry_price
+                    pnl_pct = (current_price - entry_price) / entry_price  # Tỷ lệ thay đổi giá (0.05 = 5%)
                     # Maker fee khi thoát lệnh
                     exit_fee = current_price * position_size * self.maker_fee
                     
@@ -152,7 +152,7 @@ class BaseStrategy(ABC):
             elif in_position and signal == -1 and not self.prioritize_stoploss:
                 # Calculate profit/loss
                 pnl = (current_price - entry_price) * position_size
-                pnl_pct = (current_price - entry_price) / entry_price
+                pnl_pct = (current_price - entry_price) / entry_price  # Tỷ lệ thay đổi giá (0.05 = 5%)
                 # Maker fee khi thoát lệnh
                 exit_fee = current_price * position_size * self.maker_fee
                 
@@ -223,7 +223,7 @@ class BaseStrategy(ABC):
             # print(f"  Closing remaining position at end - price: {current_price}")
             # Calculate profit/loss
             pnl = (current_price - entry_price) * position_size
-            pnl_pct = (current_price - entry_price) / entry_price
+            pnl_pct = (current_price - entry_price) / entry_price  # Tỷ lệ thay đổi giá (0.05 = 5%)
             # Maker fee khi thoát lệnh
             exit_fee = current_price * position_size * self.maker_fee
             
@@ -284,7 +284,14 @@ class BaseStrategy(ABC):
             for trade in trades:
                 entry_value = trade['entry_price'] * trade['size']
                 net_pnl = trade['pnl']  # Đã trừ phí
-                trade['profit_ratio'] = (net_pnl / entry_value) * 100 if entry_value > 0 else 0
+                
+                # Tính tỷ lệ lợi nhuận dựa trên giá entry (không phụ thuộc vào position_size)
+                if entry_value > 0:
+                    # Sử dụng pnl_pct đã có sẵn (tỷ lệ thay đổi giá)
+                    # pnl_pct là tỷ lệ thay đổi giá (0.05 = 5%), chuyển thành phần trăm
+                    trade['profit_ratio'] = trade['pnl_pct'] * 100
+                else:
+                    trade['profit_ratio'] = 0
             
             # Tính tỷ lệ lãi net trung bình = avg tỷ lệ lợi nhuận các giao dịch lãi
             winning_trade_ratios = [t['profit_ratio'] for t in trades if t['pnl'] > 0]
@@ -293,6 +300,18 @@ class BaseStrategy(ABC):
             # Tính tỷ lệ lỗ net trung bình = avg tỷ lệ lợi nhuận các giao dịch lỗ
             losing_trade_ratios = [t['profit_ratio'] for t in trades if t['pnl'] < 0]
             avg_loss_net = np.mean(losing_trade_ratios) if losing_trade_ratios else 0
+            
+            # Debug: in ra để kiểm tra
+            print(f"Debug - Total trades: {total_trades}")
+            print(f"Debug - Winning trades: {winning_trades}")
+            print(f"Debug - Losing trades: {losing_trades}")
+            print(f"Debug - Win rate: {win_rate * 100:.2f}%")
+            print(f"Debug - Avg win net: {avg_win_net:.4f}%")
+            print(f"Debug - Avg loss net: {avg_loss_net:.4f}%")
+            
+            # In ra một số trade để kiểm tra
+            if len(trades) > 0:
+                print(f"Debug - First trade: entry_price={trades[0]['entry_price']}, exit_price={trades[0]['exit_price']}, pnl={trades[0]['pnl']}, pnl_pct={trades[0]['pnl_pct']}, profit_ratio={trades[0]['profit_ratio']}")
         
         total_return = (current_capital - self.initial_capital) / self.initial_capital * 100
         
