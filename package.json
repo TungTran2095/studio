@@ -11,7 +11,7 @@
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
-    "start": "next start -p 9002",
+    "start": "next start -p $PORT",
     "safe-start": "node killport.js && next start -p 9002",
     "lint": "next lint",
     "killport": "node killport.js",

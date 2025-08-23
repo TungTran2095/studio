@@ -1,11 +1,32 @@
-# Hướng dẫn triển khai Trading Bot Studio Backend trên Heroku
+# Hướng dẫn triển khai Trading Bot Studio Fullstack trên Heroku
 
 ## Tổng quan
-Dự án này đã được cấu hình để triển khai **Python Backend** lên Heroku, bao gồm:
+Dự án này đã được cấu hình để triển khai **Fullstack** lên Heroku, bao gồm:
+- **Frontend**: Next.js (React) với TypeScript
 - **Backend Python**: Flask + FastAPI
 - **Database**: Supabase + PostgreSQL
 - **AI/ML**: TensorFlow, PyTorch, Scikit-learn
 - **Trading**: CCXT, Binance API
+
+## Cấu trúc Fullstack
+
+```
+Trading Bot Studio
+├── Frontend (Next.js/React)
+│   ├── Trading Dashboard
+│   ├── Bot Management UI
+│   ├── Backtest Results
+│   └── Strategy Builder
+├── Backend (Python)
+│   ├── Flask/FastAPI API
+│   ├── Trading Bot Engine
+│   ├── Backtest Engine
+│   └── ML Model Serving
+└── Database (Supabase)
+    ├── User Data
+    ├── Bot Configurations
+    └── Trading History
+```
 
 ## Các file cấu hình đã tạo
 
@@ -16,24 +37,35 @@ Chứa tất cả dependencies Python cần thiết:
 - Web Framework: Flask, FastAPI, gunicorn
 - Database: supabase, sqlalchemy, psycopg2
 - Financial: ccxt, yfinance, alpha-vantage
-- Monitoring: loguru, prometheus-client
 
-### 2. `Procfile`
-Chỉ định cách Heroku khởi chạy ứng dụng Python:
-- Web process: Flask/FastAPI backend với Gunicorn
+### 2. `package.json`
+Cấu hình Node.js với scripts:
+- `npm run build`: Build Next.js app
+- `npm start`: Start production server
+- `npm run dev`: Development server
 
-### 3. `runtime.txt`
+### 3. `next.config.mjs`
+Cấu hình Next.js cho Heroku:
+- `output: 'standalone'`: Tối ưu cho production
+- `images.unoptimized: true`: Disable image optimization
+- API rewrites cho Python backend
+
+### 4. `Procfile`
+Chỉ định cách Heroku khởi chạy ứng dụng:
+- Web process: Next.js frontend + Python backend
+
+### 5. `runtime.txt`
 Chỉ định phiên bản Python 3.11.7
 
-### 4. `app.json`
+### 6. `app.json`
 Cấu hình Heroku app với:
-- Environment variables
+- Environment variables cho cả Node.js và Python
 - Add-ons (PostgreSQL)
-- Buildpacks (Python only)
+- Buildpacks (Node.js + Python)
 - Formation (web dyno)
 
-### 5. `wsgi.py`
-Entry point cho WSGI server
+### 7. `wsgi.py`
+Entry point cho Python backend
 
 ## Các bước triển khai
 
@@ -61,21 +93,26 @@ heroku create your-app-name
 
 ### Bước 4: Cấu hình environment variables
 ```bash
+heroku config:set NODE_ENV=production
+heroku config:set PYTHON_ENV=production
 heroku config:set SUPABASE_URL=your_supabase_url
 heroku config:set SUPABASE_ANON_KEY=your_supabase_key
 heroku config:set BINANCE_API_KEY=your_binance_key
 heroku config:set BINANCE_SECRET_KEY=your_binance_secret
 ```
 
-### Bước 5: Thêm buildpack Python
+### Bước 5: Thêm buildpacks (quan trọng!)
 ```bash
+# Thêm Node.js buildpack TRƯỚC Python
+heroku buildpacks:add heroku/nodejs
+# Thêm Python buildpack SAU
 heroku buildpacks:add heroku/python
 ```
 
 ### Bước 6: Triển khai
 ```bash
 git add .
-git commit -m "Configure Python backend for Heroku deployment"
+git commit -m "Configure fullstack for Heroku deployment"
 git push heroku main
 ```
 
@@ -85,25 +122,36 @@ heroku ps:scale web=1
 heroku open
 ```
 
-## Cấu trúc triển khai
+## Quy trình Build trên Heroku
 
-```
-Heroku App
-└── Web Dyno (Python Backend)
-    ├── Flask/FastAPI API
-    ├── Trading Bot Engine
-    ├── Backtest Engine
-    ├── ML Model Serving
-    └── Database Connection (Supabase)
-```
+### 1. Node.js Build (Buildpack đầu tiên)
+- Cài đặt Node.js dependencies
+- Build Next.js app (`npm run build`)
+- Tạo production bundle
+
+### 2. Python Build (Buildpack thứ hai)
+- Cài đặt Python dependencies
+- Cài đặt Python packages từ `requirements.txt`
+- Chuẩn bị Python backend
+
+### 3. Runtime
+- Next.js server khởi chạy trên port `$PORT`
+- Python backend chạy như service
+- Frontend giao tiếp với backend qua API
 
 ## API Endpoints
 
-Sau khi triển khai, backend sẽ có các endpoints:
-- `GET /` - Home page
-- `GET /health` - Health check
-- `GET /api/status` - API status
-- Các endpoints khác từ Flask app
+### Frontend (Next.js)
+- `/` - Trading Dashboard
+- `/bots` - Bot Management
+- `/backtests` - Backtest Results
+- `/strategies` - Strategy Builder
+
+### Backend (Python)
+- `/api/python/` - Python API endpoints
+- `/api/python/health` - Health check
+- `/api/python/bots` - Bot management
+- `/api/python/backtests` - Backtest engine
 
 ## Monitoring & Logs
 
@@ -112,55 +160,59 @@ Sau khi triển khai, backend sẽ có các endpoints:
 heroku logs --tail
 ```
 
+### Xem buildpacks
+```bash
+heroku buildpacks
+```
+
 ### Xem status
 ```bash
 heroku ps
 ```
 
-### Restart app
-```bash
-heroku restart
-```
-
 ## Troubleshooting
 
 ### Lỗi build
-- Kiểm tra `requirements.txt` có đúng syntax
-- Đảm bảo `runtime.txt` chỉ định Python version hợp lệ
-- Kiểm tra `Procfile` có đúng format
+- **Node.js buildpack phải ở đầu tiên**
+- Kiểm tra `package.json` có script `build` và `start`
+- Đảm bảo `next.config.mjs` đúng cấu hình
 
 ### Lỗi runtime
 - Kiểm tra environment variables
 - Xem logs: `heroku logs --tail`
-- Kiểm tra database connection
+- Kiểm tra buildpack order
 
 ### Performance
 - Scale dynos: `heroku ps:scale web=2`
 - Monitor với: `heroku addons:open scout`
 
-## Tính năng Python Backend
+## Tính năng Fullstack
 
-Dự án hỗ trợ:
-- **Flask**: Legacy API endpoints
-- **FastAPI**: Modern async API endpoints
+### Frontend (React/Next.js)
+- **UI Components**: Trading dashboard, charts, forms
+- **State Management**: Zustand, React Query
+- **Styling**: Tailwind CSS, Radix UI
+- **Type Safety**: TypeScript
+
+### Backend (Python)
+- **API**: Flask, FastAPI
 - **ML Models**: TensorFlow, PyTorch, Scikit-learn
-- **Trading Strategies**: CCXT, Binance API
+- **Trading**: CCXT, Binance API
 - **Database**: Supabase integration
-- **Background Tasks**: Bot execution, data processing
 
 ## Lưu ý quan trọng
 
-1. **Environment Variables**: Không commit sensitive data
-2. **Database**: Sử dụng Supabase (external)
-3. **File Storage**: Sử dụng cloud storage (AWS S3, Cloudinary)
-4. **Secrets**: Sử dụng Heroku Config Vars
-5. **Frontend**: Chưa triển khai (chỉ backend Python)
+1. **Buildpack Order**: Node.js phải ở đầu tiên
+2. **Environment Variables**: Cấu hình cho cả frontend và backend
+3. **Port Configuration**: Sử dụng `$PORT` từ Heroku
+4. **Static Assets**: Next.js build tạo production bundle
+5. **API Communication**: Frontend gọi backend qua rewrites
 
 ## Hỗ trợ
 
 Nếu gặp vấn đề, kiểm tra:
-1. Heroku logs
-2. Environment variables
-3. Database connection
-4. Python buildpack configuration
-5. Dyno status
+1. Buildpack order (Node.js trước, Python sau)
+2. Heroku logs
+3. Environment variables
+4. Next.js build process
+5. Python backend startup

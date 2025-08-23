@@ -1,26 +1,31 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Enable static export for Heroku
+  output: 'standalone',
+  
+  // Disable image optimization for Heroku
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
-      },
-    ],
+    unoptimized: true,
   },
+  
+  // Enable experimental features
   experimental: {
-    serverActions: {
-      allowedOrigins: ["localhost:9002", "studio.web.app", "studio.firebase.google.com"]
-    },
+    serverComponentsExternalPackages: ['@supabase/supabase-js'],
+  },
+  
+  // Environment variables
+  env: {
+    CUSTOM_KEY: process.env.CUSTOM_KEY,
+  },
+  
+  // API routes configuration
+  async rewrites() {
+    return [
+      {
+        source: '/api/python/:path*',
+        destination: 'http://localhost:5000/:path*',
+      },
+    ];
   },
 };
 
