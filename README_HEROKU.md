@@ -1,9 +1,8 @@
-# Hướng dẫn triển khai Trading Bot Studio trên Heroku
+# Hướng dẫn triển khai Trading Bot Studio Backend trên Heroku
 
 ## Tổng quan
-Dự án này đã được cấu hình để hỗ trợ triển khai đa ngôn ngữ trên Heroku, bao gồm:
+Dự án này đã được cấu hình để triển khai **Python Backend** lên Heroku, bao gồm:
 - **Backend Python**: Flask + FastAPI
-- **Frontend**: Next.js (Node.js)
 - **Database**: Supabase + PostgreSQL
 - **AI/ML**: TensorFlow, PyTorch, Scikit-learn
 - **Trading**: CCXT, Binance API
@@ -20,10 +19,8 @@ Chứa tất cả dependencies Python cần thiết:
 - Monitoring: loguru, prometheus-client
 
 ### 2. `Procfile`
-Chỉ định cách Heroku khởi chạy ứng dụng:
-- Web process: Flask/FastAPI backend
-- Worker process: Background tasks (optional)
-- Release process: Database migrations (optional)
+Chỉ định cách Heroku khởi chạy ứng dụng Python:
+- Web process: Flask/FastAPI backend với Gunicorn
 
 ### 3. `runtime.txt`
 Chỉ định phiên bản Python 3.11.7
@@ -31,9 +28,9 @@ Chỉ định phiên bản Python 3.11.7
 ### 4. `app.json`
 Cấu hình Heroku app với:
 - Environment variables
-- Add-ons (PostgreSQL, Redis)
-- Buildpacks (Python + Node.js)
-- Formation (web + worker dynos)
+- Add-ons (PostgreSQL)
+- Buildpacks (Python only)
+- Formation (web dyno)
 
 ### 5. `wsgi.py`
 Entry point cho WSGI server
@@ -70,16 +67,15 @@ heroku config:set BINANCE_API_KEY=your_binance_key
 heroku config:set BINANCE_SECRET_KEY=your_binance_secret
 ```
 
-### Bước 5: Thêm buildpacks
+### Bước 5: Thêm buildpack Python
 ```bash
 heroku buildpacks:add heroku/python
-heroku buildpacks:add heroku/nodejs
 ```
 
 ### Bước 6: Triển khai
 ```bash
 git add .
-git commit -m "Configure for Heroku deployment"
+git commit -m "Configure Python backend for Heroku deployment"
 git push heroku main
 ```
 
@@ -93,18 +89,21 @@ heroku open
 
 ```
 Heroku App
-├── Web Dyno (Flask/FastAPI)
-│   ├── Trading Bot API
-│   ├── Backtest Engine
-│   └── ML Model Serving
-├── Worker Dyno (Background Tasks)
-│   ├── Bot Execution
-│   ├── Data Processing
-│   └── Model Training
-└── Add-ons
-    ├── PostgreSQL (Database)
-    └── Redis (Caching)
+└── Web Dyno (Python Backend)
+    ├── Flask/FastAPI API
+    ├── Trading Bot Engine
+    ├── Backtest Engine
+    ├── ML Model Serving
+    └── Database Connection (Supabase)
 ```
+
+## API Endpoints
+
+Sau khi triển khai, backend sẽ có các endpoints:
+- `GET /` - Home page
+- `GET /health` - Health check
+- `GET /api/status` - API status
+- Các endpoints khác từ Flask app
 
 ## Monitoring & Logs
 
@@ -138,23 +137,24 @@ heroku restart
 ### Performance
 - Scale dynos: `heroku ps:scale web=2`
 - Monitor với: `heroku addons:open scout`
-- Optimize database queries
 
-## Tính năng đa ngôn ngữ
+## Tính năng Python Backend
 
 Dự án hỗ trợ:
-- **Python**: Backend API, ML models, trading strategies
-- **JavaScript/TypeScript**: Frontend, Node.js scripts
-- **SQL**: Database queries, migrations
-- **Shell**: Deployment scripts, automation
+- **Flask**: Legacy API endpoints
+- **FastAPI**: Modern async API endpoints
+- **ML Models**: TensorFlow, PyTorch, Scikit-learn
+- **Trading Strategies**: CCXT, Binance API
+- **Database**: Supabase integration
+- **Background Tasks**: Bot execution, data processing
 
 ## Lưu ý quan trọng
 
 1. **Environment Variables**: Không commit sensitive data
-2. **Database**: Sử dụng Supabase hoặc Heroku PostgreSQL
+2. **Database**: Sử dụng Supabase (external)
 3. **File Storage**: Sử dụng cloud storage (AWS S3, Cloudinary)
 4. **Secrets**: Sử dụng Heroku Config Vars
-5. **Monitoring**: Setup alerts và logging
+5. **Frontend**: Chưa triển khai (chỉ backend Python)
 
 ## Hỗ trợ
 
@@ -162,5 +162,5 @@ Nếu gặp vấn đề, kiểm tra:
 1. Heroku logs
 2. Environment variables
 3. Database connection
-4. Buildpacks configuration
+4. Python buildpack configuration
 5. Dyno status

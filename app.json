@@ -1,6 +1,6 @@
 {
-  "name": "Trading Bot Studio",
-  "description": "Multi-language trading bot platform with AI/ML capabilities",
+  "name": "Trading Bot Studio Backend",
+  "description": "Python backend for trading bot platform with AI/ML capabilities",
   "repository": "https://github.com/yourusername/trading-bot-studio",
   "logo": "https://node-js-sample.herokuapp.com/node.png",
   "keywords": ["python", "trading", "bot", "machine-learning", "ai", "flask", "fastapi"],
@@ -27,23 +27,15 @@
     }
   },
   "addons": [
-    "heroku-postgresql:mini",
-    "heroku-redis:mini"
+    "heroku-postgresql:mini"
   ],
   "buildpacks": [
     {
       "url": "heroku/python"
-    },
-    {
-      "url": "heroku/nodejs"
     }
   ],
   "formation": {
     "web": {
-      "quantity": 1,
-      "size": "basic"
-    },
-    "worker": {
       "quantity": 1,
       "size": "basic"
     }
