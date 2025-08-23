@@ -1,16 +1,12 @@
 {
-  "name": "Trading Bot Studio Fullstack",
-  "description": "Fullstack trading bot platform with React frontend and Python backend",
+  "name": "Trading Bot Studio Backend",
+  "description": "Python backend for trading bot platform with AI/ML capabilities",
   "repository": "https://github.com/yourusername/trading-bot-studio",
   "logo": "https://node-js-sample.herokuapp.com/node.png",
-  "keywords": ["python", "react", "nextjs", "trading", "bot", "machine-learning", "ai", "flask", "fastapi", "fullstack"],
+  "keywords": ["python", "trading", "bot", "machine-learning", "ai", "flask", "fastapi"],
   "env": {
     "PYTHON_ENV": {
       "description": "Environment setting",
-      "value": "production"
-    },
-    "NODE_ENV": {
-      "description": "Node.js environment",
       "value": "production"
     },
     "SUPABASE_URL": {
@@ -34,9 +30,6 @@
     "heroku-postgresql:mini"
   ],
   "buildpacks": [
-    {
-      "url": "heroku/nodejs"
-    },
     {
       "url": "heroku/python"
     }

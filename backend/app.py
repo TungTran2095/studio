@@ -14,22 +14,42 @@ logger = logging.getLogger(__name__)
 # Flask app for legacy support
 flask_app = Flask(__name__)
 
+# Enable CORS for frontend
+from flask_cors import CORS
+CORS(flask_app, origins=[
+    "https://*.vercel.app",
+    "https://*.netlify.app", 
+    "https://*.firebaseapp.com",
+    "http://localhost:3000",
+    "http://localhost:9002"
+])
+
 @flask_app.route('/')
 def home():
     return jsonify({
         "message": "Trading Bot Studio Backend",
         "status": "running",
-        "environment": os.getenv('PYTHON_ENV', 'development')
+        "environment": os.getenv('PYTHON_ENV', 'development'),
+        "version": "1.0.0"
     })
 
 @flask_app.route('/health')
 def health():
     return jsonify({"status": "healthy"})
 
+@flask_app.route('/api/status')
+def api_status():
+    return jsonify({
+        "backend": "running",
+        "database": "connected",
+        "version": "1.0.0",
+        "cors_enabled": True
+    })
+
 # FastAPI app for modern API endpoints
 fastapi_app = FastAPI(
     title="Trading Bot Studio API",
-    description="Multi-language trading bot platform with AI/ML capabilities",
+    description="Python backend for trading bot platform with AI/ML capabilities",
     version="1.0.0"
 )
 

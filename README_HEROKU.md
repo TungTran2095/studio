@@ -1,36 +1,26 @@
 # Hướng dẫn triển khai Trading Bot Studio Fullstack trên Heroku
 
 ## Tổng quan
-Dự án này đã được cấu hình để triển khai **Fullstack** lên Heroku, bao gồm:
-- **Frontend**: Next.js (React) với TypeScript
-- **Backend Python**: Flask + FastAPI
-- **Database**: Supabase + PostgreSQL
-- **AI/ML**: TensorFlow, PyTorch, Scikit-learn
-- **Trading**: CCXT, Binance API
+Dự án này được triển khai theo kiến trúc **hybrid**:
+- **Backend Python**: Triển khai trên Heroku (Flask + FastAPI)
+- **Frontend React**: Triển khai riêng biệt (Vercel/Netlify/Firebase)
+- **Database**: Supabase (external)
 
-## Cấu trúc Fullstack
+## Kiến trúc Triển khai
 
 ```
-Trading Bot Studio
-├── Frontend (Next.js/React)
-│   ├── Trading Dashboard
-│   ├── Bot Management UI
-│   ├── Backtest Results
-│   └── Strategy Builder
-├── Backend (Python)
-│   ├── Flask/FastAPI API
-│   ├── Trading Bot Engine
-│   ├── Backtest Engine
-│   └── ML Model Serving
-└── Database (Supabase)
-    ├── User Data
-    ├── Bot Configurations
-    └── Trading History
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   Backend       │    │   Database      │
+│   (React/Next)  │◄──►│   (Python)      │◄──►│   (Supabase)    │
+│   Vercel/Netlify│    │   Heroku        │    │   External      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-## Các file cấu hình đã tạo
+## Cách 1: Triển khai Backend Python trên Heroku
 
-### 1. `requirements.txt`
+### Các file cấu hình
+
+#### 1. `requirements.txt`
 Chứa tất cả dependencies Python cần thiết:
 - Data Science: pandas, numpy, scipy, scikit-learn
 - Deep Learning: tensorflow, torch, keras
@@ -38,38 +28,27 @@ Chứa tất cả dependencies Python cần thiết:
 - Database: supabase, sqlalchemy, psycopg2
 - Financial: ccxt, yfinance, alpha-vantage
 
-### 2. `package.json`
-Cấu hình Node.js với scripts:
-- `npm run build`: Build Next.js app
-- `npm start`: Start production server
-- `npm run dev`: Development server
+#### 2. `Procfile`
+Chỉ định cách Heroku khởi chạy Python backend:
+```bash
+web: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+```
 
-### 3. `next.config.mjs`
-Cấu hình Next.js cho Heroku:
-- `output: 'standalone'`: Tối ưu cho production
-- `images.unoptimized: true`: Disable image optimization
-- API rewrites cho Python backend
+#### 3. `.python-version` (thay thế runtime.txt)
+Chỉ định Python version:
+```
+3.11
+```
 
-### 4. `Procfile`
-Chỉ định cách Heroku khởi chạy ứng dụng:
-- Web process: Next.js frontend + Python backend
+#### 4. `app.json`
+Cấu hình Heroku app với Python buildpack
 
-### 5. `runtime.txt`
-Chỉ định phiên bản Python 3.11.7
+#### 5. `wsgi.py`
+Entry point cho WSGI server
 
-### 6. `app.json`
-Cấu hình Heroku app với:
-- Environment variables cho cả Node.js và Python
-- Add-ons (PostgreSQL)
-- Buildpacks (Node.js + Python)
-- Formation (web dyno)
+### Các bước triển khai Backend
 
-### 7. `wsgi.py`
-Entry point cho Python backend
-
-## Các bước triển khai
-
-### Bước 1: Cài đặt Heroku CLI
+#### Bước 1: Cài đặt Heroku CLI
 ```bash
 # Windows
 winget install --id=Heroku.HerokuCLI
@@ -81,19 +60,14 @@ brew tap heroku/brew && brew install heroku
 curl https://cli-assets.heroku.com/install.sh | sh
 ```
 
-### Bước 2: Đăng nhập Heroku
+#### Bước 2: Đăng nhập và tạo app
 ```bash
 heroku login
+heroku create your-backend-name
 ```
 
-### Bước 3: Tạo Heroku app
+#### Bước 3: Cấu hình environment variables
 ```bash
-heroku create your-app-name
-```
-
-### Bước 4: Cấu hình environment variables
-```bash
-heroku config:set NODE_ENV=production
 heroku config:set PYTHON_ENV=production
 heroku config:set SUPABASE_URL=your_supabase_url
 heroku config:set SUPABASE_ANON_KEY=your_supabase_key
@@ -101,118 +75,145 @@ heroku config:set BINANCE_API_KEY=your_binance_key
 heroku config:set BINANCE_SECRET_KEY=your_binance_secret
 ```
 
-### Bước 5: Thêm buildpacks (quan trọng!)
-```bash
-# Thêm Node.js buildpack TRƯỚC Python
-heroku buildpacks:add heroku/nodejs
-# Thêm Python buildpack SAU
-heroku buildpacks:add heroku/python
-```
-
-### Bước 6: Triển khai
+#### Bước 4: Triển khai
 ```bash
 git add .
-git commit -m "Configure fullstack for Heroku deployment"
+git commit -m "Configure Python backend for Heroku"
 git push heroku main
 ```
 
-### Bước 7: Khởi chạy
+#### Bước 5: Khởi chạy
 ```bash
 heroku ps:scale web=1
 heroku open
 ```
 
-## Quy trình Build trên Heroku
+## Cách 2: Triển khai Frontend React riêng biệt
 
-### 1. Node.js Build (Buildpack đầu tiên)
-- Cài đặt Node.js dependencies
-- Build Next.js app (`npm run build`)
-- Tạo production bundle
+### Option A: Vercel (Recommended)
+```bash
+# Cài đặt Vercel CLI
+npm i -g vercel
 
-### 2. Python Build (Buildpack thứ hai)
-- Cài đặt Python dependencies
-- Cài đặt Python packages từ `requirements.txt`
-- Chuẩn bị Python backend
+# Triển khai
+vercel
 
-### 3. Runtime
-- Next.js server khởi chạy trên port `$PORT`
-- Python backend chạy như service
-- Frontend giao tiếp với backend qua API
+# Hoặc connect với GitHub repo
+vercel --prod
+```
+
+### Option B: Netlify
+```bash
+# Build project
+npm run build
+
+# Deploy to Netlify
+# Upload dist/ folder hoặc connect GitHub repo
+```
+
+### Option C: Firebase Hosting
+```bash
+# Cài đặt Firebase CLI
+npm i -g firebase-tools
+
+# Login và init
+firebase login
+firebase init hosting
+
+# Deploy
+firebase deploy
+```
+
+## Cấu hình Frontend để kết nối Backend
+
+### 1. Cập nhật API base URL
+```typescript
+// src/lib/api.ts
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-backend-name.herokuapp.com'
+  : 'http://localhost:5000';
+
+export const apiClient = {
+  baseURL: API_BASE_URL,
+  // ... other config
+};
+```
+
+### 2. Environment Variables
+```bash
+# .env.local
+NEXT_PUBLIC_API_URL=https://your-backend-name.herokuapp.com
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+```
 
 ## API Endpoints
 
-### Frontend (Next.js)
+### Backend (Python - Heroku)
+- `GET /` - Home page
+- `GET /health` - Health check
+- `GET /api/status` - API status
+- `POST /api/bots` - Create trading bot
+- `GET /api/backtests` - Get backtest results
+- `POST /api/backtests` - Run backtest
+
+### Frontend (React - Vercel/Netlify)
 - `/` - Trading Dashboard
 - `/bots` - Bot Management
 - `/backtests` - Backtest Results
 - `/strategies` - Strategy Builder
 
-### Backend (Python)
-- `/api/python/` - Python API endpoints
-- `/api/python/health` - Health check
-- `/api/python/bots` - Bot management
-- `/api/python/backtests` - Backtest engine
-
 ## Monitoring & Logs
 
-### Xem logs
+### Backend (Heroku)
 ```bash
 heroku logs --tail
-```
-
-### Xem buildpacks
-```bash
-heroku buildpacks
-```
-
-### Xem status
-```bash
 heroku ps
+heroku restart
 ```
+
+### Frontend (Vercel/Netlify)
+- Dashboard monitoring
+- Build logs
+- Performance analytics
 
 ## Troubleshooting
 
-### Lỗi build
-- **Node.js buildpack phải ở đầu tiên**
-- Kiểm tra `package.json` có script `build` và `start`
-- Đảm bảo `next.config.mjs` đúng cấu hình
-
-### Lỗi runtime
+### Backend Issues
+- Kiểm tra Heroku logs: `heroku logs --tail`
 - Kiểm tra environment variables
-- Xem logs: `heroku logs --tail`
-- Kiểm tra buildpack order
+- Kiểm tra database connection
 
-### Performance
-- Scale dynos: `heroku ps:scale web=2`
-- Monitor với: `heroku addons:open scout`
+### Frontend Issues
+- Kiểm tra API base URL
+- Kiểm tra environment variables
+- Kiểm tra CORS configuration
 
-## Tính năng Fullstack
+### CORS Configuration
+```python
+# backend/app.py
+from flask_cors import CORS
 
-### Frontend (React/Next.js)
-- **UI Components**: Trading dashboard, charts, forms
-- **State Management**: Zustand, React Query
-- **Styling**: Tailwind CSS, Radix UI
-- **Type Safety**: TypeScript
-
-### Backend (Python)
-- **API**: Flask, FastAPI
-- **ML Models**: TensorFlow, PyTorch, Scikit-learn
-- **Trading**: CCXT, Binance API
-- **Database**: Supabase integration
+app = Flask(__name__)
+CORS(app, origins=[
+    "https://your-frontend.vercel.app",
+    "https://your-frontend.netlify.app",
+    "http://localhost:3000"
+])
+```
 
 ## Lưu ý quan trọng
 
-1. **Buildpack Order**: Node.js phải ở đầu tiên
-2. **Environment Variables**: Cấu hình cho cả frontend và backend
-3. **Port Configuration**: Sử dụng `$PORT` từ Heroku
-4. **Static Assets**: Next.js build tạo production bundle
-5. **API Communication**: Frontend gọi backend qua rewrites
+1. **Backend**: Triển khai Python trên Heroku
+2. **Frontend**: Triển khai React riêng biệt (Vercel/Netlify)
+3. **Database**: Sử dụng Supabase (external)
+4. **CORS**: Cấu hình để frontend có thể gọi backend
+5. **Environment Variables**: Cấu hình riêng cho từng platform
 
-## Hỗ trợ
+## Ưu điểm của kiến trúc này
 
-Nếu gặp vấn đề, kiểm tra:
-1. Buildpack order (Node.js trước, Python sau)
-2. Heroku logs
-3. Environment variables
-4. Next.js build process
-5. Python backend startup
+- **Backend**: Tận dụng Python ecosystem cho AI/ML
+- **Frontend**: Tận dụng React/Next.js cho UI/UX
+- **Scalability**: Mỗi phần có thể scale độc lập
+- **Cost**: Chỉ trả tiền cho backend trên Heroku
+- **Flexibility**: Có thể thay đổi frontend platform dễ dàng
