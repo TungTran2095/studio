@@ -120,6 +120,18 @@ export async function GET(request: NextRequest) {
       query = query.eq('project_id', projectId);
     }
 
+    // Add type filter if specified
+    const type = searchParams.get('type');
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    // Add status filter if specified
+    const status = searchParams.get('status');
+    if (status) {
+      query = query.eq('status', status);
+    }
+
     const { data: experiments, error } = await query;
 
     if (error) {

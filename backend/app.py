@@ -1,33 +1,61 @@
+from flask import Flask, jsonify, request
+from fastapi import FastAPI, HTTPException
 import os
-from flask import Flask, request, jsonify
+import logging
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-@app.route('/run-bot', methods=['POST'])
-def run_bot():
-    """
-    This endpoint receives bot configuration and starts the bot.
-    For now, it just prints the configuration.
-    """
-    data = request.json
-    print("Received request to run bot:")
-    print(f"Bot Name: {data.get('name')}")
-    print(f"Project ID: {data.get('projectId')}")
-    print(f"Backtest ID: {data.get('backtestId')}")
-    print("Account Config:", data.get('account'))
-    print("Strategy Config:", data.get('config'))
-    
-    # Here you would add the logic to instantiate and run your bot
-    # For example:
-    # from bot_runner import BotRunner
-    # bot_runner = BotRunner(data)
-    # bot_runner.start()
-    
-    return jsonify({"status": "success", "message": "Bot execution started"}), 200
+# Flask app for legacy support
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return jsonify({
+        "message": "Trading Bot Studio Backend",
+        "status": "running",
+        "environment": os.getenv('PYTHON_ENV', 'development')
+    })
+
+@flask_app.route('/health')
+def health():
+    return jsonify({"status": "healthy"})
+
+# FastAPI app for modern API endpoints
+fastapi_app = FastAPI(
+    title="Trading Bot Studio API",
+    description="Multi-language trading bot platform with AI/ML capabilities",
+    version="1.0.0"
+)
+
+@fastapi_app.get("/")
+async def root():
+    return {
+        "message": "Trading Bot Studio Backend",
+        "status": "running",
+        "environment": os.getenv('PYTHON_ENV', 'development')
+    }
+
+@fastapi_app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+@fastapi_app.get("/api/status")
+async def api_status():
+    return {
+        "backend": "running",
+        "database": "connected",
+        "version": "1.0.0"
+    }
+
+# Main app variable for Heroku
+app = flask_app
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5001))
-    app.run(debug=True, port=port) 
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False) 

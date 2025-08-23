@@ -456,7 +456,9 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
   const [newAccount, setNewAccount] = useState({ name: '', apiKey: '', apiSecret: '', testnet: false });
 
   // Lọc các backtest completed
+  console.log('🔍 ProjectBotsTab received backtests:', backtests);
   const completedBacktests = backtests.filter((b: any) => b.status === 'completed');
+  console.log('🔍 Filtered completed backtests:', completedBacktests);
 
   // Fetch danh sách bots
   const loadBots = async () => {
@@ -830,6 +832,9 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="backtest">Chọn backtest làm rule</Label>
+              <div className="text-xs text-muted-foreground mb-2">
+                Debug: {completedBacktests.length} backtests available | Raw backtests: {JSON.stringify(backtests.map(b => ({ id: b.id, name: b.name, status: b.status })))}
+              </div>
               <Select value={form.backtestId} onValueChange={handleBacktestSelect}>
                 <SelectTrigger id="backtest">
                   <SelectValue placeholder="Chọn backtest" />

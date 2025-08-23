@@ -2281,6 +2281,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const [backtestResult, setBacktestResult] = useState<any>(null);
   // Thêm state filter
   const [filter, setFilter] = useState({
+    name: '',
     fromDate: '',
     toDate: '',
     minTotalReturn: '',
@@ -2883,6 +2884,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
 
   // Hàm reset filter
   const resetFilter = () => setFilter({
+    name: '',
     fromDate: '',
     toDate: '',
     minTotalReturn: '',
@@ -2902,6 +2904,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   // Hàm lọc danh sách
   const filteredExperiments = useMemo(() => {
     return experiments.filter((exp) => {
+      // Lọc theo tên thí nghiệm
+      if (filter.name && !exp.name?.toLowerCase().includes(filter.name.toLowerCase())) return false;
       // Lọc theo loại thí nghiệm
       if (filter.type && exp.type !== filter.type) return false;
       // Lọc theo trạng thái
@@ -3158,7 +3162,17 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       {/* Bộ lọc danh sách thí nghiệm */}
       <Card className="mb-2">
         <CardContent className="pt-4 pb-2">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
+            <div>
+              <Label htmlFor="name">Tên thí nghiệm</Label>
+              <Input 
+                id="name" 
+                type="text" 
+                placeholder="Tìm theo tên..." 
+                value={filter.name} 
+                onChange={e => setFilter(f => ({ ...f, name: e.target.value }))} 
+              />
+            </div>
             <div>
               <Label htmlFor="type">Loại thí nghiệm</Label>
               <Select value={filter.type || 'all'} onValueChange={v => setFilter(f => ({ ...f, type: v === 'all' ? '' : v }))}>
@@ -4336,9 +4350,38 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                         let avgWinNet = 0;
                         let avgLossNet = 0;
                         
-                        // Sử dụng dữ liệu thực từ database
-                                avgWinNet = Number(experiment.results?.performance?.avg_win_net || experiment.results?.avg_win_net || 0);
-        avgLossNet = Number(experiment.results?.performance?.avg_loss_net || experiment.results?.avg_loss_net || 0);
+                        // Tính toán trực tiếp từ trades nếu có
+                        if (experiment.results?.trades && experiment.results.trades.length > 0) {
+                          const tradesWithRatios = experiment.results.trades.map((trade: any) => {
+                            const entry = Number(trade.entry_price);
+                            const exit = Number(trade.exit_price);
+                            const size = Number(trade.size);
+                            const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                            const fee = (trade.entry_fee || 0) + (trade.exit_fee || 0);
+                            const net = gross - fee;
+                            const tradeValue = entry * size;
+                            const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0;
+                            
+                            return { ...trade, net, profitRatio };
+                          });
+                          
+                          // Phân loại trades thắng/thua
+                          const winningTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio > 0);
+                          const losingTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio < 0);
+                          
+                          // Tính trung bình
+                          avgWinNet = winningTrades.length > 0 
+                            ? winningTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / winningTrades.length 
+                            : 0;
+                            
+                          avgLossNet = losingTrades.length > 0 
+                            ? losingTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / losingTrades.length 
+                            : 0;
+                        } else {
+                          // Fallback về dữ liệu từ database nếu không có trades
+                          avgWinNet = Number(experiment.results?.performance?.avg_win_net || experiment.results?.avg_win_net || 0);
+                          avgLossNet = Number(experiment.results?.performance?.avg_loss_net || experiment.results?.avg_loss_net || 0);
+                        }
                         
                         return (
                           <>
@@ -5161,14 +5204,49 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                       console.log('🔍 DEBUG resultObj.avg_win_net:', resultObj.avg_win_net);
                                       console.log('🔍 DEBUG resultObj.avg_loss_net:', resultObj.avg_loss_net);
                                       
+                                      // Tính toán avgWinNet và avgLossNet trực tiếp từ dữ liệu trades
+                                      let avgWinNet = 0;
+                                      let avgLossNet = 0;
+                                      
+                                      if (resultObj.trades && resultObj.trades.length > 0) {
+                                        // Tính tỷ lệ lợi nhuận cho từng trade (giống như trong bảng)
+                                        const tradesWithRatios = resultObj.trades.map((trade: any) => {
+                                          const entry = Number(trade.entry_price);
+                                          const exit = Number(trade.exit_price);
+                                          const size = Number(trade.size);
+                                          const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                          const fee = (trade.entry_fee || 0) + (trade.exit_fee || 0);
+                                          const net = gross - fee;
+                                          const tradeValue = entry * size;
+                                          const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0;
+                                          
+                                          return { ...trade, net, profitRatio };
+                                        });
+                                        
+                                        // Phân loại trades thắng/thua dựa trên profitRatio
+                                        const winningTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio > 0);
+                                        const losingTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio < 0);
+                                        
+                                        // Tính trung bình
+                                        avgWinNet = winningTrades.length > 0 
+                                          ? winningTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / winningTrades.length 
+                                          : 0;
+                                          
+                                        avgLossNet = losingTrades.length > 0 
+                                          ? losingTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / losingTrades.length 
+                                          : 0;
+                                      }
+                                      
                                       const metrics = {
                                         totalTrades: Number(resultObj.total_trades) || 0,
                                         winRate: Number(resultObj.win_rate) || 0,
-                                        avgWinNet: Number(resultObj.performance?.avg_win_net || resultObj.avg_win_net || 0),
-                                        avgLossNet: Number(resultObj.performance?.avg_loss_net || resultObj.avg_loss_net || 0)
+                                        avgWinNet: avgWinNet,
+                                        avgLossNet: avgLossNet
                                       };
                                       
                                       console.log('🔍 DEBUG metrics:', metrics);
+                                      console.log('🔍 DEBUG avgWinNet:', avgWinNet);
+                                      console.log('🔍 DEBUG avgLossNet:', avgLossNet);
 
                                       // Chỉ hiển thị Monte Carlo khi có đủ dữ liệu cơ bản
                                       if (metrics.totalTrades > 0 && metrics.winRate > 0) {
@@ -5180,8 +5258,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                           backtestResult={{
                                             totalReturn: resultObj.total_return,
                                             maxDrawdown: resultObj.max_drawdown,
-                                              totalProfit: resultObj.total_profit || resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0,
-                                              positionSize: selectedExperiment.config?.trading?.positionSize || 0.1
+                                            totalProfit: resultObj.total_profit || (resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0),
+                                            positionSize: selectedExperiment.config?.trading?.positionSize || 0.1
                                           }}
                                           onSimulationComplete={setMonteCarloResults}
                                           experimentId={selectedExperiment.id}
@@ -5500,14 +5578,18 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
   const [backtests, setBacktests] = useState<any[]>([]);
   const fetchCompletedBacktests = async () => {
     try {
+      console.log('🔍 Fetching completed backtests for project:', projectId);
       const response = await fetch(`/api/research/experiments?project_id=${projectId}&type=backtest&status=completed`);
       if (response.ok) {
         const data = await response.json();
+        console.log('🔍 Backtests API response:', data);
         setBacktests(data.experiments || []);
       } else {
+        console.log('🔍 Backtests API error:', response.status, response.statusText);
         setBacktests([]);
       }
     } catch (error) {
+      console.error('🔍 Error fetching backtests:', error);
       setBacktests([]);
     }
   };

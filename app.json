@@ -1,0 +1,51 @@
+{
+  "name": "Trading Bot Studio",
+  "description": "Multi-language trading bot platform with AI/ML capabilities",
+  "repository": "https://github.com/yourusername/trading-bot-studio",
+  "logo": "https://node-js-sample.herokuapp.com/node.png",
+  "keywords": ["python", "trading", "bot", "machine-learning", "ai", "flask", "fastapi"],
+  "env": {
+    "PYTHON_ENV": {
+      "description": "Environment setting",
+      "value": "production"
+    },
+    "SUPABASE_URL": {
+      "description": "Supabase project URL",
+      "required": true
+    },
+    "SUPABASE_ANON_KEY": {
+      "description": "Supabase anonymous key",
+      "required": true
+    },
+    "BINANCE_API_KEY": {
+      "description": "Binance API key",
+      "required": false
+    },
+    "BINANCE_SECRET_KEY": {
+      "description": "Binance secret key",
+      "required": false
+    }
+  },
+  "addons": [
+    "heroku-postgresql:mini",
+    "heroku-redis:mini"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    },
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    },
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}
