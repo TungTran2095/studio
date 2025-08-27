@@ -157,7 +157,7 @@ export async function fetchTechnicalIndicators(
 async function initializeBinanceClient(apiKey?: string, apiSecret?: string, isTestnet = false) {
   try {
     if (apiKey && apiSecret) {
-      return await createSafeBinanceClient({ apiKey, apiSecret, isTestnet });
+      return await createSafeBinanceClient(apiKey, apiSecret, isTestnet);
     }
     
     // Fallback: Sử dụng API công khai
