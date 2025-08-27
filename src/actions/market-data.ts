@@ -172,7 +172,7 @@ import {
   runBacktestStrategy,
   optimizePortfolio,
   generateTradingStrategy,
-  type BacktestResult
+  type BacktestResult as AIToolBacktestResult
 } from '@/ai/tools/market-intelligence';
 import type { 
   TechnicalAnalysisResult, 
@@ -393,7 +393,7 @@ export async function getTechnicalAnalysisForAI(
  */
 export interface BacktestResponse {
   success: boolean;
-  data?: BacktestResult;
+  data?: AIToolBacktestResult;
   error?: string;
 }
 
