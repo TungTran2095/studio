@@ -66,7 +66,8 @@ export const tradingTool: Tool = {
         return {
           success: true,
           message: tradeResult.message,
-          data: tradeResult.data
+          orderId: tradeResult.orderId,
+          portfolioResults: tradeResult.portfolioResults
         };
       } else {
         console.warn('[tradingTool] Giao dịch thất bại:', tradeResult.message);
