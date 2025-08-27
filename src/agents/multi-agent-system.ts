@@ -466,12 +466,15 @@ export class MultiAgentSystem {
   /**
    * Chuyển đổi tâm lý sang tiếng Việt
    */
-  private translateSentiment(sentiment: 'positive' | 'negative' | 'neutral'): string {
-    switch (sentiment) {
+  private translateSentiment(sentiment: 'positive' | 'negative' | 'neutral' | 'bullish' | 'bearish'): string {
+    // Chuẩn hóa bullish/bearish về positive/negative
+    const normalized: 'positive' | 'negative' | 'neutral' =
+      sentiment === 'bullish' ? 'positive' :
+      sentiment === 'bearish' ? 'negative' : sentiment;
+    switch (normalized) {
       case 'positive': return 'tích cực';
       case 'negative': return 'tiêu cực';
       case 'neutral': return 'trung tính';
-      default: return sentiment;
     }
   }
   
