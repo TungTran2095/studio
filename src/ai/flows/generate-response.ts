@@ -458,14 +458,14 @@ Vui lòng kiểm tra lại thông tin hoặc thử lại sau.`
         const assetSymbol = extractAssetSymbolFromMessage(input.message);
         
         // Tạo báo cáo số dư
-        const balanceReport = await generateBalanceReport(
-          input.apiKey,
-          input.apiSecret,
-          input.isTestnet || false,
-          assetSymbol
-        );
+        const balanceReport = await generateBalanceReport({
+          apiKey: input.apiKey!,
+          apiSecret: input.apiSecret!,
+          isTestnet: input.isTestnet || false,
+          symbol: assetSymbol
+        });
         
-        return { response: balanceReport };
+        return { response: balanceReport.message };
       } catch (error: any) {
         console.error('[generateResponseFlow] Error generating balance report:', error);
         return {
@@ -523,43 +523,63 @@ Vui lòng kiểm tra lại thông tin hoặc thử lại sau.`
             
           case 'backtest':
             if (contentRequest.symbol && contentRequest.strategy) {
-              specializedResponse = await getBacktestResultForAI({
-                symbol: contentRequest.symbol,
-                strategy: contentRequest.strategy,
-                timeframe: contentRequest.timeframe || '1d',
-                startDate: contentRequest.startDate || getDefaultStartDate(),
-                endDate: contentRequest.endDate || new Date().toISOString(),
-                initialCapital: contentRequest.initialCapital || 10000
-              });
+              specializedResponse = await getBacktestResultForAI(
+                contentRequest.symbol,
+                contentRequest.timeframe || '1d',
+                contentRequest.startDate || getDefaultStartDate(),
+                contentRequest.endDate || new Date().toISOString(),
+                contentRequest.strategy,
+                contentRequest.initialCapital || 10000,
+                input.apiKey,
+                input.apiSecret,
+                input.isTestnet || false
+              );
             }
             break;
             
           case 'portfolio_optimization':
             if (contentRequest.symbols && contentRequest.symbols.length > 0) {
-              specializedResponse = await getPortfolioOptimizationForAI({
-                symbols: contentRequest.symbols,
-                riskTolerance: contentRequest.riskTolerance || 'medium',
-                lookbackPeriod: contentRequest.lookbackPeriod || 365,
-                investmentAmount: contentRequest.investmentAmount || 10000
-              });
+              specializedResponse = await getPortfolioOptimizationForAI(
+                contentRequest.symbols.map(s => s.endsWith('USDT') ? s : `${s}USDT`),
+                contentRequest.riskTolerance || 'medium',
+                contentRequest.timeframe || '1d',
+                contentRequest.lookbackPeriod || 60,
+                input.apiKey,
+                input.apiSecret,
+                input.isTestnet || false
+              );
             }
             break;
             
           case 'trading_strategy':
-            if (contentRequest.symbol) {
-              specializedResponse = await getTradingStrategyForAI(contentRequest.symbol);
-            }
+            // Hàm nhận tham số investmentAmount và riskTolerance; dùng mặc định
+            specializedResponse = await getTradingStrategyForAI(1000, 'medium', input.apiKey, input.apiSecret, input.isTestnet || false);
             break;
             
           case 'auto_trading_strategy':
             if (contentRequest.symbol) {
-              specializedResponse = await getAutoTradingStrategyForAI(contentRequest.symbol);
+              specializedResponse = await getAutoTradingStrategyForAI(
+                'Auto Strategy',
+                contentRequest.symbol,
+                contentRequest.timeframe || '1h',
+                'medium',
+                [],
+                input.apiKey,
+                input.apiSecret,
+                input.isTestnet || false
+              );
             }
             break;
             
           case 'quant_signal':
             if (contentRequest.symbol) {
-              specializedResponse = await getQuantSignalText(contentRequest.symbol);
+              specializedResponse = await getQuantSignalText(
+                input.apiKey || '',
+                input.apiSecret || '',
+                contentRequest.symbol,
+                contentRequest.timeframe || '1h',
+                input.isTestnet || false
+              );
             }
             break;
             
