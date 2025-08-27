@@ -9,8 +9,8 @@ const MOCK_MODE = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE
 
 let supabase: any = null;
 if (!MOCK_MODE) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   supabase = createClient(supabaseUrl, supabaseServiceKey);
 }
 

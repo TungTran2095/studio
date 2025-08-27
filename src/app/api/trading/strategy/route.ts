@@ -24,14 +24,14 @@ export async function POST(request: NextRequest) {
     const { action, strategyType, params, paramRanges } = body;
     
     // Kiểm tra chiến lược
-    if (!strategyType || !strategies[strategyType]) {
+    if (!strategyType || !strategies[strategyType as keyof typeof strategies]) {
       return NextResponse.json(
         { error: 'Chiến lược không hợp lệ' },
         { status: 400 }
       );
     }
     
-    const strategy = strategies[strategyType];
+    const strategy = strategies[strategyType as keyof typeof strategies];
     
     // Xử lý các hành động
     switch (action) {

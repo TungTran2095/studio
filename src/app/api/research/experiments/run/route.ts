@@ -13,6 +13,10 @@ const supabase = supabaseUrl && supabaseServiceKey
 // Mock experiment runners - trong thực tế sẽ integrate với Python backend
 class ExperimentRunner {
   static async runBacktest(config: any, experimentId: string) {
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
+    
     console.log(`🔄 Running backtest for experiment ${experimentId}:`, config);
     
     // Update status to running
@@ -79,6 +83,10 @@ class ExperimentRunner {
   }
 
   static async runHypothesisTest(config: any, experimentId: string) {
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
+    
     console.log(`🔄 Running hypothesis test for experiment ${experimentId}:`, config);
     
     await supabase
@@ -142,6 +150,10 @@ class ExperimentRunner {
   }
 
   static async runOptimization(config: any, experimentId: string) {
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
+    
     console.log(`🔄 Running optimization for experiment ${experimentId}:`, config);
     
     await supabase
@@ -208,6 +220,10 @@ class ExperimentRunner {
   }
 
   static async runMonteCarloSimulation(config: any, experimentId: string) {
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
+    
     console.log(`🔄 Running Monte Carlo simulation for experiment ${experimentId}:`, config);
     
     await supabase

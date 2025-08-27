@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       // Tính toán data quality thực tế
       let validRecords = 0;
       
-      sampleData.forEach(record => {
+      sampleData.forEach((record: { open: number; high: number; low: number; close: number; volume: number }) => {
         // Kiểm tra tính hợp lệ của OHLC data
         if (record.open > 0 && record.high > 0 && record.low > 0 && record.close > 0 &&
             record.high >= record.low && 

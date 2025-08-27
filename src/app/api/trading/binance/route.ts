@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const client = Binance({
       apiKey,
       apiSecret,
-      test: true // Sử dụng testnet
+      httpBase: 'https://testnet.binance.vision'
     });
 
     const candles = await client.candles({
@@ -43,7 +43,7 @@ export async function PUT(request: Request) {
     const client = Binance({
       apiKey,
       apiSecret,
-      test: true
+      httpBase: 'https://testnet.binance.vision'
     });
 
     const order = await client.order({
@@ -73,7 +73,7 @@ export async function PATCH(request: Request) {
     const client = Binance({
       apiKey,
       apiSecret,
-      test: true
+      httpBase: 'https://testnet.binance.vision'
     });
 
     const accountInfo = await client.accountInfo();

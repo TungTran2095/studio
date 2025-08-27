@@ -214,6 +214,10 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleTrain(model: any, config: any) {
+  if (!supabase) {
+    throw new Error('Supabase client not available');
+  }
+  
   try {
     console.log('🎯 [Handle Train] Starting training for model:', model.id);
     console.log('📊 [Handle Train] Config received:', config);
@@ -294,6 +298,10 @@ async function handleTrain(model: any, config: any) {
 }
 
 async function handleTest(model: any, config: any) {
+  if (!supabase) {
+    throw new Error('Supabase client not available');
+  }
+  
   try {
     if (model.status !== 'completed') {
       return NextResponse.json(
@@ -331,6 +339,10 @@ async function handleTest(model: any, config: any) {
 }
 
 async function handleDeploy(model: any, config: any) {
+  if (!supabase) {
+    throw new Error('Supabase client not available');
+  }
+  
   try {
     if (model.status !== 'completed') {
       return NextResponse.json(
@@ -376,6 +388,10 @@ async function handleDeploy(model: any, config: any) {
 }
 
 async function handleStop(model: any) {
+  if (!supabase) {
+    throw new Error('Supabase client not available');
+  }
+  
   try {
     // Update status back to previous state or draft
     const newStatus = model.status === 'training' ? 'draft' : 
@@ -407,6 +423,10 @@ async function handleStop(model: any) {
 
 // Background testing simulation
 async function simulateTesting(modelId: string, algorithmType: string, config: any) {
+  if (!supabase) {
+    throw new Error('Supabase client not available');
+  }
+  
   try {
     const totalSteps = 50;
     
