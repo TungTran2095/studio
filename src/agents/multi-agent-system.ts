@@ -232,7 +232,7 @@ export class MultiAgentSystem {
    * Tính toán độ tin cậy cho quyết định
    */
   private calculateDecisionConfidence(insight: MarketInsight, action: Action): number {
-    let confidence = insight.confidence;
+    let confidence = insight.sentiment.confidence;
     
     // Điều chỉnh độ tin cậy dựa trên sự đồng thuận giữa xu hướng và hành động
     if (
@@ -247,8 +247,9 @@ export class MultiAgentSystem {
       confidence -= 20; // Giảm mạnh độ tin cậy khi hành động ngược với xu hướng
     }
     
-    // Điều chỉnh theo độ mạnh của xu hướng
-    confidence += (insight.technicalAnalysis.strength - 50) * 0.2;
+    // Điều chỉnh theo tín hiệu kỹ thuật cơ bản (dựa trên MA50 so với MA200)
+    const trendStrength = insight.indicators.ma50 > insight.indicators.ma200 ? 10 : insight.indicators.ma50 < insight.indicators.ma200 ? -10 : 0;
+    confidence += trendStrength;
     
     // Giới hạn trong khoảng 0-100
     return Math.min(100, Math.max(0, confidence));
