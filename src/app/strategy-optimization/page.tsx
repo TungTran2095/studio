@@ -23,7 +23,6 @@ import {
   Activity,
   LineChart,
   PieChart,
-  Scatter,
   Calendar,
   Clock,
   DollarSign,

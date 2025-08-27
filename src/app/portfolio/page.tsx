@@ -25,16 +25,20 @@ import Link from "next/link";
 
 export default function PortfolioPage() {
   const { 
-    assets, 
-    trades, 
+    accounts,
+    activeAccountId,
     apiKey, 
     apiSecret, 
     isTestnet, 
-    isConnected, 
-    setAssets, 
-    setTrades, 
-    setIsConnected 
+    updateAccount
   } = useAssetStore();
+  
+  // Get active account data
+  const activeAccount = accounts.find(acc => acc.id === activeAccountId);
+  const assets = activeAccount?.assets || [];
+  const trades = activeAccount?.trades || [];
+  const isConnected = activeAccount?.isConnected || false;
+  
   const [isLoading, setIsLoading] = useState(false);
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [btcBalance, setBtcBalance] = useState(0);
@@ -61,7 +65,7 @@ export default function PortfolioPage() {
 
   // Hàm làm mới dữ liệu
   const refreshData = async () => {
-    if (!apiKey || !apiSecret) {
+    if (!apiKey || !apiSecret || !activeAccountId) {
       toast({ 
         title: "Không có thông tin đăng nhập", 
         description: "Vui lòng cung cấp API key và secret ở phần Binance Account", 
@@ -74,9 +78,12 @@ export default function PortfolioPage() {
     try {
       // Lấy thông tin tài sản
       const assetResult = await fetchBinanceAssets({ apiKey, apiSecret, isTestnet });
-      if (assetResult.success && assetResult.assets) {
-        setAssets(assetResult.assets);
-        setIsConnected(true);
+      if (assetResult.success && assetResult.data) {
+        // Update the active account with new assets
+        updateAccount(activeAccountId, { 
+          assets: assetResult.data,
+          isConnected: true 
+        });
         
         // Lấy lịch sử giao dịch cho BTC
         const tradeResult = await fetchBinanceTradeHistory({ 
@@ -87,8 +94,11 @@ export default function PortfolioPage() {
           limit: 100 
         });
         
-        if (tradeResult.success && tradeResult.trades) {
-          setTrades(tradeResult.trades);
+        if (tradeResult.success && tradeResult.data) {
+          // Update the active account with new trades
+          updateAccount(activeAccountId, { 
+            trades: tradeResult.data 
+          });
         }
 
         toast({ title: "Cập nhật thành công", description: "Dữ liệu tài sản đã được cập nhật." });
@@ -123,15 +133,18 @@ export default function PortfolioPage() {
     let winCount = 0;
 
     trades.forEach(trade => {
+      const price = parseFloat(trade.price);
+      const quantity = parseFloat(trade.qty);
+      
       if (trade.isBuyer) {
-        totalBuys += (trade.price * trade.quantity);
-        buyVolume += trade.quantity;
+        totalBuys += (price * quantity);
+        buyVolume += quantity;
       } else {
-        totalSells += (trade.price * trade.quantity);
-        sellVolume += trade.quantity;
+        totalSells += (price * quantity);
+        sellVolume += quantity;
 
         // Nếu giá bán > giá mua trung bình, đó là lời
-        if (trade.price > (totalBuys / buyVolume)) {
+        if (price > (totalBuys / buyVolume)) {
           winCount++;
         }
       }
@@ -427,9 +440,9 @@ export default function PortfolioPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium">{trade.quantity.toLocaleString('vi-VN', { maximumFractionDigits: 8 })}</p>
+                          <p className="font-medium">{parseFloat(trade.qty).toLocaleString('vi-VN', { maximumFractionDigits: 8 })}</p>
                           <p className="text-xs text-muted-foreground">
-                            ${(trade.price * trade.quantity).toLocaleString('vi-VN', { maximumFractionDigits: 2 })}
+                            ${(parseFloat(trade.price) * parseFloat(trade.qty)).toLocaleString('vi-VN', { maximumFractionDigits: 2 })}
                           </p>
                         </div>
                       </div>

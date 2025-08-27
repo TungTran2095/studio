@@ -50,9 +50,16 @@ export async function POST(request: NextRequest) {
     const marketTrend = historicalPrices['BTC'] ? detectTrend(historicalPrices['BTC']) : 'sideways';
     
     // Tính toán các chỉ số rủi ro
+    const pricesAsNumbers = Object.fromEntries(
+      Object.entries(historicalPrices).map(([symbol, priceData]) => [
+        symbol,
+        priceData.prices || []
+      ])
+    );
+    
     const riskMetrics = await calculatePortfolioRisk(
       assets as Asset[],
-      historicalPrices,
+      pricesAsNumbers,
       marketData
     );
     

@@ -208,7 +208,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
   useEffect(() => {
     if (accounts.length === 0) {
       fetchAccountsFromSupabase().then(accs => {
-        accs.forEach(acc => {
+        accs.forEach((acc: BinanceAccount) => {
           addAccount({
             name: acc.name,
             apiKey: acc.apiKey,

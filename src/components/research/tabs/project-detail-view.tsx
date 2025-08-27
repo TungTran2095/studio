@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MonteCarloHistogram from '@/components/MonteCarloHistogram';
 import MonteCarloProfitSimulation from '@/components/MonteCarloProfitSimulation';
+import { useToast } from '@/hooks/use-toast';
 
 
 // Helper functions để tạo text signal dựa trên chiến lược
@@ -314,7 +315,6 @@ import { TrainingProgressModal } from '../training-progress-modal';
 import { ModelPerformanceDisplay } from '../model-performance-display';
 import { PriceChart } from '../price-chart';
 import { format } from 'date-fns';
-import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase-client';
 import { ProjectBotsTab } from './project-bots';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -5639,6 +5639,7 @@ function BacktestResultDetail({ results }: { results: any }) {
 }
 
 export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps) {
+  const { toast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(true);

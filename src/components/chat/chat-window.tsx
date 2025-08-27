@@ -39,12 +39,17 @@ export const ChatWindow: FC<ChatWindowProps> = ({ isExpanded, onToggle }) => {
   const { toast } = useToast();
   
   // Use credentials from the Zustand store
-  const { apiKey, apiSecret, isTestnet, isConnected } = useAssetStore(state => ({
+  const { apiKey, apiSecret, isTestnet, accounts, activeAccountId } = useAssetStore(state => ({
     apiKey: state.apiKey,
     apiSecret: state.apiSecret,
     isTestnet: state.isTestnet,
-    isConnected: state.isConnected, // Get connection status
+    accounts: state.accounts,
+    activeAccountId: state.activeAccountId,
   }));
+
+  // Derive connection status from active account
+  const activeAccount = accounts.find(acc => acc.id === activeAccountId);
+  const isConnected = activeAccount?.isConnected || false;
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
