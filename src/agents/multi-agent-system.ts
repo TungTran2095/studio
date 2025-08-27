@@ -259,37 +259,34 @@ export class MultiAgentSystem {
    * Tạo lý do cho quyết định
    */
   private generateReasoning(insight: MarketInsight, action: Action): string {
-    const { marketCondition, technicalAnalysis, fundamentalAnalysis, sentimentAnalysis } = insight;
+    const { marketCondition, indicators, sentiment, patterns, supportLevels, resistanceLevels } = insight;
     
     let reasoning = `Quyết định ${action.type} ${action.symbol} dựa trên các yếu tố sau:\n`;
     
-    // Thêm thông tin về điều kiện thị trường
+    // Điều kiện thị trường tổng quan
     reasoning += `- Điều kiện thị trường: ${this.translateMarketCondition(marketCondition)}\n`;
     
-    // Thêm thông tin về xu hướng kỹ thuật
-    reasoning += `- Phân tích kỹ thuật: Xu hướng ${this.translateTrend(technicalAnalysis.trend)} với độ mạnh ${technicalAnalysis.strength}/100\n`;
+    // Tóm tắt tín hiệu kỹ thuật cơ bản
+    const trendByMA = indicators.ma50 > indicators.ma200 ? 'bullish' : indicators.ma50 < indicators.ma200 ? 'bearish' : 'neutral';
+    const trendByMACD = indicators.macd.histogram > 0 ? 'bullish' : indicators.macd.histogram < 0 ? 'bearish' : 'neutral';
+    reasoning += `- Phân tích kỹ thuật: MA50 vs MA200 ${this.translateTrend(trendByMA as any)}, MACD ${this.translateTrend(trendByMACD as any)}, RSI=${indicators.rsi.toFixed(2)}\n`;
     
-    // Thêm thông tin về các mẫu hình được phát hiện
-    if (technicalAnalysis.patterns.length > 0) {
-      reasoning += `- Mẫu hình được phát hiện: ${technicalAnalysis.patterns.map(p => p.name).join(', ')}\n`;
+    // Mẫu hình giá (nếu có)
+    if (patterns && patterns.length > 0) {
+      reasoning += `- Mẫu hình phát hiện: ${patterns.join(', ')}\n`;
     }
     
-    // Thêm thông tin về các mức hỗ trợ/kháng cự
-    if (technicalAnalysis.keyLevels.support.length > 0) {
-      reasoning += `- Mức hỗ trợ gần nhất: ${technicalAnalysis.keyLevels.support[0]}\n`;
+    // Mức hỗ trợ/kháng cự
+    if (supportLevels && supportLevels.length > 0) {
+      reasoning += `- Mức hỗ trợ gần: ${supportLevels[0]}\n`;
     }
-    if (technicalAnalysis.keyLevels.resistance.length > 0) {
-      reasoning += `- Mức kháng cự gần nhất: ${technicalAnalysis.keyLevels.resistance[0]}\n`;
-    }
-    
-    // Thêm thông tin về phân tích cơ bản
-    if (fundamentalAnalysis) {
-      reasoning += `- Phân tích cơ bản: Vốn hóa thị trường ${this.formatNumber(fundamentalAnalysis.marketCap)} USD, khối lượng 24h ${this.formatNumber(fundamentalAnalysis.volume24h)} USD\n`;
+    if (resistanceLevels && resistanceLevels.length > 0) {
+      reasoning += `- Mức kháng cự gần: ${resistanceLevels[0]}\n`;
     }
     
-    // Thêm thông tin về phân tích tâm lý
-    if (sentimentAnalysis) {
-      reasoning += `- Phân tích tâm lý: Tâm lý thị trường ${this.translateSentiment(sentimentAnalysis.overallSentiment)}, điểm cảm xúc ${sentimentAnalysis.sentimentScore.toFixed(1)}\n`;
+    // Tâm lý thị trường
+    if (sentiment) {
+      reasoning += `- Tâm lý thị trường: ${this.translateSentiment(sentiment.overall)}, độ tin cậy ${sentiment.confidence}\n`;
     }
     
     // Thêm lý do cụ thể cho hành động
