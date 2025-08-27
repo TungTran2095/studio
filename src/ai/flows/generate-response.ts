@@ -455,7 +455,7 @@ Vui lòng kiểm tra lại thông tin hoặc thử lại sau.`
       
       try {
         // Trích xuất symbol cụ thể nếu người dùng hỏi về một tài sản cụ thể
-        const assetSymbol = extractAssetSymbolFromMessage(input.message);
+        const assetSymbol = await extractAssetSymbolFromMessage(input.message);
         
         // Tạo báo cáo số dư
         const balanceReport = await generateBalanceReport({
