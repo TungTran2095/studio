@@ -3,7 +3,4 @@
  */
 
 export * from './market-analysis-agent';
-export * from './risk-management-agent';
-export * from './execution-agent';
-export * from './research-agent';
-export * from './multi-agent-system'; 
+export * from './multi-agent-system';
