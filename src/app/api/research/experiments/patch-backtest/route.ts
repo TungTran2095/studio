@@ -109,7 +109,7 @@ interface PatchResult {
   };
 }
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   let experimentId: string = '';
   
   try {
@@ -205,7 +205,7 @@ export async function POST(req: Request) {
     // Gọi Python script cho patch backtest
     const pythonScript = path.join(process.cwd(), 'scripts', 'backtest_strategies', 'patch_backtest_runner.py');
     
-    return new Promise((resolve) => {
+    return new Promise<Response>((resolve) => {
       const pythonProcess = spawn('python', [
         pythonScript,
         '--experiment_id', experimentId,
