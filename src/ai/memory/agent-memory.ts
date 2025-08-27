@@ -46,13 +46,13 @@ export class AgentMemory {
   private conversationHistory: ConversationRecord[] = [];
   private symbolSpecificMemory: Record<string, ExperienceRecord[]> = {};
 
-  constructor(config: MemoryConfig) {
-    this.config = {
+  constructor(config: Partial<MemoryConfig> = {}) {
+    const defaults: MemoryConfig = {
       experienceCapacity: 1000,
       longTermMemoryEnabled: true,
-      maxConversationHistoryLength: 50,
-      ...config
+      maxConversationHistoryLength: 50
     };
+    this.config = Object.assign({}, defaults, config);
   }
 
   /**
