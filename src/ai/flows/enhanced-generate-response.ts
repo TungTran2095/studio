@@ -208,23 +208,7 @@ export async function generateEnhancedResponse(input: EnhancedGenerateResponseIn
     // Nếu không phải câu hỏi về giá, xử lý bằng AI thông thường
     console.log('🤖 [Enhanced] Using AI for general response');
     
-    const aiResponse = await ai.generate({
-      prompt: `
-Bạn là một chuyên gia phân tích cryptocurrency. Hãy trả lời câu hỏi sau một cách chuyên nghiệp và hữu ích:
-
-Câu hỏi: ${input.message}
-
-Lưu ý:
-- Sử dụng tiếng Việt
-- Cung cấp thông tin chính xác và cập nhật
-- Đưa ra lời khuyên thận trọng về đầu tư
-- Nếu câu hỏi liên quan đến giá cả, hãy đề xuất người dùng hỏi cụ thể về từng loại tiền
-      `,
-      config: {
-        temperature: 0.7,
-        maxOutputTokens: 500
-      }
-    });
+    const aiResponse = await ai.generateResponse();
 
     const processingTime = Date.now() - startTime;
     console.log(`✅ [Enhanced] Response generated in ${processingTime}ms`);
