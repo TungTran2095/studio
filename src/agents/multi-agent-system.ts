@@ -129,8 +129,8 @@ export class MultiAgentSystem {
       this.memory.addExperience({
         action: action.type,
         symbol: action.symbol,
-        price: state.currentPrice,
-        quantity: typeof action.size === 'number' ? action.size : '0',
+        price: marketInsight.currentPrice,
+        quantity: typeof action.amount === 'number' ? action.amount : '0',
         reasoning: decision.reasoning,
         metadata: {
           confidence,
