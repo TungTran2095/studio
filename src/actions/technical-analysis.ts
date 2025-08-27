@@ -5,8 +5,6 @@
  */
 
 import { createSafeBinanceClient } from './binance';
-import type { IndicatorsData, IndicatorResult, TechnicalIndicatorsInput } from '@/types/technical';
-import { initializeBinanceClient } from './binance';
 import { Spot } from '@binance/connector';
 
 interface TechnicalIndicatorsInput {
