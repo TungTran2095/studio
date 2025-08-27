@@ -512,40 +512,41 @@ export async function getBacktestResultForAI(
   }
   
   // Tạo văn bản phân tích
-  let result = `📊 *Kết quả Backtesting ${data.symbol}* (${data.timeframe})\n\n`;
+  const s = data.summary;
+  let result = `📊 *Kết quả Backtesting ${s.symbol}* (${s.timeframe})\n\n`;
   result += `Chiến lược: ${strategy.toUpperCase()}\n`;
-  result += `Thời gian: ${new Date(data.startDate).toLocaleDateString('vi-VN')} - ${new Date(data.endDate).toLocaleDateString('vi-VN')}\n\n`;
+  result += `Thời gian: ${new Date(s.startDate).toLocaleDateString('vi-VN')} - ${new Date(s.endDate).toLocaleDateString('vi-VN')}\n\n`;
   
   // Thêm thông tin tổng kết
   result += `💰 *Kết quả tài chính*:\n`;
-  result += `- Vốn ban đầu: $${data.initialCapital.toLocaleString('vi-VN')}\n`;
-  result += `- Vốn cuối cùng: $${data.finalCapital.toLocaleString('vi-VN')}\n`;
-  result += `- Lợi nhuận: $${data.profitLoss.toLocaleString('vi-VN')} (${data.profitLossPercentage.toFixed(2)}%)\n`;
-  result += `- Drawdown tối đa: $${data.maxDrawdown.toLocaleString('vi-VN')} (${data.maxDrawdownPercentage.toFixed(2)}%)\n\n`;
+  result += `- Vốn ban đầu: $${s.initialCapital.toLocaleString('vi-VN')}\n`;
+  result += `- Vốn cuối cùng: $${s.finalCapital.toLocaleString('vi-VN')}\n`;
+  result += `- Lợi nhuận: $${s.profitLoss.toLocaleString('vi-VN')} (${s.profitLossPercentage.toFixed(2)}%)\n`;
+  result += `- Drawdown tối đa: $${s.maxDrawdown.toLocaleString('vi-VN')} (${s.maxDrawdownPercentage.toFixed(2)}%)\n\n`;
   
   // Thêm thông tin giao dịch
   result += `🔄 *Thống kê giao dịch*:\n`;
-  result += `- Tổng số giao dịch: ${data.totalTrades}\n`;
-  result += `- Giao dịch thắng: ${data.winningTrades} (${(data.winRate * 100).toFixed(2)}%)\n`;
-  result += `- Giao dịch thua: ${data.losingTrades}\n`;
-  result += `- Lợi nhuận trung bình mỗi giao dịch thắng: $${data.averageWin.toLocaleString('vi-VN')}\n`;
-  result += `- Thua lỗ trung bình mỗi giao dịch thua: $${data.averageLoss.toLocaleString('vi-VN')}\n`;
-  result += `- Tỷ lệ Sharpe: ${data.sharpeRatio.toFixed(2)}\n\n`;
+  result += `- Tổng số giao dịch: ${s.totalTrades}\n`;
+  result += `- Giao dịch thắng: ${s.winningTrades} (${(s.winRate).toFixed(2)}%)\n`;
+  result += `- Giao dịch thua: ${s.losingTrades}\n`;
+  result += `- Lợi nhuận trung bình mỗi giao dịch thắng: $${s.averageWin.toLocaleString('vi-VN')}\n`;
+  result += `- Thua lỗ trung bình mỗi giao dịch thua: $${s.averageLoss.toLocaleString('vi-VN')}\n`;
+  result += `- Tỷ lệ Sharpe: ${s.sharpeRatio.toFixed(2)}\n\n`;
   
   // Thêm đánh giá tổng thể
   result += `💡 *Đánh giá*: `;
-  if (data.profitLossPercentage > 20) {
-    result += `Chiến lược hoạt động rất tốt trong giai đoạn này với lợi nhuận ${data.profitLossPercentage.toFixed(2)}%.`;
-  } else if (data.profitLossPercentage > 0) {
-    result += `Chiến lược có lợi nhuận khiêm tốn ${data.profitLossPercentage.toFixed(2)}%.`;
+  if (s.profitLossPercentage > 20) {
+    result += `Chiến lược hoạt động rất tốt trong giai đoạn này với lợi nhuận ${s.profitLossPercentage.toFixed(2)}%.`;
+  } else if (s.profitLossPercentage > 0) {
+    result += `Chiến lược có lợi nhuận khiêm tốn ${s.profitLossPercentage.toFixed(2)}%.`;
   } else {
-    result += `Chiến lược không hiệu quả trong giai đoạn này, thua lỗ ${Math.abs(data.profitLossPercentage).toFixed(2)}%.`;
+    result += `Chiến lược không hiệu quả trong giai đoạn này, thua lỗ ${Math.abs(s.profitLossPercentage).toFixed(2)}%.`;
   }
   
-  if (data.sharpeRatio > 1) {
-    result += ` Tỷ lệ Sharpe ${data.sharpeRatio.toFixed(2)} cho thấy hiệu suất tốt so với rủi ro.`;
+  if (s.sharpeRatio > 1) {
+    result += ` Tỷ lệ Sharpe ${s.sharpeRatio.toFixed(2)} cho thấy hiệu suất tốt so với rủi ro.`;
   } else {
-    result += ` Tỷ lệ Sharpe ${data.sharpeRatio.toFixed(2)} cho thấy hiệu suất chưa tương xứng với rủi ro.`;
+    result += ` Tỷ lệ Sharpe ${s.sharpeRatio.toFixed(2)} cho thấy hiệu suất chưa tương xứng với rủi ro.`;
   }
   
   return result;
