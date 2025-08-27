@@ -319,7 +319,7 @@ Kết quả dự kiến: ${decision.expectedOutcome}`;
       try {
         const tool = toolManager.getTool(toolName);
         if (tool) {
-          results[toolName] = await tool.execute(message, this.context, entities);
+          results[toolName] = await tool.execute(message, this.context);
         }
       } catch (error: any) {
         console.error(`[YinsenAgent] Lỗi khi sử dụng công cụ ${toolName}:`, error);
