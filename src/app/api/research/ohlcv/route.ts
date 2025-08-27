@@ -180,7 +180,7 @@ export async function POST(request: Request) {
     const aggregatedData = timeframe === '1m' ? data : aggregateOHLCV(data, timeframe);
 
     // Format data for response
-    const ohlcv = aggregatedData.map(row => ({
+    const ohlcv = aggregatedData.map((row: any) => ({
       timestamp: new Date(row.open_time).getTime(),
       open: parseFloat(row.open),
       high: parseFloat(row.high),
