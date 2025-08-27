@@ -1,16 +1,34 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { calculateMA, calculateRSI, calculateMACD } from '@/lib/indicators';
 import { calculateReturns, calculateSharpeRatio, calculateMaxDrawdown } from '@/lib/performance';
 
 // Khởi tạo Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Only create Supabase client if environment variables are available
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 export async function POST(req: Request) {
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
+      return NextResponse.json(
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+          success: false
+        },
+        { status: 503 }
+      );
+    }
+
     const { experimentId, config } = await req.json();
     
     // Lấy dữ liệu OHLCV từ Supabase
@@ -81,8 +99,8 @@ export async function POST(req: Request) {
     const sharpeRatio = calculateSharpeRatio(returns);
     const maxDrawdown = calculateMaxDrawdown(equity);
     const totalTrades = trades.length;
-    const winningTrades = trades.filter(t => t.type === 'sell' && t.price > trades[trades.indexOf(t)-1].price).length;
-    const winRate = (winningTrades / totalTrades) * 100;
+    const winningTrades = trades.filter(t => t.type === 'sell' && t.price > trades[trades.indexOf(t)-1]?.price).length;
+    const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
 
     // Cập nhật kết quả vào database
     const { error: updateError } = await supabase
@@ -125,8 +143,8 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('Backtest error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to execute backtest' },
+      { error: 'Backtest failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
-} 
+}

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Only create Supabase client if environment variables are available
+const supabase = supabaseUrl && supabaseServiceKey 
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null;
 
 // Mock experiment runners - trong thực tế sẽ integrate với Python backend
 class ExperimentRunner {
@@ -318,6 +322,19 @@ class ExperimentRunner {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
+      return NextResponse.json(
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required',
+          success: false
+        },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
     const { experiment_id } = body;
 

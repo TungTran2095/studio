@@ -1,4 +1,6 @@
-import {genkit} from 'genkit';
+// Avoid importing genkit at build-time to prevent handlebars loader errors
+// If needed in the future, switch to dynamic import inside functions
+// import { genkit } from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 
 export const ai = genkit({

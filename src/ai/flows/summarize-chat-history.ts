@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/ai-instance';
-import {z} from 'genkit';
+import { z } from 'zod';
 
 const SummarizeChatHistoryInputSchema = z.object({
   chatHistory: z

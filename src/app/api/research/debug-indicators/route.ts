@@ -1,13 +1,30 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Khởi tạo Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export async function GET(request: Request) {
+// Only create Supabase client if environment variables are available
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
+
+export async function GET(request: NextRequest) {
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
+      return NextResponse.json(
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+          success: false
+        },
+        { status: 503 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const experimentId = searchParams.get('experiment_id');
 
@@ -72,4 +89,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

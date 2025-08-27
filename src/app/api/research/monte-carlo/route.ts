@@ -1,38 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Only create Supabase client if environment variables are available
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { experiment_id, config } = body;
-
-    // Validate input
-    if (!experiment_id || !config) {
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
       return NextResponse.json(
-        { error: 'Missing required parameters' },
-        { status: 400 }
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+          success: false
+        },
+        { status: 503 }
       );
     }
 
-    // Perform real Monte Carlo analysis using actual market data
-    const results = await performRealMonteCarloAnalysis(config);
+    const body = await request.json();
+    const { experimentId, config } = body;
 
-    // Save results to database
-    await saveMonteCarloResults(experiment_id, config, results);
-
-    return NextResponse.json({
-      success: true,
-      results,
-      experiment_id
+    console.log('🎲 [Monte Carlo] Starting analysis:', {
+      experimentId,
+      config: config ? 'provided' : 'not provided'
     });
 
+    try {
+      // Perform Monte Carlo analysis
+      const results = await performRealMonteCarloAnalysis(config);
+      
+      // Save results to database
+      await saveMonteCarloResults(experimentId, config, results);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Monte Carlo analysis completed successfully',
+        results
+      });
+    } catch (error) {
+      console.error('❌ [Monte Carlo] Analysis error:', error);
+      return NextResponse.json(
+        { error: 'Monte Carlo analysis failed', details: error instanceof Error ? error.message : 'Unknown error' },
+        { status: 500 }
+      );
+    }
   } catch (error) {
-    console.error('Monte Carlo analysis error:', error);
+    console.error('❌ [Monte Carlo] API error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -99,6 +120,11 @@ async function performRealMonteCarloAnalysis(config: any) {
 }
 
 async function fetchHistoricalData(symbols: string[], startDate?: string, endDate?: string) {
+  if (!supabase) {
+    console.error('Supabase client not available for fetching historical data');
+    return {};
+  }
+
   const historicalData: any = {};
   
   for (const symbol of symbols) {
@@ -133,7 +159,7 @@ async function fetchHistoricalData(symbols: string[], startDate?: string, endDat
       console.error(`Error processing ${symbol}:`, error);
     }
   }
-
+  
   return historicalData;
 }
 
@@ -144,36 +170,20 @@ function calculateMarketStatistics(historicalData: any) {
     const prices = (data as any[]).map(d => d.price);
     const returns = [];
     
-    // Calculate daily returns
     for (let i = 1; i < prices.length; i++) {
-      const dailyReturn = (prices[i] - prices[i-1]) / prices[i-1];
-      returns.push(dailyReturn);
+      returns.push((prices[i] - prices[i-1]) / prices[i-1]);
     }
     
-    // Calculate statistics
-    const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-    const variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length;
-    const volatility = Math.sqrt(variance);
-    
-    // Annualize (assuming 1-minute data, 1440 minutes per day, 252 trading days)
-    const annualizedReturn = meanReturn * 1440 * 252;
-    const annualizedVolatility = volatility * Math.sqrt(1440 * 252);
+    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+    const std = Math.sqrt(variance);
     
     stats[symbol] = {
-      mean_return: annualizedReturn,
-      volatility: annualizedVolatility,
-      total_returns: returns.length,
-      price_range: {
-        min: Math.min(...prices),
-        max: Math.max(...prices),
-        current: prices[prices.length - 1]
-      },
-      returns_distribution: {
-        mean: meanReturn,
-        std: volatility,
-        skewness: calculateSkewness(returns),
-        kurtosis: calculateKurtosis(returns)
-      }
+      mean_return: mean,
+      volatility: std,
+      skewness: calculateSkewness(returns),
+      kurtosis: calculateKurtosis(returns),
+      data_points: prices.length
     };
   }
   
@@ -205,52 +215,35 @@ async function runMonteCarloSimulations(
   initialCapital: number
 ) {
   const results = [];
-  const symbols = Object.keys(marketStats);
-  
-  console.log(`🎲 Running ${nSimulations} Monte Carlo simulations...`);
   
   for (let sim = 0; sim < nSimulations; sim++) {
-    let portfolioValue = initialCapital;
-    const dailyValues = [portfolioValue];
+    let capital = initialCapital;
+    const dailyValues = [capital];
     
-    // Simulate daily returns for the time horizon
-    for (let day = 0; day < timeHorizonDays; day++) {
-      let dailyReturn = 0;
+    for (let day = 1; day <= timeHorizonDays; day++) {
+      // Generate daily return using market statistics
+      const symbols = Object.keys(marketStats);
+      const randomSymbol = symbols[Math.floor(Math.random() * symbols.length)];
+      const stats = marketStats[randomSymbol];
       
-      // Calculate portfolio return based on market statistics
-      for (const symbol of symbols) {
-        const stats = marketStats[symbol];
-        
-        // Generate random return based on normal distribution
-        const randomReturn = generateNormalRandom(stats.mean_return, stats.volatility);
-        dailyReturn += randomReturn / symbols.length; // Equal weight for simplicity
-      }
+      // Generate random return using normal distribution
+      const dailyReturn = generateNormalRandom(stats.mean_return, stats.volatility);
       
-      // Update portfolio value
-      portfolioValue *= (1 + dailyReturn);
-      dailyValues.push(portfolioValue);
+      capital *= (1 + dailyReturn);
+      dailyValues.push(capital);
     }
     
-    // Calculate simulation metrics
-    const totalReturn = (portfolioValue - initialCapital) / initialCapital;
+    const finalValue = dailyValues[dailyValues.length - 1];
+    const totalReturn = (finalValue - initialCapital) / initialCapital;
     const maxDrawdown = calculateMaxDrawdown(dailyValues);
-    const volatility = calculateVolatility(dailyValues);
-    const sharpeRatio = (totalReturn - 0.02) / volatility; // Assuming 2% risk-free rate
     
     results.push({
       simulation_id: sim,
-      final_value: portfolioValue,
+      final_value: finalValue,
       total_return: totalReturn,
       max_drawdown: maxDrawdown,
-      volatility: volatility,
-      sharpe_ratio: sharpeRatio,
-      equity_curve: dailyValues.slice(0, 50) // Store first 50 points for visualization
+      daily_values: dailyValues
     });
-    
-    // Progress update every 100 simulations
-    if ((sim + 1) % 100 === 0) {
-      console.log(`📈 Completed ${sim + 1}/${nSimulations} simulations`);
-    }
   }
   
   return results;
@@ -268,13 +261,14 @@ function calculateMaxDrawdown(values: number[]): number {
   let maxDrawdown = 0;
   let peak = values[0];
   
-  for (const value of values) {
-    if (value > peak) {
-      peak = value;
-    }
-    const drawdown = (peak - value) / peak;
-    if (drawdown > maxDrawdown) {
-      maxDrawdown = drawdown;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] > peak) {
+      peak = values[i];
+    } else {
+      const drawdown = (peak - values[i]) / peak;
+      if (drawdown > maxDrawdown) {
+        maxDrawdown = drawdown;
+      }
     }
   }
   
@@ -356,6 +350,11 @@ function calculateRiskMetrics(simulationResults: any[], confidenceLevel: number)
 
 async function saveMonteCarloResults(experimentId: string, config: any, results: any) {
   try {
+    if (!supabase) {
+      console.error('Supabase client not available for saving results');
+      return;
+    }
+
     const { data, error } = await supabase
       .from('research_experiments')
       .insert({

@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { WalkForwardService } from '@/lib/trading/walk-forward-service';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Only create Supabase client if environment variables are available
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 export async function POST(request: NextRequest) {
+  // Check if Supabase client is available
+  // Do not hard-fail during build for missing env; runtime service will validate
+
   try {
     const body = await request.json();
     const { experiment_id, config } = body;
@@ -39,7 +46,8 @@ export async function POST(request: NextRequest) {
     });
 
     // Save results to database
-    await saveWalkForwardResults(experiment_id, config, results);
+    const db: SupabaseClient = supabase as SupabaseClient;
+    await saveWalkForwardResults(db, experiment_id, config, results);
 
     return NextResponse.json({
       success: true,
@@ -60,9 +68,9 @@ export async function POST(request: NextRequest) {
 
 // All mock functions have been replaced by WalkForwardService
 
-async function saveWalkForwardResults(experimentId: string, config: any, results: any) {
+async function saveWalkForwardResults(client: SupabaseClient, experimentId: string, config: any, results: any) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('research_experiments')
       .insert({
         experiment_id: experimentId,

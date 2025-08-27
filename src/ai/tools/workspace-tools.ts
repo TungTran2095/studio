@@ -1,4 +1,4 @@
-import { z } from 'genkit';
+import { z } from 'zod';
 
 /**
  * AI Tools for Workspace Market Data Collection

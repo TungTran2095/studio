@@ -1,12 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Only create Supabase client if environment variables are available
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 export async function GET(request: NextRequest) {
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
+      return NextResponse.json(
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+          success: false
+        },
+        { status: 503 }
+      );
+    }
+
+    
   try {
     console.log('📁 [Projects API] GET - Fetching from Supabase database...');
     
@@ -53,12 +71,26 @@ export async function GET(request: NextRequest) {
       error: 'Failed to fetch projects',
       projects: [],
       total: 0
-    }, { status: 500 });
+    }, { status: 500 }    );
   }
 }
 
 export async function POST(request: NextRequest) {
-  try {
+  
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
+      return NextResponse.json(
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+          success: false
+        },
+        { status: 503 }
+      );
+    }
+
+    try {
     const body = await request.json();
     console.log('📁 [Projects API] POST - Creating project in database:', body);
 
@@ -115,6 +147,7 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 
 export async function PUT(request: NextRequest) {
   try {

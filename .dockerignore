@@ -1,0 +1,38 @@
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store
+
+# Next.js
+.next
+out
+
+# Python caches
+__pycache__
+*.py[cod]
+*.egg-info
+
+# VCS
+.git
+.gitignore
+
+# IDE / tooling
+.vscode
+.idx
+.DS_Store
+
+# Local env & secrets
+.env
+.env.*
+!.env.example
+
+# Data / logs
+logs
+results
+data
+*.log
+
+# Misc
+supabase 

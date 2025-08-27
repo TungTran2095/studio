@@ -103,36 +103,32 @@ export interface Database {
 }
 
 
+// Check if environment variables are available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Helper function to validate URL format (moved before usage)
-function isValidUrl(string: string | undefined): string is string {
-  if (!string) return false;
+// Only create Supabase client if environment variables are available
+let supabaseInstance: any = null;
+
+if (supabaseUrl && supabaseAnonKey) {
   try {
-    new URL(string);
-    return true;
-  } catch (_) {
-    return false;
+    // Validate URL format
+    if (!supabaseUrl.startsWith('https://')) {
+      console.error(`Invalid URL in NEXT_PUBLIC_SUPABASE_URL: "${supabaseUrl}"`);
+    } else {
+      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+      console.log('✅ Supabase client initialized successfully');
+    }
+  } catch (error) {
+    console.error('❌ Error creating Supabase client:', error);
   }
-}
-
-let supabaseInstance = null;
-
-if (!supabaseUrl) {
-  console.error('Missing environment variable NEXT_PUBLIC_SUPABASE_URL');
-} else if (!isValidUrl(supabaseUrl)) {
-    console.error(`Invalid URL in NEXT_PUBLIC_SUPABASE_URL: "${supabaseUrl}"`);
-} else if (!supabaseAnonKey) {
-  console.error('Missing environment variable NEXT_PUBLIC_SUPABASE_ANON_KEY');
 } else {
-  try {
-    // Initialize the Supabase client ONLY if URL and Key are valid
-    // Pass the Database generic for type safety
-    supabaseInstance = createClient<Database>(supabaseUrl, supabaseAnonKey);
-    console.log("Supabase client initialized successfully.");
-  } catch (error: any) {
-      console.error('Error initializing Supabase client:', error.message);
+  console.warn('⚠️ Supabase environment variables not available - client not initialized');
+  if (!supabaseUrl) {
+    console.error('Missing environment variable NEXT_PUBLIC_SUPABASE_URL');
+  }
+  if (!supabaseAnonKey) {
+    console.error('Missing environment variable NEXT_PUBLIC_SUPABASE_ANON_KEY');
   }
 }
 

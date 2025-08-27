@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Only create Supabase client if environment variables are available
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 export async function GET(request: NextRequest) {
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
+      return NextResponse.json(
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+          success: false
+        },
+        { status: 503 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '1000');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -39,7 +56,7 @@ export async function GET(request: NextRequest) {
     // Add pagination
     query = query.range(offset, offset + limit - 1);
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
       console.error('❌ Supabase query error:', error);
@@ -81,8 +98,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.log('⚠️ Supabase client not available - environment variables missing');
+      return NextResponse.json(
+        { 
+          error: 'Database connection not available',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+          success: false
+        },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
-    const { sampleSize, trainTestSplit, startDate, endDate } = body;
+    const { sampleSize = 1000, trainTestSplit = 80, startDate, endDate } = body;
 
     console.log('📊 Creating dataset sample:', {
       sampleSize,
@@ -141,26 +171,23 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      dataset: {
-        total: data.length,
+      data: {
         train: trainData,
         test: testData,
         metadata: {
-          sampleSize,
-          trainTestSplit,
-          startDate,
-          endDate,
-          trainSize: trainData.length,
-          testSize: testData.length
+          totalRecords: data.length,
+          trainRecords: trainData.length,
+          testRecords: testData.length,
+          splitRatio: trainTestSplit
         }
       }
     });
 
   } catch (error) {
-    console.error('❌ Dataset creation error:', error);
+    console.error('❌ API error:', error);
     return NextResponse.json(
-      { error: 'Failed to create dataset', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
-} 
+}
