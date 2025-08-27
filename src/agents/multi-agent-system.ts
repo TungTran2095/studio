@@ -324,9 +324,9 @@ export class MultiAgentSystem {
     
     // Xác định khung thời gian dự kiến
     let timeframe: string;
-    if (state.technicalIndicators.bollingerBands.width > 0.05) {
+    if ((state.features.bollingerWidth ?? 0) / (state.features.price || 1) > 0.05) {
       timeframe = 'short'; // Biến động lớn, kết quả nhanh
-    } else if (state.technicalIndicators.macd.histogram > 0 && state.technicalIndicators.macd.histogram < 0.01) {
+    } else if ((state.features.macdHistogram ?? 0) > 0 && (state.features.macdHistogram ?? 0) < 0.01) {
       timeframe = 'long'; // MACD yếu, cần thời gian
     } else {
       timeframe = 'medium'; // Trường hợp mặc định
@@ -350,34 +350,30 @@ export class MultiAgentSystem {
     
     if (action.type === 'BUY') {
       // Nếu RSI thấp, tiềm năng cao hơn (mua ở vùng quá bán)
-      if (state.technicalIndicators.rsi < 30) {
+      if ((state.features.rsi ?? 50) < 30) {
         potential += 20;
       }
       
-      // Nếu MACD cắt lên, tiềm năng cao hơn
-      if (state.technicalIndicators.macd.histogram > 0 && state.technicalIndicators.macd.signal < state.technicalIndicators.macd.line) {
+      // Nếu MACD histogram dương, tiềm năng cao hơn
+      if ((state.features.macdHistogram ?? 0) > 0) {
         potential += 15;
       }
       
-      // Nếu giá gần mức hỗ trợ, tiềm năng cao hơn
-      if (state.currentPrice < state.technicalIndicators.bollingerBands.lower * 1.01) {
-        potential += 15;
-      }
+      // Nếu giá dưới MA200 (gần hỗ trợ dài hạn), tăng tiềm năng
+      if ((state.features.priceToMA200Ratio ?? 1) < 1) potential += 10;
     } else if (action.type === 'SELL') {
       // Nếu RSI cao, tiềm năng cao hơn (bán ở vùng quá mua)
-      if (state.technicalIndicators.rsi > 70) {
+      if ((state.features.rsi ?? 50) > 70) {
         potential += 20;
       }
       
-      // Nếu MACD cắt xuống, tiềm năng cao hơn
-      if (state.technicalIndicators.macd.histogram < 0 && state.technicalIndicators.macd.signal > state.technicalIndicators.macd.line) {
+      // Nếu MACD histogram âm, tiềm năng cao hơn
+      if ((state.features.macdHistogram ?? 0) < 0) {
         potential += 15;
       }
       
-      // Nếu giá gần mức kháng cự, tiềm năng cao hơn
-      if (state.currentPrice > state.technicalIndicators.bollingerBands.upper * 0.99) {
-        potential += 15;
-      }
+      // Nếu giá trên MA200 (gần kháng cự dài hạn), tăng tiềm năng
+      if ((state.features.priceToMA200Ratio ?? 1) > 1.05) potential += 10;
     }
     
     // Giới hạn trong khoảng 0-100
@@ -393,37 +389,33 @@ export class MultiAgentSystem {
     // Mặc định 0-100
     let risk = 50;
     
-    // Rủi ro tăng theo biến động
-    if (state.recentPriceAction.volatility > 0.05) {
+    // Rủi ro tăng theo biến động (xấp xỉ bằng |priceChange24h|)
+    const change = Math.abs((state.features.priceChange24h ?? 0) / 100);
+    if (change > 0.05) {
       risk += 20;
     }
     
     if (action.type === 'BUY') {
       // Nếu RSI đã cao, rủi ro cao hơn
-      if (state.technicalIndicators.rsi > 70) {
+      if ((state.features.rsi ?? 50) > 70) {
         risk += 15;
       }
       
-      // Nếu xu hướng chung đang giảm, rủi ro cao hơn
-      if (state.marketCondition === 'bearish') {
-        risk += 20;
-      }
+      // Nếu MACD âm, rủi ro cao hơn
+      if ((state.features.macdHistogram ?? 0) < 0) risk += 10;
     } else if (action.type === 'SELL') {
       // Nếu RSI đã thấp, rủi ro cao hơn
-      if (state.technicalIndicators.rsi < 30) {
+      if ((state.features.rsi ?? 50) < 30) {
         risk += 15;
       }
       
-      // Nếu xu hướng chung đang tăng, rủi ro cao hơn
-      if (state.marketCondition === 'bullish') {
-        risk += 20;
-      }
+      // Nếu MACD dương, rủi ro cao hơn
+      if ((state.features.macdHistogram ?? 0) > 0) risk += 10;
     }
     
-    // Rủi ro thấp hơn nếu có stop loss
-    if (action.stopLoss) {
-      risk -= 10;
-    }
+    // Có thể giảm rủi ro theo tỉ lệ giá/MA200 gần 1 (ít lệch)
+    const priceToMA = state.features.priceToMA200Ratio ?? 1;
+    if (priceToMA > 0.98 && priceToMA < 1.02) risk -= 5;
     
     // Giới hạn trong khoảng 0-100
     return Math.min(100, Math.max(0, risk));
