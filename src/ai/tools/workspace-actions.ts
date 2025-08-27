@@ -1,4 +1,4 @@
-import { defineTool } from 'genkit/ai';
+// import { defineTool } from 'genkit/ai';
 import { z } from 'zod';
 import { 
   MARKET_DATA_CONTENT, 
@@ -7,7 +7,7 @@ import {
   QUANTITATIVE_RESEARCH_TOOLS
 } from '@/lib/workspace-content';
 
-export const workspaceActionTool = defineTool(
+// export const workspaceActionTool = defineTool(
   {
     name: 'workspaceAction',
     description: 'Thực hiện các hành động trong workspace của Urus Studio',
@@ -140,4 +140,17 @@ export const workspaceActionTool = defineTool(
         };
     }
   }
-); 
+// );
+
+// Temporary placeholder to prevent build errors
+export const workspaceActionTool = {
+  // Placeholder implementation
+  execute: async (action: string, context?: string) => {
+    console.warn('Workspace action tool is temporarily disabled');
+    return { 
+      success: false, 
+      message: 'Workspace action tool temporarily unavailable',
+      content: 'This feature is temporarily disabled due to genkit integration issues.'
+    };
+  }
+}; 

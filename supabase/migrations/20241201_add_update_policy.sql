@@ -10,3 +10,4 @@ WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Enable update for service role" ON "public"."trading_bots"
 FOR UPDATE USING (auth.role() = 'service_role');
 
+

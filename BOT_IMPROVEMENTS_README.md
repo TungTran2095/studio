@@ -107,3 +107,4 @@ Body: { "botId": "uuid", "positionSize": 50 }
 - ✅ Giao diện thân thiện với thanh trượt trực quan
 - ✅ Có thể chỉnh sửa Position Size sau khi tạo bot
 
+

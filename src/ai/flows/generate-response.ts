@@ -277,65 +277,29 @@ export async function generateResponse(input: GenerateResponseInput): Promise<Ge
     return generateResponseFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'generateResponsePrompt',
-  input: {
-    schema: GenerateResponseInputSchema,
-  },
-  output: {
-    schema: GenerateResponseOutputSchema,
-  },
-  prompt: `Bạn là YINSEN, trợ lý giao dịch tiếng Việt chuyên về tiền điện tử. Hãy phản hồi tin nhắn của người dùng bằng tiếng Việt, phân tích lịch sử trò chuyện và dữ liệu thị trường hiện tại.
+// Comment out genkit usage to prevent build errors
+// const prompt = ai.definePrompt({
+//   name: 'generateResponsePrompt',
+//   input: {
+//     schema: GenerateResponseInputSchema,
+//   },
+//   output: {
+//     schema: GenerateResponseOutputSchema,
+//   },
+//   prompt: `...`,
+// });
 
-Khả năng của bạn:
-- Trò chuyện chung và trả lời các câu hỏi về giao dịch, tiền điện tử, hoặc phân tích thị trường
-- Phát hiện khi người dùng muốn đặt lệnh giao dịch
-- Thực hiện phân tích kỹ thuật cho các cặp tiền điện tử
-- Chạy backtesting cho các chiến lược giao dịch khác nhau
-- Tối ưu hóa danh mục đầu tư để cân bằng rủi ro/lợi nhuận
-- Đề xuất chiến lược giao dịch dựa trên tình hình thị trường
-- Phân tích quant trading để đưa ra tín hiệu mua/bán với độ tin cậy cụ thể
-- Khi phát hiện ý định giao dịch, bao gồm dữ liệu có cấu trúc về giao dịch trong phản hồi của bạn
+// export const generateResponseFlow = ai.defineFlow<
+//   typeof GenerateResponseInputSchema,
+//   typeof GenerateResponseOutputSchema
+// >({
+//   name: 'generateResponseFlow',
+//   inputSchema: GenerateResponseInputSchema,
+//   outputSchema: GenerateResponseOutputSchema,
+// }, async (input) => {
 
-${tradingIntentRecognitionPrompt}
-
-${tradingExamples}
-
-${portfolioAnalysisPrompt}
-
-${autoTradingStrategyPrompt}
-
-${ichimokuAnalysisPrompt}
-
-DỮ LIỆU THỊ TRƯỜNG HIỆN TẠI:
-{{marketData}}
-
-Luôn sử dụng dữ liệu thị trường thực tế cung cấp phía trên khi trả lời về giá cả, biến động hoặc tình hình thị trường. 
-
-HƯỚNG DẪN QUAN TRỌNG KHI PHÂN TÍCH ICHIMOKU:
-- KHÔNG BAO GIỜ sử dụng các placeholder như [Giá trị], [Nhận định chi tiết] hoặc bất kỳ dấu ngoặc vuông nào
-- KHÔNG BAO GIỜ hiển thị mẫu có sẵn
-- Nếu bạn không có dữ liệu thực tế, hãy trả lời: "Tôi không thể phân tích Ichimoku cho <coin> vào lúc này do không có đủ dữ liệu. Vui lòng thử lại sau."
-- Nếu bạn có dữ liệu thực tế, hãy sử dụng các giá trị đó
-
-Lịch sử trò chuyện:
-{{#each chatHistory}}
-{{this.role}}: {{this.content}}
-{{/each}}
-
-Tin nhắn của người dùng: {{message}}
-
-Phản hồi:`,
-});
-
-export const generateResponseFlow = ai.defineFlow<
-  typeof GenerateResponseInputSchema,
-  typeof GenerateResponseOutputSchema
->({
-  name: 'generateResponseFlow',
-  inputSchema: GenerateResponseInputSchema,
-  outputSchema: GenerateResponseOutputSchema,
-}, async (input) => {
+// Placeholder implementation to prevent build errors
+export const generateResponseFlow = async (input: GenerateResponseInput): Promise<GenerateResponseOutput> => {
     console.log("[generateResponseFlow] Input received:", {
         message: input.message,
         chatHistoryLength: input.chatHistory?.length,
@@ -641,7 +605,7 @@ Vui lòng cho tôi biết bạn cần hỗ trợ gì?`
         response: `Xin lỗi, tôi không thể xử lý yêu cầu của bạn vào lúc này. Lỗi: ${error instanceof Error ? error.message : 'Không xác định'}`
       };
     }
-});
+};
 
 /**
  * Kiểm tra xem tin nhắn có phải là yêu cầu giao dịch mua/bán không

@@ -80,3 +80,4 @@ node test_bot_start_stop.js
 - Service role key có quyền bypass tất cả RLS policies
 - Chỉ sử dụng service role key trong backend, không expose ra frontend
 
+
