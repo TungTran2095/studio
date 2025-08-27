@@ -137,18 +137,25 @@ export class ReinforcementLearningModel {
       const nextState = exp.metadata.nextMarketState as State;
       
       // Tạo hành động từ kinh nghiệm
+      const actionAmount: number | 'all' | 'half' | 'quarter' =
+        typeof exp.quantity === 'string'
+          ? (['all', 'half', 'quarter'].includes(exp.quantity)
+              ? (exp.quantity as 'all' | 'half' | 'quarter')
+              : parseFloat(exp.quantity))
+          : exp.quantity;
+
       const action: Action = {
         type: exp.action,
         symbol: exp.symbol,
-        amount: exp.quantity,
-        reason: exp.result.reason || '',
+        amount: actionAmount,
+        reason: exp.reasoning || '',
         timestamp: exp.timestamp
       };
       
       // Tạo phần thưởng từ kết quả
       const reward: Reward = {
-        value: exp.result.value || 0,
-        reason: exp.result.reason || '',
+        value: exp.result?.profitLoss ?? 0,
+        reason: exp.reasoning || '',
         timestamp: exp.timestamp
       };
       
