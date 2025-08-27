@@ -21,11 +21,11 @@ export class TimeSync {
       // Nếu đã đồng bộ gần đây, không cần đồng bộ lại
       const now = Date.now();
       if (this.isSynced && (now - this.lastSyncTime) < this.SYNC_INTERVAL_MS) {
-        console.log(`[TimeSync] Đồng bộ thời gian gần đây (${Math.round((now - this.lastSyncTime) / 1000)}s trước), bỏ qua.`);
+        // console.log(`[TimeSync] Đồng bộ thời gian gần đây (${Math.round((now - this.lastSyncTime) / 1000)}s trước), bỏ qua.`);
         return;
       }
 
-      console.log('[TimeSync] Đang đồng bộ thời gian với Binance...');
+              // console.log('[TimeSync] Đang đồng bộ thời gian với Binance...');
       
       // Sử dụng nhiều endpoint thay thế và thêm error handling tốt hơn
       const endpoints = [
@@ -74,19 +74,19 @@ export class TimeSync {
           this.lastSyncTime = now;
           this.retryCount = 0; // Reset số lần thử lại
           
-          console.log(`[TimeSync] Đồng bộ thành công với ${endpoint}. Hiệu số: ${this.timeOffset}ms`);
+          // console.log(`[TimeSync] Đồng bộ thành công với ${endpoint}. Hiệu số: ${this.timeOffset}ms`);
           return; // Thoát nếu thành công
           
         } catch (error) {
           lastError = error as Error;
-          console.warn(`[TimeSync] Lỗi với ${endpoint}:`, error);
+          // console.warn(`[TimeSync] Lỗi với ${endpoint}:`, error);
           continue; // Thử endpoint tiếp theo
         }
       }
       
       // Nếu tất cả endpoints đều thất bại, thử sử dụng World Time API
       try {
-        console.log('[TimeSync] Thử sử dụng World Time API làm fallback...');
+        // console.log('[TimeSync] Thử sử dụng World Time API làm fallback...');
         const worldTimeResponse = await fetch('http://worldtimeapi.org/api/timezone/Etc/UTC', {
           signal: AbortSignal.timeout(3000)
         });
@@ -101,27 +101,27 @@ export class TimeSync {
           this.lastSyncTime = now;
           this.retryCount = 0;
           
-          console.log(`[TimeSync] Đồng bộ thành công với World Time API. Hiệu số: ${this.timeOffset}ms`);
+          // console.log(`[TimeSync] Đồng bộ thành công với World Time API. Hiệu số: ${this.timeOffset}ms`);
           return;
         }
       } catch (worldTimeError) {
-        console.warn('[TimeSync] World Time API cũng thất bại:', worldTimeError);
+        // console.warn('[TimeSync] World Time API cũng thất bại:', worldTimeError);
       }
       
       // Nếu tất cả endpoints đều thất bại
       throw lastError || new Error('Không thể kết nối với bất kỳ endpoint nào');
       
     } catch (error) {
-      console.error('[TimeSync] Lỗi đồng bộ thời gian:', error);
+      // console.error('[TimeSync] Lỗi đồng bộ thời gian:', error);
       // Tăng số lần thử lại
       this.retryCount++;
       
       if (this.retryCount <= this.MAX_RETRY) {
         // Tự động thử lại sau 2 giây
-        console.log(`[TimeSync] Thử lại lần ${this.retryCount}/${this.MAX_RETRY} sau 2 giây...`);
+        // console.log(`[TimeSync] Thử lại lần ${this.retryCount}/${this.MAX_RETRY} sau 2 giây...`);
         setTimeout(() => this.syncWithServer(), 2000);
       } else {
-        console.error(`[TimeSync] Đã thử lại ${this.MAX_RETRY} lần không thành công. Sử dụng offset mặc định.`);
+        // console.error(`[TimeSync] Đã thử lại ${this.MAX_RETRY} lần không thành công. Sử dụng offset mặc định.`);
         // Nếu không thể đồng bộ, sử dụng offset mặc định an toàn
         this.timeOffset = -300000; // 5 phút trước
         this.isSynced = false;
@@ -137,7 +137,8 @@ export class TimeSync {
   static adjustOffset(offsetAdjustment: number): void {
     const oldOffset = this.timeOffset;
     this.timeOffset += offsetAdjustment;
-    console.log(`[TimeSync] Điều chỉnh thủ công timeOffset: ${oldOffset}ms -> ${this.timeOffset}ms (điều chỉnh ${offsetAdjustment}ms)`);
+    // Tắt log để giảm spam
+    // console.log(`[TimeSync] Điều chỉnh thủ công timeOffset: ${oldOffset}ms -> ${this.timeOffset}ms (điều chỉnh ${offsetAdjustment}ms)`);
   }
 
   /**
@@ -147,7 +148,8 @@ export class TimeSync {
   static setOffset(newOffset: number): void {
     const oldOffset = this.timeOffset;
     this.timeOffset = newOffset;
-    console.log(`[TimeSync] Đặt timeOffset: ${oldOffset}ms -> ${this.timeOffset}ms`);
+    // Tắt log để giảm spam
+    // console.log(`[TimeSync] Đặt timeOffset: ${oldOffset}ms -> ${this.timeOffset}ms`);
   }
 
   /**
@@ -210,7 +212,7 @@ export class TimeSync {
           return data.serverTime;
           
         } catch (error) {
-          console.warn(`[TimeSync] Lỗi với ${endpoint}:`, error);
+          // console.warn(`[TimeSync] Lỗi với ${endpoint}:`, error);
           continue;
         }
       }
@@ -228,13 +230,13 @@ export class TimeSync {
           return worldTime;
         }
       } catch (worldTimeError) {
-        console.warn('[TimeSync] World Time API cũng thất bại:', worldTimeError);
+        // console.warn('[TimeSync] World Time API cũng thất bại:', worldTimeError);
       }
       
       throw new Error('Không thể lấy thời gian server từ bất kỳ endpoint nào');
       
     } catch (error) {
-      console.error('[TimeSync] Lỗi khi lấy thời gian server:', error);
+      // console.error('[TimeSync] Lỗi khi lấy thời gian server:', error);
       // Nếu không thể lấy thời gian server, trả về thời gian ước tính
       return this.lastServerTime > 0 ? this.lastServerTime : Date.now() - 240000;
     }

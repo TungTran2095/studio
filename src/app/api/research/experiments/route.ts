@@ -110,10 +110,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ experiment });
     }
 
-    // Get all experiments for project
+    // Get all experiments for project with results field
     let query = supabase
       .from('research_experiments')
-      .select('*')
+      .select(`
+        id, 
+        project_id, 
+        name, 
+        type, 
+        description, 
+        status, 
+        progress, 
+        created_at, 
+        updated_at,
+        results,
+        config
+      `)
       .order('created_at', { ascending: false });
 
     if (projectId) {
@@ -131,6 +143,9 @@ export async function GET(request: NextRequest) {
     if (status) {
       query = query.eq('status', status);
     }
+
+    // Add limit to prevent timeout
+    query = query.limit(100);
 
     const { data: experiments, error } = await query;
 

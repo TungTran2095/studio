@@ -38,7 +38,7 @@ class NewsDataCollector {
    */
   async collectCoinDeskNews(limit: number = 10): Promise<NewsCollectionResult> {
     try {
-      console.log(`🔄 [NewsCollector] Fetching CoinDesk news (limit: ${limit})`);
+              // console.log(`🔄 [NewsCollector] Fetching CoinDesk news (limit: ${limit})`);
       
       // CoinDesk có RSS feed và API miễn phí
       const response = await fetch('https://www.coindesk.com/arc/outboundfeeds/rss/', {
@@ -54,7 +54,7 @@ class NewsDataCollector {
       const rssText = await response.text();
       const articles = this.parseRSSFeed(rssText, 'coindesk', limit);
 
-      console.log(`✅ [NewsCollector] CoinDesk: ${articles.length} articles`);
+              // console.log(`✅ [NewsCollector] CoinDesk: ${articles.length} articles`);
       return {
         success: true,
         articles,
@@ -62,7 +62,7 @@ class NewsDataCollector {
         count: articles.length
       };
     } catch (error) {
-      console.error('❌ [NewsCollector] CoinDesk error:', error);
+              // console.error('❌ [NewsCollector] CoinDesk error:', error);
       return {
         success: false,
         articles: [],
@@ -78,7 +78,8 @@ class NewsDataCollector {
    */
   async collectCoinMarketCapNews(limit: number = 10): Promise<NewsCollectionResult> {
     try {
-      console.log(`🔄 [NewsCollector] Fetching CoinMarketCap news (limit: ${limit})`);
+      // Tắt log để giảm spam - chỉ giữ log lỗi quan trọng
+      // console.log(`🔄 [NewsCollector] Fetching CoinMarketCap news (limit: ${limit})`);
       
       if (!this.coinMarketCapApiKey) {
         throw new Error('CoinMarketCap API key not configured');
@@ -98,7 +99,7 @@ class NewsDataCollector {
       const data = await response.json();
       const articles = this.parseCoinMarketCapNews(data);
 
-      console.log(`✅ [NewsCollector] CoinMarketCap: ${articles.length} articles`);
+      // console.log(`✅ [NewsCollector] CoinMarketCap: ${articles.length} articles`);
       return {
         success: true,
         articles,
@@ -106,7 +107,7 @@ class NewsDataCollector {
         count: articles.length
       };
     } catch (error) {
-      console.error('❌ [NewsCollector] CoinMarketCap error:', error);
+              // console.error('❌ [NewsCollector] CoinMarketCap error:', error);
       return {
         success: false,
         articles: [],
@@ -122,7 +123,8 @@ class NewsDataCollector {
    */
   async collectRedditNews(limit: number = 10): Promise<NewsCollectionResult> {
     try {
-      console.log(`🔄 [NewsCollector] Fetching Reddit news (limit: ${limit})`);
+      // Tắt log để giảm spam - chỉ giữ log lỗi quan trọng
+      // console.log(`🔄 [NewsCollector] Fetching Reddit news (limit: ${limit})`);
       
       const response = await fetch(`https://www.reddit.com/r/cryptocurrency/hot.json?limit=${limit}`, {
         headers: {
@@ -137,7 +139,7 @@ class NewsDataCollector {
       const data = await response.json();
       const articles = this.parseRedditPosts(data);
 
-      console.log(`✅ [NewsCollector] Reddit: ${articles.length} articles`);
+      // console.log(`✅ [NewsCollector] Reddit: ${articles.length} articles`);
       return {
         success: true,
         articles,
@@ -145,7 +147,7 @@ class NewsDataCollector {
         count: articles.length
       };
     } catch (error) {
-      console.error('❌ [NewsCollector] Reddit error:', error);
+              // console.error('❌ [NewsCollector] Reddit error:', error);
       return {
         success: false,
         articles: [],
@@ -161,7 +163,8 @@ class NewsDataCollector {
    */
   async collectCoinTelegraphNews(limit: number = 10): Promise<NewsCollectionResult> {
     try {
-      console.log(`🔄 [NewsCollector] Fetching CoinTelegraph news (limit: ${limit})`);
+      // Tắt log để giảm spam - chỉ giữ log lỗi quan trọng
+      // console.log(`🔄 [NewsCollector] Fetching CoinTelegraph news (limit: ${limit})`);
       
       const response = await fetch('https://cointelegraph.com/rss', {
         headers: {
@@ -176,7 +179,7 @@ class NewsDataCollector {
       const rssText = await response.text();
       const articles = this.parseRSSFeed(rssText, 'cointelegraph', limit);
 
-      console.log(`✅ [NewsCollector] CoinTelegraph: ${articles.length} articles`);
+              // console.log(`✅ [NewsCollector] CoinTelegraph: ${articles.length} articles`);
       return {
         success: true,
         articles,
@@ -184,7 +187,7 @@ class NewsDataCollector {
         count: articles.length
       };
     } catch (error) {
-      console.error('❌ [NewsCollector] CoinTelegraph error:', error);
+              // console.error('❌ [NewsCollector] CoinTelegraph error:', error);
       return {
         success: false,
         articles: [],
@@ -204,7 +207,8 @@ class NewsDataCollector {
     results: NewsCollectionResult[];
     totalCount: number;
   }> {
-    console.log('🚀 [NewsCollector] Starting comprehensive news collection...');
+    // Tắt log để giảm spam - chỉ giữ log lỗi quan trọng
+    // console.log('🚀 [NewsCollector] Starting comprehensive news collection...');
     
     const results = await Promise.allSettled([
       this.collectCoinDeskNews(limitPerSource),
@@ -237,7 +241,7 @@ class NewsDataCollector {
 
     const successfulSources = collectionResults.filter(r => r.success).length;
     
-    console.log(`🎉 [NewsCollector] Collection completed: ${allArticles.length} articles from ${successfulSources}/4 sources`);
+    // console.log(`🎉 [NewsCollector] Collection completed: ${allArticles.length} articles from ${successfulSources}/4 sources`);
     
     return {
       success: successfulSources > 0,
@@ -283,7 +287,7 @@ class NewsDataCollector {
         }
       }
     } catch (error) {
-      console.error(`❌ [NewsCollector] RSS parsing error for ${source}:`, error);
+              // console.error(`❌ [NewsCollector] RSS parsing error for ${source}:`, error);
     }
     
     return articles;
@@ -314,7 +318,8 @@ class NewsDataCollector {
         });
       }
     } catch (error) {
-      console.error('❌ [NewsCollector] CoinMarketCap parsing error:', error);
+      // Tắt log để giảm spam - chỉ giữ log lỗi quan trọng
+      // console.error('❌ [NewsCollector] CoinMarketCap parsing error:', error);
     }
     
     return articles;
@@ -348,7 +353,7 @@ class NewsDataCollector {
         });
       }
     } catch (error) {
-      console.error('❌ [NewsCollector] Reddit parsing error:', error);
+      // console.error('❌ [NewsCollector] Reddit parsing error:', error);
     }
     
     return articles;

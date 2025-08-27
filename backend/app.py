@@ -46,6 +46,38 @@ def api_status():
         "cors_enabled": True
     })
 
+@flask_app.route('/run-bot', methods=['POST'])
+def run_bot():
+    try:
+        data = request.get_json()
+        bot_id = data.get('botId')
+        project_id = data.get('projectId')
+        name = data.get('name')
+        backtest_id = data.get('backtestId')
+        account = data.get('account')
+        config = data.get('config')
+        
+        logger.info(f"Received request to run bot: {name} (ID: {bot_id})")
+        logger.info(f"Project ID: {project_id}, Backtest ID: {backtest_id}")
+        logger.info(f"Account: {account}, Config: {config}")
+        
+        # TODO: Implement actual bot running logic here
+        # For now, just return success response
+        
+        return jsonify({
+            "success": True,
+            "message": f"Bot {name} started successfully",
+            "bot_id": bot_id,
+            "status": "running"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error running bot: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 # FastAPI app for modern API endpoints
 fastapi_app = FastAPI(
     title="Trading Bot Studio API",

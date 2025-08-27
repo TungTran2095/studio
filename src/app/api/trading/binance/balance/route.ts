@@ -18,13 +18,27 @@ export async function POST(req: NextRequest) {
     // Lấy thông tin tài khoản
     const accountInfo = await client.accountInfo();
     
-    // Tìm số dư USDT
+    // Tìm số dư USDT và BTC
     const usdtBalance = accountInfo.balances.find((balance: any) => balance.asset === 'USDT');
+    const btcBalance = accountInfo.balances.find((balance: any) => balance.asset === 'BTC');
+    
     const usdtAmount = usdtBalance ? parseFloat(usdtBalance.free) : 0;
+    const btcAmount = btcBalance ? parseFloat(btcBalance.free) : 0;
+
+    // Không log gì cả - âm thầm check balance
+    const nonZeroBalances = accountInfo.balances
+      .filter((balance: any) => parseFloat(balance.free) > 0)
+      .map((balance: any) => ({
+        asset: balance.asset,
+        free: parseFloat(balance.free),
+        locked: parseFloat(balance.locked)
+      }));
 
     return NextResponse.json({
       USDT: usdtAmount,
-      balances: accountInfo.balances
+      BTC: btcAmount,
+      balances: accountInfo.balances,
+      nonZeroBalances: nonZeroBalances
     });
   } catch (error: any) {
     console.error('Error fetching balance:', error);

@@ -73,8 +73,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const { symbol, timeframe, startTime, endTime } = body;
+    let { symbol, timeframe, startTime, endTime } = await request.json();
 
     console.log('Received request:', { symbol, timeframe, startTime, endTime });
 
@@ -85,6 +84,16 @@ export async function POST(request: Request) {
         { error: 'Missing required parameters' },
         { status: 400 }
       );
+    }
+
+    // Validate time range to prevent extremely large queries
+    const timeRange = endTime - startTime;
+    const maxTimeRange = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+    
+    if (timeRange > maxTimeRange) {
+      console.warn('Time range too large, reducing to 30 days');
+      const adjustedStartTime = endTime - maxTimeRange;
+      startTime = adjustedStartTime;
     }
 
     // Map symbol to table name
@@ -111,20 +120,45 @@ export async function POST(request: Request) {
 
     console.log('Query time range:', { startDate, endDate });
 
-    // Query data from database
-    const { data, error } = await supabase
+    // Query data from database with optimization
+    let { data, error } = await supabase
       .from(tableName)
       .select('open_time, open, high, low, close, volume')
       .gte('open_time', startDate)
       .lte('open_time', endDate)
-      .order('open_time', { ascending: true });
+      .order('open_time', { ascending: true })
+      .limit(10000); // Thêm limit để tránh timeout
 
     if (error) {
       console.error('Database error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch OHLCV data', details: error.message },
-        { status: 500 }
-      );
+      
+      // Nếu bị timeout, thử với limit nhỏ hơn
+      if (error.code === '57014') {
+        console.log('Database timeout detected, trying with smaller limit...');
+        
+        const { data: limitedData, error: limitedError } = await supabase
+          .from(tableName)
+          .select('open_time, open, high, low, close, volume')
+          .gte('open_time', startDate)
+          .lte('open_time', endDate)
+          .order('open_time', { ascending: true })
+          .limit(5000); // Giảm limit xuống 5000
+        
+        if (limitedError) {
+          console.error('Limited query also failed:', limitedError);
+          return NextResponse.json(
+            { error: 'Database timeout - data range too large. Please reduce time range.', details: limitedError.message },
+            { status: 500 }
+          );
+        }
+        
+        data = limitedData;
+      } else {
+        return NextResponse.json(
+          { error: 'Failed to fetch OHLCV data', details: error.message },
+          { status: 500 }
+        );
+      }
     }
 
     if (!data || data.length === 0) {

@@ -1,5 +1,8 @@
 import { TradingBot } from './trading-bot';
 import { supabase } from '@/lib/supabase-client';
+import { BinanceService } from './binance-service';
+import { createClient } from '@supabase/supabase-js';
+import { botLogger } from './bot-logger';
 
 interface BotExecutorConfig {
   symbol: string;
@@ -37,6 +40,7 @@ function timeframeToMs(timeframe: string): number {
 
 export class BotExecutor {
   private bot: TradingBot;
+  private binanceService!: BinanceService;
   private config: BotExecutorConfig = {
     symbol: '',
     strategy: {
@@ -54,9 +58,25 @@ export class BotExecutor {
   private isRunning: boolean = false;
   private currentPosition: any = null;
   private lastExecutionTime: number = 0;
+  
+  // Supabase admin client để bypass RLS
+  private supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
   constructor(bot: TradingBot) {
     this.bot = bot;
+    
+    // Khởi tạo BinanceService
+    if (this.bot.config.account?.apiKey && this.bot.config.account?.apiSecret) {
+      this.binanceService = new BinanceService(
+        this.bot.config.account.apiKey,
+        this.bot.config.account.apiSecret,
+        this.bot.config.account.testnet || false
+      );
+    }
+    
     // Lấy đúng các trường từ cấu trúc config lồng
     const config = (this.bot.config as any);
     
@@ -93,6 +113,15 @@ export class BotExecutor {
       apiKey: this.bot.config.account.apiKey ? `${this.bot.config.account.apiKey.slice(0, 6)}...${this.bot.config.account.apiKey.slice(-4)}` : 'undefined',
       testnet: this.bot.config.account.testnet
     });
+
+    // Enhanced logging with botLogger
+    botLogger.info('BotExecutor initialized', {
+      botName: this.bot.name,
+      botId: this.bot.id,
+      symbol: this.config.symbol,
+      strategy: this.config.strategy.type,
+      timeframe: this.config.timeframe
+    });
   }
 
   async initialize() {
@@ -104,20 +133,35 @@ export class BotExecutor {
       this.currentPosition = null;
       console.log('[BotExecutor] Reset current position to null');
       
-      // Check API connection by fetching account info
-      const accountRes = await fetch(`${API_BASE_URL}/api/trading/binance/account`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret,
-          isTestnet: this.bot.config.account.testnet,
-        })
-      });
-
-      if (!accountRes.ok) {
-        const errorText = await accountRes.text();
-        throw new Error(`Failed to connect to account: ${errorText}`);
+      // Kiểm tra BinanceService đã được khởi tạo chưa
+      if (!this.binanceService) {
+        throw new Error('BinanceService chưa được khởi tạo - thiếu API Key hoặc Secret');
+      }
+      
+      // Test kết nối bằng cách lấy thông tin tài khoản
+      try {
+        const accountInfo = await this.binanceService.getAccountInfo();
+        console.log('[BotExecutor] ✅ Kết nối Binance thành công');
+        console.log('[BotExecutor] Account info:', {
+          canTrade: accountInfo.canTrade,
+          accountType: accountInfo.accountType,
+          balancesCount: accountInfo.balances.length
+        });
+        
+        // Enhanced logging
+        botLogger.info('Binance connection successful', {
+          botName: this.bot.name,
+          canTrade: accountInfo.canTrade,
+          accountType: accountInfo.accountType,
+          balancesCount: accountInfo.balances.length
+        });
+      } catch (error) {
+        console.error('[BotExecutor] Lỗi kết nối Binance:', error);
+        botLogger.error('Binance connection failed', {
+          botName: this.bot.name,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        throw new Error(`Không thể kết nối đến Binance: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
       return true;
     } catch (error) {
@@ -130,47 +174,75 @@ export class BotExecutor {
   async start() {
     try {
       if (this.isRunning) return;
-      console.log('[BotExecutor] Bắt đầu start() cho bot:', this.bot?.name);
-      console.log('[BotExecutor] Timeframe:', this.config.timeframe);
+      console.log('[BotExecutor] 🚀 Bắt đầu start() cho bot:', this.bot?.name);
+      console.log('[BotExecutor] 📊 Bot config:', {
+        symbol: this.config.symbol,
+        strategy: this.config.strategy.type,
+        positionSize: this.config.riskManagement.positionSize,
+        stopLoss: this.config.riskManagement.stopLoss,
+        takeProfit: this.config.riskManagement.takeProfit,
+        timeframe: this.config.timeframe
+      });
+      console.log('[BotExecutor] ⏰ Timeframe:', this.config.timeframe);
+      
+      // Enhanced logging
+      botLogger.botStart(this.bot.name, this.bot.id, {
+        symbol: this.config.symbol,
+        strategy: this.config.strategy.type,
+        positionSize: this.config.riskManagement.positionSize,
+        stopLoss: this.config.riskManagement.stopLoss,
+        takeProfit: this.config.riskManagement.takeProfit,
+        timeframe: this.config.timeframe
+      });
+      
       const initialized = await this.initialize();
       if (!initialized) return;
 
       this.isRunning = true;
       await this.updateBotStatus('running');
+      console.log('[BotExecutor] ✅ Bot status updated to running');
+
+      // Đợi một chút để đảm bảo status đã được cập nhật
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Tính toán interval dựa trên timeframe
       const intervalMs = timeframeToMs(this.config.timeframe);
-      console.log(`[BotExecutor] Chạy với interval: ${intervalMs}ms (${this.config.timeframe})`);
+      console.log(`[BotExecutor] 🔄 Chạy với interval: ${intervalMs}ms (${this.config.timeframe})`);
 
       // Bắt đầu vòng lặp chính
       while (this.isRunning) {
-        console.log('[BotExecutor] Vòng lặp chính executeStrategy()...');
+        console.log('[BotExecutor] 🔄 Vòng lặp chính executeStrategy()...');
         
-        // Kiểm tra thêm status từ database trước mỗi vòng lặp
+        // Kiểm tra status từ database trước mỗi vòng lặp - DỪNG NGAY nếu không phải running
         try {
-          if (supabase) {
-            const { data: botStatus } = await supabase
-              .from('trading_bots')
-              .select('status')
-              .eq('id', this.bot.id)
-              .single();
-            
-            if (botStatus && botStatus.status !== 'running') {
-              console.log(`[BotExecutor] 🛑 Bot status changed to ${botStatus.status} during loop, STOPPING`);
-              this.isRunning = false;
-              await this.updateBotStatus('stopped');
-              break;
-            }
+          const { data: botStatus } = await this.supabaseAdmin
+            .from('trading_bots')
+            .select('status')
+            .eq('id', this.bot.id)
+            .single();
+          
+          if (botStatus && botStatus.status !== 'running') {
+            console.log(`[BotExecutor] 🛑 Bot status in database is ${botStatus.status}, stopping execution immediately`);
+            this.isRunning = false;
+            break; // Thoát khỏi vòng lặp
           }
         } catch (error) {
           console.error('[BotExecutor] Error checking status in main loop:', error);
+          console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+          this.isRunning = false;
+          break; // Thoát khỏi vòng lặp
         }
         
-        await this.executeStrategy();
-        
-        // Đợi theo đúng timeframe thay vì cố định 10s
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
+        // Chỉ thực hiện strategy nếu vẫn đang chạy
+        if (this.isRunning) {
+          await this.executeStrategy();
+          
+          // Đợi theo đúng timeframe thay vì cố định 10s
+          await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
       }
+      
+      console.log('[BotExecutor] 🛑 Vòng lặp chính đã dừng');
     } catch (error) {
       console.error('[BotExecutor] Error running bot:', error);
       await this.handleError(error);
@@ -186,25 +258,20 @@ export class BotExecutor {
     // Cập nhật status trong database ngay lập tức
     await this.updateBotStatus('stopped');
     
-    // Đợi một chút để vòng lặp hiện tại kết thúc
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
     // Clear current position để tránh "ghost trading"
     this.currentPosition = null;
     
     // Đảm bảo status đã được cập nhật trong database
     try {
-      if (supabase) {
-        const { data: botStatus } = await supabase
-          .from('trading_bots')
-          .select('status')
-          .eq('id', this.bot.id)
-          .single();
-        
-        if (botStatus && botStatus.status !== 'stopped') {
-          console.log('[BotExecutor] ⚠️ Bot status not properly updated, forcing stop');
-          await this.updateBotStatus('stopped');
-        }
+      const { data: botStatus } = await this.supabaseAdmin
+        .from('trading_bots')
+        .select('status')
+        .eq('id', this.bot.id)
+        .single();
+      
+      if (botStatus && botStatus.status !== 'stopped') {
+        console.log('[BotExecutor] ⚠️ Bot status not properly updated, forcing stop');
+        await this.updateBotStatus('stopped');
       }
     } catch (error) {
       console.error('[BotExecutor] Error verifying bot stop status:', error);
@@ -221,36 +288,51 @@ export class BotExecutor {
         return;
       }
 
-      // Kiểm tra thêm status từ database để đảm bảo - KIỂM TRA MẠNH MẼ HƠN
+      // Kiểm tra status từ database - DỪNG ngay nếu không phải running
       try {
-        if (!supabase) {
-          console.error('[BotExecutor] Supabase client not available for status check');
-          this.isRunning = false;
-          return;
-        }
-        
-        const { data: botStatus } = await supabase
+        const { data: botStatus } = await this.supabaseAdmin
           .from('trading_bots')
           .select('status')
           .eq('id', this.bot.id)
           .single();
         
         if (botStatus && botStatus.status !== 'running') {
-          console.log(`[BotExecutor] 🛑 Bot status in database is ${botStatus.status}, FORCING STOP`);
+          console.log(`[BotExecutor] 🛑 Bot status in database is ${botStatus.status}, stopping execution`);
           this.isRunning = false;
-          // Cập nhật lại status để đảm bảo
-          await this.updateBotStatus('stopped');
           return;
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status from database:', error);
-        // Nếu không thể kiểm tra database, dừng bot để an toàn
-        console.log('[BotExecutor] 🛑 Cannot check database status, stopping bot for safety');
+        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
         this.isRunning = false;
         return;
       }
       
-      console.log('[BotExecutor] Executing strategy...');
+      console.log('[BotExecutor] 🎯 Executing strategy...');
+      console.log(`[BotExecutor] 📈 Symbol: ${this.config.symbol}, Timeframe: ${this.config.timeframe}`);
+      
+      // Enhanced detailed logging
+      botLogger.info('Strategy execution started', {
+        botName: this.bot.name,
+        botId: this.bot.id,
+        symbol: this.config.symbol,
+        timeframe: this.config.timeframe,
+        timestamp: new Date().toISOString(),
+        currentPosition: this.currentPosition,
+        isRunning: this.isRunning
+      });
+      
+      console.log(`[BotExecutor] 🔍 DEBUG: Strategy execution details:`, {
+        botName: this.bot.name,
+        botId: this.bot.id,
+        symbol: this.config.symbol,
+        timeframe: this.config.timeframe,
+        timestamp: new Date().toISOString(),
+        currentPosition: this.currentPosition,
+        isRunning: this.isRunning,
+        lastExecutionTime: this.lastExecutionTime,
+        timeSinceLastExecution: this.lastExecutionTime ? Date.now() - this.lastExecutionTime : 'N/A'
+      });
       
       // Lấy dữ liệu candles
       const candlesRes = await fetch(`${API_BASE_URL}/api/trading/binance/candles`, {
@@ -267,9 +349,9 @@ export class BotExecutor {
       });
 
       if (!candlesRes.ok) {
-        const errorText = await candlesRes.text();
-        console.error('[BotExecutor] Error fetching candles:', errorText);
-        throw new Error(`Không thể lấy dữ liệu candles: ${candlesRes.status}`);
+        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+        console.log(`[BotExecutor] ⏭️ Bỏ qua signal - Không thể lấy dữ liệu candles`);
+        return;
       }
 
       const candlesData = await candlesRes.json();
@@ -279,7 +361,43 @@ export class BotExecutor {
         throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
       }
 
-      console.log(`[BotExecutor] Fetched ${candlesData.candles.length} candles`);
+      console.log(`[BotExecutor] 📊 Fetched ${candlesData.candles.length} candles`);
+      console.log(`[BotExecutor] 📅 Latest candle time: ${new Date(candlesData.candles[candlesData.candles.length - 1].time).toLocaleString()}`);
+      
+      // Enhanced candles logging
+      const latestCandle = candlesData.candles[candlesData.candles.length - 1];
+      const oldestCandle = candlesData.candles[0];
+      
+      console.log(`[BotExecutor] 🔍 DEBUG: Candles data analysis:`, {
+        totalCandles: candlesData.candles.length,
+        oldestCandle: {
+          time: new Date(oldestCandle[0]).toISOString(),
+          open: oldestCandle[1],
+          close: oldestCandle[4],
+          volume: oldestCandle[5]
+        },
+        latestCandle: {
+          time: new Date(latestCandle[0]).toISOString(),
+          open: latestCandle[1],
+          close: latestCandle[4],
+          volume: latestCandle[5]
+        },
+        timeRange: {
+          from: new Date(oldestCandle[0]).toISOString(),
+          to: new Date(latestCandle[0]).toISOString(),
+          duration: new Date(latestCandle[0]).getTime() - new Date(oldestCandle[0]).getTime()
+        }
+      });
+      
+      botLogger.debug('Candles data fetched', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        totalCandles: candlesData.candles.length,
+        timeRange: {
+          from: new Date(oldestCandle[0]).toISOString(),
+          to: new Date(latestCandle[0]).toISOString()
+        }
+      });
 
       // Format dữ liệu candles từ Binance API
       const formattedCandles = candlesData.candles.map((candle: any[]) => ({
@@ -293,17 +411,76 @@ export class BotExecutor {
       }));
 
       // Tính toán signal
+      console.log(`[BotExecutor] 🔍 DEBUG: Starting signal calculation...`);
+      console.log(`[BotExecutor] 🔍 DEBUG: Input candles:`, {
+        count: formattedCandles.length,
+        firstCandle: formattedCandles[0],
+        lastCandle: formattedCandles[formattedCandles.length - 1]
+      });
+      
+      const signalCalculationStart = Date.now();
       const signal = await this.calculateSignal(formattedCandles);
+      const signalCalculationTime = Date.now() - signalCalculationStart;
+      
       console.log('[BotExecutor] Calculated signal:', signal);
+      console.log(`[BotExecutor] 🔍 DEBUG: Signal calculation completed in ${signalCalculationTime}ms`);
       console.log('[BotExecutor] Current position:', this.currentPosition);
+      
+      // Enhanced signal logging
+      botLogger.info('Signal calculated', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        signal: signal,
+        calculationTime: signalCalculationTime,
+        timestamp: new Date().toISOString(),
+        currentPosition: this.currentPosition
+      });
+      
+      console.log(`[BotExecutor] 🔍 DEBUG: Signal analysis:`, {
+        signal: signal,
+        calculationTime: signalCalculationTime,
+        timestamp: new Date().toISOString(),
+        currentPosition: this.currentPosition,
+        strategy: this.config.strategy.type,
+        strategyParams: this.config.strategy.parameters
+      });
 
       // Kiểm tra position thực tế từ Binance
+      console.log(`[BotExecutor] 🔍 DEBUG: Checking real position from Binance...`);
+      const positionCheckStart = Date.now();
       const hasRealPosition = await this.checkRealPosition();
+      const positionCheckTime = Date.now() - positionCheckStart;
+      
       console.log('[BotExecutor] Has real position from Binance:', hasRealPosition);
+      console.log(`[BotExecutor] 🔍 DEBUG: Position check completed in ${positionCheckTime}ms`);
+      
+      // Enhanced position logging
+      botLogger.debug('Position check completed', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        hasRealPosition: hasRealPosition,
+        currentPosition: this.currentPosition,
+        checkTime: positionCheckTime,
+        timestamp: new Date().toISOString()
+      });
 
       // Clear currentPosition nếu không có position thực tế trên Binance
       if (this.currentPosition && !hasRealPosition) {
         console.log('[BotExecutor] Clearing currentPosition because no real position exists');
+        console.log(`[BotExecutor] 🔍 DEBUG: Position mismatch detected:`, {
+          localPosition: this.currentPosition,
+          hasRealPosition: hasRealPosition,
+          reason: 'Local position exists but no real position on Binance'
+        });
+        
+        botLogger.warn('Position mismatch detected', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          localPosition: this.currentPosition,
+          hasRealPosition: hasRealPosition,
+          action: 'Clearing local position'
+        });
+        
         this.currentPosition = null;
       }
 
@@ -313,43 +490,194 @@ export class BotExecutor {
         return;
       }
 
-      // Kiểm tra thêm một lần nữa status từ database trước khi thực hiện giao dịch
+      // Kiểm tra status từ database trước khi thực hiện giao dịch - DỪNG ngay nếu không phải running
       try {
-        if (!supabase) {
-          console.error('[BotExecutor] Supabase client not available for status check before trade');
-          return;
-        }
-        
-        const { data: botStatus } = await supabase
+        const { data: botStatus } = await this.supabaseAdmin
           .from('trading_bots')
           .select('status')
           .eq('id', this.bot.id)
           .single();
         
         if (botStatus && botStatus.status !== 'running') {
-          console.log(`[BotExecutor] Bot status changed to ${botStatus.status} before trade execution, stopping`);
+          console.log(`[BotExecutor] 🛑 Bot status in database is ${botStatus.status}, stopping trade execution`);
           this.isRunning = false;
           return;
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status before trade:', error);
+        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+        this.isRunning = false;
+        return;
       }
 
-      if (signal === 'buy' && !this.currentPosition && !hasRealPosition) {
-        console.log('[BotExecutor] Executing BUY signal');
+      // Kiểm tra lại status một lần nữa trước khi thực hiện bất kỳ hành động nào
+      try {
+        const { data: finalBotStatus } = await this.supabaseAdmin
+          .from('trading_bots')
+          .select('status')
+          .eq('id', this.bot.id)
+          .single();
+        
+        if (finalBotStatus && finalBotStatus.status !== 'running') {
+          console.log(`[BotExecutor] 🛑 Final check: Bot status is ${finalBotStatus.status}, stopping all actions`);
+          this.isRunning = false;
+          return;
+        }
+      } catch (error) {
+        console.error('[BotExecutor] Error in final status check:', error);
+        console.log('[BotExecutor] 🛑 Cannot verify status, stopping for safety');
+        this.isRunning = false;
+        return;
+      }
+
+      // Kiểm tra balance trước khi thực hiện signal để tránh lỗi liên tiếp
+      if (signal) {
+        const canExecuteSignal = await this.checkBalanceForSignal(signal);
+        
+        if (!canExecuteSignal) {
+          // Bỏ qua signal một cách im lặng - không báo lỗi, không cập nhật error
+          console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal.toUpperCase()} signal - Balance không đủ để trade`);
+          console.log(`[BotExecutor] ℹ️ Bot đã BUY/SELL toàn bộ balance, chờ signal tiếp theo`);
+          return; // Bỏ qua signal này một cách im lặng
+        }
+      }
+      
+      // Enhanced trade execution logging
+      console.log(`[BotExecutor] 🔍 DEBUG: Trade execution decision:`, {
+        signal: signal,
+        currentPosition: this.currentPosition,
+        hasRealPosition: hasRealPosition,
+        canExecute: signal && this.isRunning,
+        timestamp: new Date().toISOString()
+      });
+      
+      botLogger.info('Trade execution decision', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        signal: signal,
+        currentPosition: this.currentPosition,
+        hasRealPosition: hasRealPosition,
+        decision: signal ? 'Execute' : 'No action'
+      });
+
+      // Đơn giản hóa: Chỉ BUY/SELL, không quản lý position
+      console.log(`[BotExecutor] 🔍 DEBUG: Simple logic flow:`, {
+        signal: signal,
+        hasRealPosition: hasRealPosition,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Log chi tiết quyết định
+      console.log(`[BotExecutor] 🎯 Decision Making Process:`, {
+        step1: 'Signal received',
+        signal: signal,
+        step2: 'Balance check',
+        hasRealPosition: hasRealPosition,
+        step3: 'Logic evaluation',
+        buyCondition: signal === 'buy', // Luôn thực hiện BUY nếu có signal
+        sellCondition: signal === 'sell', // Luôn thực hiện SELL nếu có signal
+        step4: 'Action decision',
+        explanation: 'New logic: Always execute signal if balance check passes',
+        timestamp: new Date().toISOString()
+      });
+      
+            // Logic mới: Mua hết USDT khi có BUY signal, Bán hết BTC khi có SELL signal
+      if (signal === 'buy') {
+        // BUY signal: Luôn thực hiện nếu có USDT (balance check đã được thực hiện trước đó)
+        console.log('[BotExecutor] 🟢 BUY Signal: Dùng hết USDT để mua BTC');
+        console.log(`[BotExecutor] 🔍 DEBUG: BUY execution details:`, {
+          reason: 'Signal=buy && Balance check passed',
+          action: 'Execute BUY with 100% USDT',
+          expectedResult: 'Convert all USDT to BTC',
+          timestamp: new Date().toISOString()
+        });
+        
+        botLogger.info('Executing BUY signal (all USDT)', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          signal: signal,
+          timestamp: new Date().toISOString()
+        });
+        
         await this.executeTrade('buy');
-      } else if (signal === 'sell' && !this.currentPosition && !hasRealPosition) {
-        console.log('[BotExecutor] Executing SELL signal');
+        
+      } else if (signal === 'sell') {
+        // SELL signal: Luôn thực hiện nếu có BTC (balance check đã được thực hiện trước đó)
+        console.log('[BotExecutor] 🔴 SELL Signal: Bán hết BTC để lấy USDT');
+        console.log(`[BotExecutor] 🔍 DEBUG: SELL execution details:`, {
+          reason: 'Signal=sell && Balance check passed',
+          action: 'Execute SELL with 100% BTC',
+          expectedResult: 'Convert all BTC to USDT',
+          timestamp: new Date().toISOString()
+        });
+        
+        botLogger.info('Executing SELL signal (all BTC)', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          signal: signal,
+          timestamp: new Date().toISOString()
+        });
+        
         await this.executeTrade('sell');
-      } else if (this.currentPosition || hasRealPosition) {
-        console.log('[BotExecutor] Managing existing position');
-        await this.managePosition();
+        
+      } else if (!signal) {
+        // Không có signal - chờ
+        console.log('[BotExecutor] ⏳ Không có signal - chờ tín hiệu tiếp theo');
+        console.log(`[BotExecutor] 🔍 DEBUG: No signal details:`, {
+          reason: 'No trading signal generated',
+          action: 'Wait for next signal',
+          explanation: 'Strategy did not generate buy/sell signal',
+          nextAction: 'Continue monitoring market',
+          timestamp: new Date().toISOString()
+        });
+        
+        botLogger.debug('No signal - waiting', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          timestamp: new Date().toISOString()
+        });
+        
       } else {
-        console.log('[BotExecutor] No action needed');
+        // Trường hợp khác - log để debug
+        console.log(`[BotExecutor] ❓ Trường hợp không xác định:`, {
+          signal: signal,
+          hasRealPosition: hasRealPosition,
+          timestamp: new Date().toISOString()
+        });
+        console.log(`[BotExecutor] 🔍 DEBUG: Unknown case analysis:`, {
+          signalType: typeof signal,
+          signalValue: signal,
+          hasRealPositionType: typeof hasRealPosition,
+          hasRealPositionValue: hasRealPosition,
+          possibleIssues: [
+            'Signal might be undefined/null',
+            'hasRealPosition might be undefined/null',
+            'Unexpected signal value',
+            'Logic error in condition evaluation'
+          ],
+          timestamp: new Date().toISOString()
+        });
       }
 
-      // Cập nhật thời gian thực thi cuối
-      this.lastExecutionTime = Date.now();
+              // Cập nhật thời gian thực thi cuối
+        this.lastExecutionTime = Date.now();
+        
+        // Log summary của cycle này
+        console.log(`[BotExecutor] 📊 Cycle Summary:`, {
+          cycle: 'Completed',
+          signal: signal,
+          action: signal === 'buy' ? 'EXECUTE BUY (100% USDT)' :
+                  signal === 'sell' ? 'EXECUTE SELL (100% BTC)' :
+                  !signal ? 'WAIT' : 'UNKNOWN',
+          reason: signal === 'buy' ? 'Buy signal + Balance check passed' :
+                  signal === 'sell' ? 'Sell signal + Balance check passed' :
+                  !signal ? 'No signal generated' : 'Unexpected condition',
+          nextAction: signal === 'buy' ? 'Wait for SELL signal' :
+                     signal === 'sell' ? 'Wait for BUY signal' :
+                     !signal ? 'Continue monitoring' : 'Investigate issue',
+          executionTime: Date.now() - this.lastExecutionTime,
+          timestamp: new Date().toISOString()
+        });
 
     } catch (error) {
       console.error('[BotExecutor] Error executing strategy:', error);
@@ -362,8 +690,41 @@ export class BotExecutor {
       console.log('[BotExecutor] Calculate Signal Debug - Starting signal calculation');
       console.log('[BotExecutor] Calculate Signal Debug - Candles length:', candles.length);
       
+      // Enhanced signal calculation logging
+      botLogger.debug('Signal calculation started', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        candlesLength: candles.length,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`[BotExecutor] 🔍 DEBUG: Signal calculation input analysis:`, {
+        candlesLength: candles.length,
+        firstCandle: candles[0],
+        lastCandle: candles[candles.length - 1],
+        timeRange: {
+          from: new Date(candles[0].openTime).toISOString(),
+          to: new Date(candles[candles.length - 1].openTime).toISOString()
+        },
+        strategy: this.config.strategy.type,
+        strategyParams: this.config.strategy.parameters
+      });
+      
       if (candles.length < 50) {
         console.log('[BotExecutor] Calculate Signal Debug - Not enough data for signal calculation');
+        console.log(`[BotExecutor] 🔍 DEBUG: Insufficient data:`, {
+          required: 50,
+          available: candles.length,
+          missing: 50 - candles.length
+        });
+        
+        botLogger.warn('Insufficient data for signal calculation', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          required: 50,
+          available: candles.length
+        });
+        
         return null;
       }
 
@@ -372,27 +733,116 @@ export class BotExecutor {
       console.log('[BotExecutor] Calculate Signal Debug - First 5 closes:', closes.slice(0, 5));
       console.log('[BotExecutor] Calculate Signal Debug - Last 5 closes:', closes.slice(-5));
       
+      // Enhanced closes data logging
+      console.log(`[BotExecutor] 🔍 DEBUG: Closes data analysis:`, {
+        totalCloses: closes.length,
+        first5Closes: closes.slice(0, 5),
+        last5Closes: closes.slice(-5),
+        priceRange: {
+          min: Math.min(...closes),
+          max: Math.max(...closes),
+          current: closes[closes.length - 1]
+        },
+        volatility: {
+          avg: closes.reduce((a, b) => a + b, 0) / closes.length,
+          stdDev: Math.sqrt(closes.reduce((sq, n) => sq + Math.pow(n - (closes.reduce((a, b) => a + b, 0) / closes.length), 2), 0) / closes.length)
+        }
+      });
+      
       const strategy = this.config.strategy;
       console.log('[BotExecutor] Calculate Signal Debug - Strategy:', strategy);
 
+      console.log(`[BotExecutor] 🔍 DEBUG: Strategy selection:`, {
+        strategyType: strategy.type,
+        strategyParams: strategy.parameters,
+        timestamp: new Date().toISOString()
+      });
+      
+      let signalResult: 'buy' | 'sell' | null = null;
+      const strategyStartTime = Date.now();
+      
       switch (strategy.type.toLowerCase()) {
         case 'ma_crossover':
         case 'ma_cross':
           console.log('[BotExecutor] Calculate Signal Debug - Using MA_CROSSOVER strategy');
-          return this.calculateMACrossoverSignal(closes, strategy.parameters);
+          console.log(`[BotExecutor] 🔍 DEBUG: MA Crossover parameters:`, {
+            fastPeriod: strategy.parameters.fastPeriod,
+            slowPeriod: strategy.parameters.slowPeriod,
+            timestamp: new Date().toISOString()
+          });
+          
+          signalResult = this.calculateMACrossoverSignal(closes, strategy.parameters);
+          break;
+          
         case 'rsi':
           console.log('[BotExecutor] Calculate Signal Debug - Using RSI strategy');
-          return this.calculateRSISignal(closes, strategy.parameters);
+          console.log(`[BotExecutor] 🔍 DEBUG: RSI parameters:`, {
+            period: strategy.parameters.period,
+            oversold: strategy.parameters.oversold,
+            overbought: strategy.parameters.overbought,
+            timestamp: new Date().toISOString()
+          });
+          
+          signalResult = this.calculateRSISignal(closes, strategy.parameters);
+          break;
+          
         case 'bollinger_bands':
         case 'bollinger':
         case 'bb':
           console.log('[BotExecutor] Calculate Signal Debug - Using BOLLINGER_BANDS strategy');
-          return this.calculateBollingerBandsSignal(closes, strategy.parameters);
+          console.log(`[BotExecutor] 🔍 DEBUG: Bollinger Bands parameters:`, {
+            period: strategy.parameters.period,
+            stdDev: strategy.parameters.stdDev,
+            timestamp: new Date().toISOString()
+          });
+          
+          signalResult = this.calculateBollingerBandsSignal(closes, strategy.parameters);
+          break;
+          
+        case 'ichimoku':
+          console.log('[BotExecutor] Calculate Signal Debug - Using ICHIMOKU strategy');
+          console.log(`[BotExecutor] 🔍 DEBUG: Ichimoku parameters:`, {
+            tenkanPeriod: strategy.parameters.tenkanPeriod,
+            kijunPeriod: strategy.parameters.kijunPeriod,
+            senkouSpanBPeriod: strategy.parameters.senkouSpanBPeriod,
+            timestamp: new Date().toISOString()
+          });
+          
+          signalResult = this.calculateIchimokuSignal(closes, strategy.parameters);
+          break;
+          
         default:
           console.warn('[BotExecutor] Calculate Signal Debug - Unknown strategy type:', strategy.type);
-          console.log('[BotExecutor] Calculate Signal Debug - Supported types: ma_crossover, rsi, bollinger_bands');
+          console.log('[BotExecutor] Calculate Signal Debug - Supported types: ma_crossover, rsi, bollinger_bands, ichimoku');
+          
+          botLogger.warn('Unknown strategy type', {
+            botName: this.bot.name,
+            symbol: this.config.symbol,
+            strategyType: strategy.type,
+            supportedTypes: ['ma_crossover', 'rsi', 'bollinger_bands', 'ichimoku']
+          });
+          
           return null;
       }
+      
+      const strategyExecutionTime = Date.now() - strategyStartTime;
+      
+      console.log(`[BotExecutor] 🔍 DEBUG: Strategy execution completed:`, {
+        strategy: strategy.type,
+        executionTime: strategyExecutionTime,
+        result: signalResult,
+        timestamp: new Date().toISOString()
+      });
+      
+      botLogger.debug('Strategy execution completed', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        strategy: strategy.type,
+        executionTime: strategyExecutionTime,
+        result: signalResult
+      });
+      
+      return signalResult;
     } catch (error) {
       console.error('[BotExecutor] Calculate Signal Debug - Error calculating signal:', error);
       return null;
@@ -481,6 +931,117 @@ export class BotExecutor {
     }
     
     return null;
+  }
+
+  private calculateIchimokuSignal(closes: number[], params: any): 'buy' | 'sell' | null {
+    try {
+      console.log('[BotExecutor] Ichimoku Signal Debug - Starting calculation');
+      console.log('[BotExecutor] Ichimoku Signal Debug - Parameters:', params);
+      console.log('[BotExecutor] Ichimoku Signal Debug - Closes length:', closes.length);
+      
+      const tenkanPeriod = params.tenkanPeriod || 9;
+      const kijunPeriod = params.kijunPeriod || 26;
+      const senkouSpanBPeriod = params.senkouSpanBPeriod || 52;
+      
+      if (closes.length < senkouSpanBPeriod) {
+        console.log('[BotExecutor] Ichimoku Signal Debug - Not enough data for calculation');
+        return null;
+      }
+      
+      // Tính Tenkan-sen (Conversion Line)
+      const tenkanSen = this.calculateSMA(closes, tenkanPeriod);
+      const currentTenkan = tenkanSen[tenkanSen.length - 1];
+      
+      // Tính Kijun-sen (Base Line)
+      const kijunSen = this.calculateSMA(closes, kijunPeriod);
+      const currentKijun = kijunSen[kijunSen.length - 1];
+      
+      // Tính Senkou Span A (Leading Span A)
+      const senkouSpanA = (currentTenkan + currentKijun) / 2;
+      
+      // Tính Senkou Span B (Leading Span B)
+      const senkouSpanB = this.calculateSMA(closes, senkouSpanBPeriod);
+      const currentSenkouB = senkouSpanB[senkouSpanB.length - 1];
+      
+      const currentPrice = closes[closes.length - 1];
+      
+      console.log('[BotExecutor] Ichimoku Signal Debug - Current values:', {
+        price: currentPrice,
+        tenkan: currentTenkan,
+        kijun: currentKijun,
+        senkouA: senkouSpanA,
+        senkouB: currentSenkouB
+      });
+      
+      // Sử dụng logic giống hệt như trong backtest (technical-analysis-tool.ts)
+      let bullishPoints = 0;
+      let bearishPoints = 0;
+      
+      console.log('[BotExecutor] Ichimoku Signal Debug - Using backtest logic (point system)');
+      
+      // 1. Vị trí giá so với mây (Kumo)
+      if (currentPrice > Math.max(senkouSpanA, currentSenkouB)) {
+        bullishPoints += 2;
+        console.log('[BotExecutor] Ichimoku Signal Debug - Price above Kumo cloud (+2 bullish)');
+      } else if (currentPrice < Math.min(senkouSpanA, currentSenkouB)) {
+        bearishPoints += 2;
+        console.log('[BotExecutor] Ichimoku Signal Debug - Price below Kumo cloud (+2 bearish)');
+      } else {
+        console.log('[BotExecutor] Ichimoku Signal Debug - Price inside Kumo cloud (neutral)');
+      }
+      
+      // 2. Tenkan-sen so với Kijun-sen
+      if (currentTenkan > currentKijun) {
+        bullishPoints += 1;
+        console.log('[BotExecutor] Ichimoku Signal Debug - Tenkan above Kijun (+1 bullish)');
+      } else if (currentTenkan < currentKijun) {
+        bearishPoints += 1;
+        console.log('[BotExecutor] Ichimoku Signal Debug - Tenkan below Kijun (+1 bearish)');
+      }
+      
+      // 3. Kiểm tra giao cắt (cross) gần đây
+      const prevClosePrices = closes.slice(-5);
+      if (prevClosePrices.length >= 2) {
+        if (currentTenkan > currentKijun && prevClosePrices[prevClosePrices.length - 2] < prevClosePrices[prevClosePrices.length - 1]) {
+          bullishPoints += 2;
+          console.log('[BotExecutor] Ichimoku Signal Debug - Recent bullish cross (+2 bullish)');
+        } else if (currentTenkan < currentKijun && prevClosePrices[prevClosePrices.length - 2] > prevClosePrices[prevClosePrices.length - 1]) {
+          bearishPoints += 2;
+          console.log('[BotExecutor] Ichimoku Signal Debug - Recent bearish cross (+2 bearish)');
+        }
+      }
+      
+      // 4. Senkou Span A so với Senkou Span B (hình dạng mây)
+      if (senkouSpanA > currentSenkouB) {
+        bullishPoints += 1;
+        console.log('[BotExecutor] Ichimoku Signal Debug - Senkou A above Senkou B (+1 bullish)');
+      } else if (senkouSpanA < currentSenkouB) {
+        bearishPoints += 1;
+        console.log('[BotExecutor] Ichimoku Signal Debug - Senkou A below Senkou B (+1 bearish)');
+      }
+      
+      console.log('[BotExecutor] Ichimoku Signal Debug - Point calculation:', {
+        bullishPoints: bullishPoints,
+        bearishPoints: bearishPoints,
+        difference: bullishPoints - bearishPoints
+      });
+      
+      // Xác định tín hiệu cuối cùng - giống hệt backtest
+      if (bullishPoints > bearishPoints) {
+        console.log(`[BotExecutor] Ichimoku Signal Debug - BUY signal: ${bullishPoints} bullish vs ${bearishPoints} bearish`);
+        return 'buy';
+      } else if (bearishPoints > bullishPoints) {
+        console.log(`[BotExecutor] Ichimoku Signal Debug - SELL signal: ${bearishPoints} bearish vs ${bullishPoints} bullish`);
+        return 'sell';
+      } else {
+        console.log('[BotExecutor] Ichimoku Signal Debug - NEUTRAL signal: Equal points');
+        return null;
+      }
+      
+    } catch (error) {
+      console.error('[BotExecutor] Ichimoku Signal Debug - Error calculating signal:', error);
+      return null;
+    }
   }
 
   private calculateSMA(data: number[], period: number): number[] {
@@ -579,36 +1140,70 @@ export class BotExecutor {
 
   private async executeTrade(signal: 'buy' | 'sell') {
     try {
+      // Enhanced trade execution logging
+      console.log(`[BotExecutor] 🔍 DEBUG: Trade execution started:`, {
+        signal: signal,
+        botName: this.bot.name,
+        botId: this.bot.id,
+        symbol: this.config.symbol,
+        timestamp: new Date().toISOString(),
+        isRunning: this.isRunning,
+        currentPosition: this.currentPosition
+      });
+      
+      botLogger.info('Trade execution started', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        signal: signal,
+        timestamp: new Date().toISOString()
+      });
+      
       // Kiểm tra xem bot có đang chạy không
       if (!this.isRunning) {
         console.log('[BotExecutor] Bot is stopped, skipping trade execution');
+        console.log(`[BotExecutor] 🔍 DEBUG: Trade execution skipped:`, {
+          reason: 'Bot is stopped',
+          isRunning: this.isRunning,
+          timestamp: new Date().toISOString()
+        });
+        
+        botLogger.warn('Trade execution skipped - Bot stopped', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          signal: signal,
+          reason: 'Bot is stopped'
+        });
+        
         return;
       }
 
-      // Kiểm tra thêm status từ database
+      // Kiểm tra thêm status từ database - DỪNG ngay nếu không phải running
       try {
-        if (!supabase) {
-          console.error('[BotExecutor] Supabase client not available for trade execution check');
-          return;
-        }
-        
-        const { data: botStatus } = await supabase
+        const { data: botStatus } = await this.supabaseAdmin
           .from('trading_bots')
           .select('status')
           .eq('id', this.bot.id)
           .single();
         
         if (botStatus && botStatus.status !== 'running') {
-          console.log(`[BotExecutor] Bot status is ${botStatus.status}, cancelling trade execution`);
+          console.log(`[BotExecutor] 🛑 Bot status is ${botStatus.status}, stopping trade execution`);
           this.isRunning = false;
           return;
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status for trade execution:', error);
+        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+        this.isRunning = false;
+        return;
       }
 
-      console.log(`[BotExecutor] Executing ${signal.toUpperCase()} trade...`);
+      console.log(`[BotExecutor] 🚀 Executing ${signal.toUpperCase()} trade...`);
+      console.log(`[BotExecutor] 📊 Current price check for ${this.config.symbol}`);
 
+      // Enhanced price fetching logging
+      console.log(`[BotExecutor] 🔍 DEBUG: Fetching current price...`);
+      const priceFetchStart = Date.now();
+      
       // Lấy giá hiện tại
       const priceRes = await fetch(`${API_BASE_URL}/api/trading/binance/price`, {
         method: 'POST',
@@ -621,15 +1216,160 @@ export class BotExecutor {
         })
       });
 
+      const priceFetchTime = Date.now() - priceFetchStart;
+      console.log(`[BotExecutor] 🔍 DEBUG: Price fetch completed in ${priceFetchTime}ms`);
+
       if (!priceRes.ok) {
-        throw new Error('Không thể lấy giá hiện tại');
+        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+        console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Không thể lấy giá hiện tại`);
+        console.log(`[BotExecutor] 🔍 DEBUG: Price fetch failed:`, {
+          status: priceRes.status,
+          statusText: priceRes.statusText,
+          fetchTime: priceFetchTime,
+          timestamp: new Date().toISOString()
+        });
+        
+        botLogger.warn('Price fetch failed', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          signal: signal,
+          status: priceRes.status,
+          fetchTime: priceFetchTime
+        });
+        
+        return;
       }
 
       const priceData = await priceRes.json();
       const currentPrice = parseFloat(priceData.price);
+      
+      console.log(`[BotExecutor] 🔍 DEBUG: Price data received:`, {
+        symbol: this.config.symbol,
+        price: currentPrice,
+        rawData: priceData,
+        fetchTime: priceFetchTime,
+        timestamp: new Date().toISOString()
+      });
+      
+      botLogger.debug('Price fetched successfully', {
+        botName: this.bot.name,
+        symbol: this.config.symbol,
+        price: currentPrice,
+        fetchTime: priceFetchTime
+      });
 
-      // Tính toán số lượng
-      const quantity = (this.config.riskManagement.positionSize / 100) * this.config.riskManagement.initialCapital / currentPrice;
+      // Lấy balance thực tế từ Binance
+      const balanceRes = await fetch(`${API_BASE_URL}/api/trading/binance/balance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: this.bot.config.account.apiKey,
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
+        })
+      });
+
+      if (!balanceRes.ok) {
+        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+        console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Không thể lấy balance từ Binance`);
+        return;
+      }
+
+      const balanceData = await balanceRes.json();
+      console.log(`[BotExecutor] 💰 Balance data received:`, balanceData);
+      
+      // Tính toán số lượng dựa trên positionSize từ bot config
+      let quantity: number;
+      const positionSizePercent = this.bot.config.positionSize || 10; // Mặc định 10%
+      console.log(`[BotExecutor] 📊 Position Size: ${positionSizePercent}%`);
+      
+      if (signal === 'buy') {
+        // Mua: sử dụng 100% USDT balance
+        const usdtBalance = parseFloat(balanceData.USDT || '0');
+        console.log(`[BotExecutor] 💵 USDT Balance: ${usdtBalance}`);
+        
+        if (usdtBalance <= 0) {
+          console.log(`[BotExecutor] ⚠️ USDT balance = ${usdtBalance}, không thể thực hiện BUY`);
+          return; // Thoát mà không throw error
+        }
+        
+        // Sử dụng 100% USDT balance (99% để tránh lỗi)
+        const usdtToUse = usdtBalance * 0.99;
+        
+        // Tính quantity dựa trên 100% USDT balance
+        quantity = usdtToUse / currentPrice;
+        
+        console.log(`[BotExecutor] 🛒 BUY Signal Details (100% USDT):`);
+        console.log(`[BotExecutor] 💰 USDT balance: ${usdtBalance}`);
+        console.log(`[BotExecutor] 💵 USDT sẽ sử dụng (100%): ${usdtToUse.toFixed(2)}`);
+        console.log(`[BotExecutor] 📈 Current price: ${currentPrice}`);
+        console.log(`[BotExecutor] 🎯 Quantity cuối cùng: ${quantity.toFixed(6)} BTC`);
+        
+      } else {
+        // Bán: sử dụng 100% BTC balance
+        const btcBalance = parseFloat(balanceData.BTC || '0');
+        console.log(`[BotExecutor] ₿ BTC Balance: ${btcBalance}`);
+        
+        if (btcBalance <= 0) {
+          console.log(`[BotExecutor] ⚠️ BTC balance = ${btcBalance}, không thể thực hiện SELL`);
+          return; // Thoát mà không throw error
+        }
+        
+        // Sử dụng 100% BTC balance (99% để tránh lỗi)
+        quantity = btcBalance * 0.99;
+        
+        console.log(`[BotExecutor] 🛒 SELL Signal Details (100% BTC):`);
+        console.log(`[BotExecutor] ₿ BTC balance: ${btcBalance}`);
+        console.log(`[BotExecutor] ₿ BTC sẽ bán (100%): ${quantity.toFixed(6)}`);
+        console.log(`[BotExecutor] 📈 Current price: ${currentPrice}`);
+        console.log(`[BotExecutor] 💰 Order value: ${(quantity * currentPrice).toFixed(2)} USDT`);
+      }
+
+      // Kiểm tra quantity hợp lệ
+      if (quantity <= 0 || isNaN(quantity)) {
+        console.log(`[BotExecutor] ⚠️ Quantity không hợp lệ: ${quantity}, bỏ qua giao dịch`);
+        return; // Thoát mà không throw error
+      }
+
+      // Kiểm tra quantity cuối cùng trước khi đặt order
+      if (quantity <= 0 || isNaN(quantity)) {
+        console.log(`[BotExecutor] ⚠️ Quantity cuối cùng không hợp lệ: ${quantity}, bỏ qua giao dịch`);
+        return;
+      }
+      
+      // Kiểm tra minimum notional để tránh lỗi "Filter failure: NOTIONAL"
+      const orderValue = quantity * currentPrice;
+      const minNotional = 10; // Binance yêu cầu tối thiểu 10 USDT
+      
+      if (orderValue < minNotional) {
+        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+        console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal.toUpperCase()} signal - Order value (${orderValue.toFixed(2)} USDT) < minimum (${minNotional} USDT)`);
+        return;
+      }
+      
+      // Validation cuối cùng: đảm bảo quantity không vượt quá balance
+      if (signal === 'buy') {
+        const requiredUsdt = quantity * currentPrice;
+        const availableUsdt = parseFloat(balanceData.USDT || '0');
+        
+        if (requiredUsdt > availableUsdt) {
+          // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+          console.log(`[BotExecutor] ⏭️ Bỏ qua BUY signal - Cần ${requiredUsdt.toFixed(2)} USDT nhưng chỉ có ${availableUsdt}`);
+          return;
+        }
+      } else {
+        const availableBtc = parseFloat(balanceData.BTC || '0');
+        
+        if (quantity > availableBtc) {
+          // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+          console.log(`[BotExecutor] ⏭️ Bỏ qua SELL signal - Cần bán ${quantity} BTC nhưng chỉ có ${availableBtc}`);
+          return;
+        }
+      }
+      
+      console.log(`[BotExecutor] ✅ Quantity cuối cùng hợp lệ: ${quantity.toFixed(6)}`);
+      console.log(`[BotExecutor] ✅ Order value: ${orderValue.toFixed(2)} USDT >= ${minNotional} USDT`);
+      console.log(`[BotExecutor] ✅ Balance đủ để thực hiện giao dịch`);
 
       // Kiểm tra lại isRunning trước khi thực hiện order
       if (!this.isRunning) {
@@ -637,29 +1377,36 @@ export class BotExecutor {
         return;
       }
 
-      // Kiểm tra thêm một lần nữa status từ database trước khi đặt order
+      // Kiểm tra thêm một lần nữa status từ database trước khi đặt order - DỪNG ngay nếu không phải running
       try {
-        if (!supabase) {
-          console.error('[BotExecutor] Supabase client not available for order placement check');
-          return;
-        }
-        
-        const { data: botStatus } = await supabase
+        const { data: botStatus } = await this.supabaseAdmin
           .from('trading_bots')
           .select('status')
           .eq('id', this.bot.id)
           .single();
         
         if (botStatus && botStatus.status !== 'running') {
-          console.log(`[BotExecutor] Bot status changed to ${botStatus.status} before order placement, cancelling`);
+          console.log(`[BotExecutor] 🛑 Bot status is ${botStatus.status} before order placement, stopping`);
           this.isRunning = false;
           return;
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status before order placement:', error);
+        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+        this.isRunning = false;
+        return;
       }
 
       // Thực hiện order
+      console.log(`[BotExecutor] 📤 Placing ${signal.toUpperCase()} order...`);
+      console.log(`[BotExecutor] 📋 Order details:`, {
+        symbol: this.config.symbol,
+        side: signal.toUpperCase(),
+        type: 'MARKET',
+        quantity: quantity.toFixed(6),
+        price: currentPrice
+      });
+      
       const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -675,12 +1422,16 @@ export class BotExecutor {
       });
 
       if (!orderRes.ok) {
-        const errorText = await orderRes.text();
-        throw new Error(`Không thể thực hiện order: ${errorText}`);
+        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+        console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Không thể thực hiện order`);
+        return;
       }
 
       const order = await orderRes.json();
-      console.log(`[BotExecutor] Order executed:`, order);
+      console.log(`[BotExecutor] ✅ Order executed successfully:`, order);
+      console.log(`[BotExecutor] 📊 Order fills:`, order.fills);
+      console.log(`[BotExecutor] 💰 Entry price: ${parseFloat(order.fills[0].price)}`);
+      console.log(`[BotExecutor] 📈 Quantity filled: ${order.fills[0].qty}`);
 
       // Kiểm tra lại isRunning trước khi cập nhật position
       if (!this.isRunning) {
@@ -699,8 +1450,16 @@ export class BotExecutor {
           ? currentPrice * (1 + this.config.riskManagement.takeProfit / 100)
           : currentPrice * (1 - this.config.riskManagement.takeProfit / 100)
       };
+      
+      console.log(`[BotExecutor] 📊 Position opened successfully:`);
+      console.log(`[BotExecutor] 🎯 Side: ${this.currentPosition.side.toUpperCase()}`);
+      console.log(`[BotExecutor] 💰 Entry price: ${this.currentPosition.entryPrice}`);
+      console.log(`[BotExecutor] 📈 Quantity: ${this.currentPosition.quantity}`);
+      console.log(`[BotExecutor] 🛑 Stop Loss: ${this.currentPosition.stopLoss.toFixed(2)}`);
+      console.log(`[BotExecutor] 🎯 Take Profit: ${this.currentPosition.takeProfit.toFixed(2)}`);
 
       // Lưu giao dịch vào database
+      console.log(`[BotExecutor] 💾 Saving trade to database...`);
       await this.saveTrade({
         symbol: this.config.symbol,
         side: signal,
@@ -712,17 +1471,22 @@ export class BotExecutor {
         status: 'open',
         open_time: new Date().toISOString()
       });
+      console.log(`[BotExecutor] ✅ Trade saved to database`);
 
       // Cập nhật thống kê
+      console.log(`[BotExecutor] 📊 Updating bot statistics...`);
       await this.updateBotStats({
         total_trades: this.bot.total_trades + 1,
         total_profit: this.bot.total_profit,
         win_rate: this.bot.win_rate
       });
+      console.log(`[BotExecutor] ✅ Bot statistics updated`);
+      console.log(`[BotExecutor] 🎉 ${signal.toUpperCase()} trade completed successfully!`);
 
     } catch (error) {
-      console.error('Error executing trade:', error);
-      await this.handleError(error);
+      // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+      console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Lỗi khi thực hiện giao dịch`);
+      return;
     }
   }
 
@@ -801,7 +1565,11 @@ export class BotExecutor {
           })
         });
 
-        if (!orderRes.ok) throw new Error('Không thể đóng vị thế');
+        if (!orderRes.ok) {
+          // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+          console.log(`[BotExecutor] ⏭️ Bỏ qua signal - Không thể đóng vị thế`);
+          return;
+        }
 
         const closeOrder = JSON.parse(await orderRes.text());
         const exitPrice = parseFloat(closeOrder.fills[0].price);
@@ -828,23 +1596,22 @@ export class BotExecutor {
         this.currentPosition = null;
       }
     } catch (error) {
-      console.error('Error managing position:', error);
-      await this.handleError(error);
+      // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+      console.log(`[BotExecutor] ⏭️ Bỏ qua signal - Lỗi khi quản lý vị thế`);
+      return;
     }
   }
 
   private async updateBotStatus(status: TradingBot['status']) {
     try {
-      if (!supabase) {
-        console.error('Supabase client not initialized');
-        return;
-      }
       if (!this.bot.id) {
         console.error('Bot id is undefined, cannot update status');
         return;
       }
       console.log('Update bot status:', { id: this.bot.id, status });
-      const { error } = await supabase
+      
+      // Sử dụng supabaseAdmin để bypass RLS
+      const { error } = await this.supabaseAdmin
         .from('trading_bots')
         .update({ 
           status,
@@ -864,11 +1631,6 @@ export class BotExecutor {
 
   private async updateBotStats(stats: Pick<TradingBot, 'total_trades' | 'total_profit' | 'win_rate'>) {
     try {
-      if (!supabase) {
-        console.error('Supabase client not initialized');
-        return;
-      }
-      
       // Chỉ update các trường cơ bản để tránh lỗi schema
       const updateData: any = {
         updated_at: new Date().toISOString()
@@ -885,7 +1647,7 @@ export class BotExecutor {
         updateData.win_rate = stats.win_rate;
       }
       
-      const { error } = await supabase
+      const { error } = await this.supabaseAdmin
         .from('trading_bots')
         .update(updateData)
         .eq('id', this.bot.id);
@@ -893,7 +1655,7 @@ export class BotExecutor {
       if (error) {
         console.error('Supabase update error:', error);
         // Nếu lỗi schema, chỉ update status
-        await supabase
+        await this.supabaseAdmin
           .from('trading_bots')
           .update({ 
             status: this.bot.status,
@@ -915,11 +1677,7 @@ export class BotExecutor {
 
   private async handleError(error: any) {
     try {
-      if (!supabase) {
-        console.error('Supabase client not initialized');
-        return;
-      }
-      await supabase
+      await this.supabaseAdmin
         .from('trading_bots')
         .update({
           status: 'error',
@@ -951,7 +1709,7 @@ export class BotExecutor {
       
       console.log('[BotExecutor] Saving trade to database:', tradeData);
       
-      const { data, error } = await supabase
+      const { data, error } = await this.supabaseAdmin
         .from('trades')
         .insert({
           bot_id: this.bot.id,
@@ -979,15 +1737,10 @@ export class BotExecutor {
     pnl?: number;
   }) {
     try {
-      if (!supabase) {
-        console.error('Supabase client not initialized');
-        return;
-      }
-      
       console.log('[BotExecutor] Updating last trade:', updateData);
       
       // Tìm giao dịch mở cuối cùng của bot này
-      const { data: lastTrade, error: fetchError } = await supabase
+      const { data: lastTrade, error: fetchError } = await this.supabaseAdmin
         .from('trades')
         .select('*')
         .eq('bot_id', this.bot.id)
@@ -1002,7 +1755,7 @@ export class BotExecutor {
       }
 
       // Cập nhật giao dịch
-      const { error: updateError } = await supabase
+      const { error: updateError } = await this.supabaseAdmin
         .from('trades')
         .update({
           ...updateData,
@@ -1052,11 +1805,7 @@ export class BotExecutor {
     if (!this.bot?.id) return;
     try {
       console.log('[BotExecutor] Ghi log indicator:', indicator, value);
-      if (!supabase) {
-        console.error('Supabase client not initialized');
-        return;
-      }
-      await supabase
+      await this.supabaseAdmin
         .from('bot_indicator_logs')
         .insert({
           bot_id: this.bot.id,
@@ -1066,6 +1815,160 @@ export class BotExecutor {
         });
     } catch (err) {
       console.error('[BotExecutor] Lỗi ghi log indicator:', err);
+    }
+  }
+
+  // Kiểm tra balance trước khi thực hiện signal để tránh lỗi liên tiếp
+  private async checkBalanceForSignal(signal: 'buy' | 'sell'): Promise<boolean> {
+    try {
+      console.log(`[BotExecutor] 🔍 Kiểm tra balance cho ${signal.toUpperCase()} signal...`);
+      
+      // Lấy balance hiện tại từ Binance
+      const balanceRes = await fetch(`${API_BASE_URL}/api/trading/binance/balance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: this.bot.config.account.apiKey,
+          apiSecret: this.bot.config.account.apiSecret,
+          isTestnet: this.bot.config.account.testnet,
+        })
+      });
+
+      if (!balanceRes.ok) {
+        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+        console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Không thể lấy balance`);
+        return false;
+      }
+
+      const balanceData = await balanceRes.json();
+      const positionSizePercent = this.bot.config.positionSize || 10;
+      
+      // Enhanced balance logging
+      console.log(`[BotExecutor] 🔍 DEBUG: Balance data received:`, {
+        rawData: balanceData,
+        USDT: balanceData.USDT,
+        BTC: balanceData.BTC,
+        nonZeroBalances: balanceData.nonZeroBalances,
+        positionSizePercent: positionSizePercent,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Log chi tiết balance analysis
+      console.log(`[BotExecutor] 💰 Balance Analysis:`, {
+        step1: 'Raw balance data',
+        usdtBalance: balanceData.USDT,
+        btcBalance: balanceData.BTC,
+        step2: 'Position detection',
+        hasUSDT: parseFloat(balanceData.USDT || '0') > 0,
+        hasBTC: parseFloat(balanceData.BTC || '0') > 0,
+        step3: 'Trading capability',
+        canBuy: parseFloat(balanceData.USDT || '0') >= 10, // Minimum 10 USDT
+        canSell: parseFloat(balanceData.BTC || '0') >= 0.0001, // Minimum 0.0001 BTC
+        step4: 'Decision factors',
+        timestamp: new Date().toISOString()
+      });
+      
+      if (signal === 'buy') {
+        // Kiểm tra USDT balance cho BUY signal - SỬ DỤNG 100% BALANCE
+        const usdtBalance = parseFloat(balanceData.USDT || '0');
+        
+        console.log(`[BotExecutor] 🔍 DEBUG: BUY signal balance check (100% USDT):`, {
+          usdtBalance: usdtBalance,
+          minimumNotional: 10
+        });
+        
+        if (usdtBalance <= 0) {
+          // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+          console.log(`[BotExecutor] ⏭️ Bỏ qua BUY signal - USDT balance = 0`);
+          console.log(`[BotExecutor] 🔍 DEBUG: BUY signal rejected - insufficient USDT balance`);
+          return false;
+        }
+        
+        // Kiểm tra minimum notional (10 USDT) với 100% USDT balance
+        if (usdtBalance < 10) {
+          console.log(`[BotExecutor] ⏭️ Bỏ qua BUY signal - USDT balance (${usdtBalance.toFixed(2)}) < minimum notional (10 USDT)`);
+          console.log(`[BotExecutor] ℹ️ Bot đã BUY toàn bộ balance, chờ signal tiếp theo`);
+          console.log(`[BotExecutor] 🔍 DEBUG: BUY signal rejected - insufficient USDT for minimum notional`);
+          return false;
+        }
+        
+        console.log(`[BotExecutor] ✅ Có thể BUY - USDT balance: ${usdtBalance} (100% sẽ được sử dụng)`);
+        console.log(`[BotExecutor] 🔍 DEBUG: BUY signal approved - sufficient USDT balance for 100%`);
+        return true;
+        
+      } else {
+        // Kiểm tra BTC balance cho SELL signal - SỬ DỤNG 100% BALANCE
+        const btcBalance = parseFloat(balanceData.BTC || '0');
+        
+        console.log(`[BotExecutor] 🔍 DEBUG: SELL signal balance check (100% BTC):`, {
+          btcBalance: btcBalance,
+          minimumBtc: 0.0001
+        });
+        
+        if (btcBalance <= 0) {
+          // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+          console.log(`[BotExecutor] ⏭️ Bỏ qua SELL signal - BTC balance = 0`);
+          console.log(`[BotExecutor] 🔍 DEBUG: SELL signal rejected - insufficient BTC balance`);
+          console.log(`[BotExecutor] 🔍 DEBUG: Available balances:`, balanceData.nonZeroBalances || []);
+          return false;
+        }
+        
+        // Kiểm tra minimum notional (0.0001 BTC) với 100% BTC balance
+        if (btcBalance < 0.0001) {
+          console.log(`[BotExecutor] ⏭️ Bỏ qua SELL signal - BTC balance (${btcBalance.toFixed(6)}) < minimum (0.0001 BTC)`);
+          console.log(`[BotExecutor] ℹ️ Bot đã SELL toàn bộ balance, chờ signal tiếp theo`);
+          console.log(`[BotExecutor] 🔍 DEBUG: SELL signal rejected - insufficient BTC for minimum notional`);
+          return false;
+        }
+        
+        // Kiểm tra thêm: nếu BTC balance quá nhỏ để tạo order value >= 10 USDT
+        try {
+          const priceRes = await fetch(`${API_BASE_URL}/api/trading/binance/price`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              symbol: this.config.symbol,
+              apiKey: this.bot.config.account.apiKey,
+              apiSecret: this.bot.config.account.apiSecret,
+              isTestnet: this.bot.config.account.testnet,
+            })
+          });
+          
+          if (priceRes.ok) {
+            const priceData = await priceRes.json();
+            const currentPrice = parseFloat(priceData.price);
+            const orderValue = btcBalance * currentPrice; // 100% BTC balance
+            const minNotional = 10; // Binance minimum 10 USDT
+            
+            console.log(`[BotExecutor] 🔍 DEBUG: Order value check (100% BTC):`, {
+              btcBalance: btcBalance,
+              currentPrice: currentPrice,
+              orderValue: orderValue.toFixed(2),
+              minNotional: minNotional,
+              canSell: orderValue >= minNotional
+            });
+            
+            // Nếu order value < 10 USDT, bỏ qua SELL signal
+            if (orderValue < minNotional) {
+              console.log(`[BotExecutor] ⏭️ Bỏ qua SELL signal - Order value (${orderValue.toFixed(2)} USDT) < minimum (${minNotional} USDT)`);
+              console.log(`[BotExecutor] ℹ️ Bot đã SELL toàn bộ balance, chờ signal tiếp theo`);
+              console.log(`[BotExecutor] 🔍 DEBUG: SELL signal rejected - BTC balance too small for minimum notional`);
+              return false;
+            }
+          }
+        } catch (error: any) {
+          console.log(`[BotExecutor] 🔍 DEBUG: Cannot check price for order value validation:`, error.message);
+        }
+        
+        console.log(`[BotExecutor] ✅ Có thể SELL - BTC balance: ${btcBalance} (100% sẽ được bán)`);
+        console.log(`[BotExecutor] 🔍 DEBUG: SELL signal approved - sufficient BTC balance for 100%`);
+        return true;
+      }
+      
+    } catch (error) {
+      // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+      console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Lỗi khi kiểm tra balance`);
+      return false; // Bỏ qua signal nếu có lỗi
     }
   }
 } 

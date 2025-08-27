@@ -52,6 +52,71 @@ function calculateStdDev(data: number[]): number {
   return Math.sqrt(variance);
 }
 
+// Hàm tính toán Ichimoku Cloud
+function calculateIchimoku(data: number[], params: any) {
+  const tenkanPeriod = params.tenkanPeriod || 9;
+  const kijunPeriod = params.kijunPeriod || 26;
+  const senkouSpanBPeriod = params.senkouSpanBPeriod || 52;
+  
+  if (data.length < senkouSpanBPeriod) {
+    return { tenkan: [], kijun: [], senkouA: [], senkouB: [] };
+  }
+
+  // Tenkan-sen (Conversion Line)
+  const tenkan = calculateSMA(data, tenkanPeriod);
+  
+  // Kijun-sen (Base Line)  
+  const kijun = calculateSMA(data, kijunPeriod);
+  
+  // Senkou Span A (Leading Span A)
+  const senkouA = [];
+  for (let i = 0; i < Math.min(tenkan.length, kijun.length); i++) {
+    senkouA.push((tenkan[i] + kijun[i]) / 2);
+  }
+  
+  // Senkou Span B (Leading Span B)
+  const senkouB = calculateSMA(data, senkouSpanBPeriod);
+  
+  return { tenkan, kijun, senkouA, senkouB };
+}
+
+// Hàm tính toán MACD
+function calculateMACD(data: number[], params: any) {
+  const fastPeriod = params.fastPeriod || 12;
+  const slowPeriod = params.slowPeriod || 26;
+  const signalPeriod = params.signalPeriod || 9;
+  
+  const fastEMA = calculateEMA(data, fastPeriod);
+  const slowEMA = calculateEMA(data, slowPeriod);
+  
+  const macdLine = fastEMA.map((fast, i) => fast - slowEMA[i]);
+  const signalLine = calculateEMA(macdLine, signalPeriod);
+  const histogram = macdLine.map((macd, i) => macd - signalLine[i]);
+  
+  return { macdLine, signalLine, histogram };
+}
+
+// Hàm tính toán EMA (Exponential Moving Average)
+function calculateEMA(data: number[], period: number): number[] {
+  const ema: number[] = [];
+  const multiplier = 2 / (period + 1);
+  
+  // Giá trị đầu tiên là SMA
+  let sum = 0;
+  for (let i = 0; i < period; i++) {
+    sum += data[i];
+  }
+  ema.push(sum / period);
+  
+  // Tính EMA cho các điểm còn lại
+  for (let i = period; i < data.length; i++) {
+    const newEMA: number = (data[i] - ema[ema.length - 1]) * multiplier + ema[ema.length - 1];
+    ema.push(newEMA);
+  }
+  
+  return ema;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { botId } = req.query;
   console.log('🔍 API indicator-history called with botId:', botId);
@@ -61,6 +126,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // 1. Lấy config bot
     console.log('📋 Fetching bot config for botId:', botId);
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase client not initialized' });
+    }
+    
     const { data: botData, error: botError } = await supabase
       .from('trading_bots')
       .select('config')
@@ -82,9 +151,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Lấy timeframe từ config bot
     let interval = botData.config?.config?.trading?.timeframe || '1m';
-    // Chuyển đổi một số giá trị phổ biến nếu cần (ví dụ: 1h, 1d, 15m đều hợp lệ với Binance)
-    // Nếu cần mapping thêm thì bổ sung ở đây
-    // interval = interval.replace('H', 'h').replace('D', 'd').replace('M', 'm');
     
     console.log('📊 Fetching candles for symbol:', symbol, 'interval:', interval);
     
@@ -135,9 +201,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('📊 Strategy config:', strategy);
     
     const closes = formattedCandles.map((c: any) => parseFloat(c.close));
+    const highs = formattedCandles.map((c: any) => parseFloat(c.high));
+    const lows = formattedCandles.map((c: any) => parseFloat(c.low));
+    
     let indicatorData: any[] = [];
-    let indicatorName = 'RSI';
-    let triggerValue = 70;
+    let indicatorName = 'Unknown';
+    let triggerValue: number | null = null;
+    let oversold: number | null = null;
+    let additionalData: any = {};
 
     if (strategy?.type === 'rsi') {
       const period = strategy.parameters?.period || 14;
@@ -148,6 +219,62 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }));
       indicatorName = 'RSI';
       triggerValue = strategy.parameters?.overbought || 70;
+      oversold = strategy.parameters?.oversold || 30;
+      
+    } else if (strategy?.type === 'ichimoku') {
+      const ichimoku = calculateIchimoku(closes, strategy.parameters);
+      
+      // Tạo data cho chart với tất cả các đường Ichimoku
+      const maxLength = Math.max(
+        ichimoku.tenkan.length,
+        ichimoku.kijun.length,
+        ichimoku.senkouA.length,
+        ichimoku.senkouB.length
+      );
+      
+      indicatorData = [];
+      for (let i = 0; i < maxLength; i++) {
+        const timeIndex = Math.min(i + (strategy.parameters?.senkouSpanBPeriod || 52), formattedCandles.length - 1);
+        const dataPoint = {
+          time: formattedCandles[timeIndex].closeTime,
+          value: closes[timeIndex], // Giá hiện tại
+          tenkan: ichimoku.tenkan[i] || null,
+          kijun: ichimoku.kijun[i] || null,
+          senkouA: ichimoku.senkouA[i] || null,
+          senkouB: ichimoku.senkouB[i] || null
+        };
+        
+        // Chỉ thêm data point nếu có ít nhất 2 đường có dữ liệu
+        const validLines = [dataPoint.tenkan, dataPoint.kijun, dataPoint.senkouA, dataPoint.senkouB].filter(v => v !== null).length;
+        if (validLines >= 2) {
+          indicatorData.push(dataPoint);
+        }
+      }
+      
+      indicatorName = 'Ichimoku Cloud';
+      triggerValue = null; // Ichimoku không có trigger cố định
+      additionalData = {
+        strategy: 'ichimoku',
+        parameters: strategy.parameters,
+        currentPrice: closes[closes.length - 1],
+        currentTenkan: ichimoku.tenkan[ichimoku.tenkan.length - 1],
+        currentKijun: ichimoku.kijun[ichimoku.kijun.length - 1],
+        currentSenkouA: ichimoku.senkouA[ichimoku.senkouA.length - 1],
+        currentSenkouB: ichimoku.senkouB[ichimoku.senkouB.length - 1]
+      };
+      
+    } else if (strategy?.type === 'macd') {
+      const macd = calculateMACD(closes, strategy.parameters);
+      
+      indicatorData = macd.macdLine.map((value: number, index: number) => ({
+        time: formattedCandles[index + (strategy.parameters?.slowPeriod || 26)].closeTime,
+        value: parseFloat(value.toFixed(4)),
+        signal: macd.signalLine[index] || null,
+        histogram: macd.histogram[index] || null
+      }));
+      
+      indicatorName = 'MACD';
+      triggerValue = 0; // MACD có đường zero
       
     } else if (strategy?.type === 'ma_crossover') {
       const fastPeriod = strategy.parameters?.fastPeriod || 10;
@@ -155,13 +282,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const fastMA = calculateSMA(closes, fastPeriod);
       const slowMA = calculateSMA(closes, slowPeriod);
       
-      // Lấy MA chậm hơn làm indicator chính
       indicatorData = slowMA.map((value, index) => ({
         time: formattedCandles[index + slowPeriod - 1].closeTime,
-        value: parseFloat(value.toFixed(2))
+        value: parseFloat(value.toFixed(2)),
+        fastMA: fastMA[index] || null
       }));
-      indicatorName = 'MA';
-      triggerValue = null; // MA crossover không có trigger cố định
+      indicatorName = 'MA Crossover';
+      triggerValue = null;
       
     } else if (strategy?.type === 'bollinger_bands') {
       const period = strategy.parameters?.period || 20;
@@ -185,6 +312,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       indicatorName = 'Bollinger Bands';
       triggerValue = null;
+      
+    } else if (strategy?.type === 'stochastic') {
+      const kPeriod = strategy.parameters?.kPeriod || 14;
+      const dPeriod = strategy.parameters?.dPeriod || 3;
+      
+      const stochK: number[] = [];
+      const stochD: number[] = [];
+      
+      for (let i = kPeriod - 1; i < closes.length; i++) {
+        const slice = lows.slice(i - kPeriod + 1, i + 1);
+        const lowest = Math.min(...slice);
+        const highest = Math.max(...highs.slice(i - kPeriod + 1, i + 1));
+        const k = ((closes[i] - lowest) / (highest - lowest)) * 100;
+        stochK.push(k);
+      }
+      
+      // Tính %D (SMA của %K)
+      for (let i = dPeriod - 1; i < stochK.length; i++) {
+        const d = stochK.slice(i - dPeriod + 1, i + 1).reduce((a, b) => a + b, 0) / dPeriod;
+        stochD.push(d);
+      }
+      
+      indicatorData = stochK.map((k, index) => ({
+        time: formattedCandles[index + kPeriod - 1].closeTime,
+        value: parseFloat(k.toFixed(2)),
+        d: stochD[index] || null
+      }));
+      
+      indicatorName = 'Stochastic';
+      triggerValue = 80; // Overbought level
+      oversold = 20; // Oversold level
+      
+    } else {
+      // Strategy không được hỗ trợ, hiển thị giá đơn giản
+      indicatorData = closes.map((close: number, index: number) => ({
+        time: formattedCandles[index].closeTime,
+        value: parseFloat(close.toFixed(2))
+      }));
+      indicatorName = 'Price';
+      triggerValue = null;
     }
 
     console.log('🎯 Calculated', indicatorData.length, 'indicator points for', indicatorName);
@@ -192,8 +359,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({
       indicatorName,
       triggerValue,
-      oversold: strategy?.type === 'rsi' ? strategy.parameters?.oversold : undefined,
-      history: indicatorData
+      oversold,
+      strategy: strategy?.type,
+      timeframe: interval,
+      symbol,
+      history: indicatorData,
+      additionalData
     });
     
   } catch (err) {

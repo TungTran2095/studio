@@ -440,6 +440,7 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
     name: '',
     backtestId: '',
     account: 'default',
+    positionSize: 10, // Mặc định 10% size giao dịch
   });
 
   // State quản lý tài khoản giao dịch
@@ -455,10 +456,12 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [newAccount, setNewAccount] = useState({ name: '', apiKey: '', apiSecret: '', testnet: false });
 
-  // Lọc các backtest completed
+  // Lọc các backtest có thể sử dụng để tạo bot
   console.log('🔍 ProjectBotsTab received backtests:', backtests);
-  const completedBacktests = backtests.filter((b: any) => b.status === 'completed');
-  console.log('🔍 Filtered completed backtests:', completedBacktests);
+  const availableBacktests = backtests.filter((b: any) => 
+    b.status === 'completed' || b.status === 'running' || b.status === 'pending'
+  );
+  console.log('🔍 Available backtests for bot creation:', availableBacktests);
 
   // Fetch danh sách bots
   const loadBots = async () => {
@@ -476,17 +479,17 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
 
   const handleModalClose = () => {
     setShowModal(false);
-    setForm({ name: '', backtestId: '', account: 'default' });
+    setForm({ name: '', backtestId: '', account: 'default', positionSize: 10 });
     setSelectedBacktest(null);
   };
 
-  const handleFormChange = (key: string, value: string) => {
+  const handleFormChange = (key: string, value: string | number) => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
   const handleBacktestSelect = (backtestId: string) => {
     handleFormChange('backtestId', backtestId);
-    const backtestDetails = completedBacktests.find(b => b.id === backtestId);
+    const backtestDetails = availableBacktests.find(b => b.id === backtestId);
     setSelectedBacktest(backtestDetails || null);
   };
 
@@ -522,6 +525,7 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
             testnet: accountObj.testnet,
           },
           config: backtestFullConfig,
+          positionSize: form.positionSize, // Thêm position size
         }),
       });
 
@@ -601,11 +605,11 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
           description: "Đã dừng bot giao dịch"
         });
       } else {
-        // Start bot bằng API backend
-        const res = await fetch('/api/trading/bot/start', {
-          method: 'POST',
+        // Start bot bằng API backend - sử dụng cùng endpoint với stop
+        const res = await fetch('/api/trading/bot', {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ botId: bot.id })
+          body: JSON.stringify({ botId: bot.id, action: 'start' })
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -702,17 +706,33 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
   const handleDeleteBot = async (botId: string) => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa bot này?')) return;
     try {
-      const success = await deleteTradingBot(botId);
-      if (success) {
+      console.log('🗑️ Đang xóa bot:', botId);
+      
+      // Sử dụng API endpoint trực tiếp thay vì function
+      const response = await fetch(`/api/trading/bot?botId=${botId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Delete bot response:', result);
+      
+      if (result.success) {
         toast({
           title: 'Thành công',
           description: 'Đã xóa bot giao dịch',
         });
-        loadBots();
+        loadBots(); // Refresh danh sách
       } else {
-        throw new Error('Không thể xóa bot giao dịch');
+        throw new Error(result.error || 'Không thể xóa bot giao dịch');
       }
     } catch (error) {
+      console.error('❌ Lỗi khi xóa bot:', error);
       toast({
         title: 'Lỗi',
         description: 'Không thể xóa bot giao dịch: ' + (error as Error).message,
@@ -737,11 +757,11 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
           </CardHeader>
           <CardContent>
             <p className="mb-4">Bạn có thể tạo bot giao dịch tự động từ các backtest đã thành công.</p>
-            <Button onClick={handleCreateBot} disabled={completedBacktests.length === 0}>
+            <Button onClick={handleCreateBot} disabled={availableBacktests.length === 0}>
               <Plus className="h-4 w-4 mr-2" />Tạo bot từ backtest thành công
             </Button>
-            {completedBacktests.length === 0 && (
-              <div className="text-xs text-muted-foreground mt-2">Chưa có backtest nào completed để tạo bot.</div>
+            {availableBacktests.length === 0 && (
+              <div className="text-xs text-muted-foreground mt-2">Chưa có backtest nào available để tạo bot.</div>
             )}
           </CardContent>
         </Card>
@@ -832,20 +852,88 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="backtest">Chọn backtest làm rule</Label>
+              {availableBacktests.length === 0 && (
+                <div className="p-3 border border-orange-200 bg-orange-50 rounded-md mb-2">
+                  <p className="text-sm text-orange-800 mb-2">
+                    <strong>Lưu ý:</strong> Bạn cần tạo ít nhất một backtest trước khi có thể tạo trading bot.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const response = await fetch('/api/research/create-sample-backtest', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ projectId })
+                          });
+                          
+                          if (response.ok) {
+                            toast({
+                              title: "Thành công",
+                              description: "Đã tạo backtest mẫu. Vui lòng đóng modal và mở lại để xem.",
+                              variant: "default"
+                            });
+                            // Refresh backtests
+                            window.location.reload();
+                          } else {
+                            throw new Error('Failed to create sample backtest');
+                          }
+                        } catch (error) {
+                          toast({
+                            title: "Lỗi",
+                            description: "Không thể tạo backtest mẫu. Vui lòng thử lại.",
+                            variant: "destructive"
+                          });
+                        }
+                      }}
+                    >
+                      Tạo Backtest mẫu
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        // Chuyển đến tab experiments để tạo backtest mới
+                        const event = new CustomEvent('switchTab', { detail: 'experiments' });
+                        window.dispatchEvent(event);
+                      }}
+                    >
+                      Chuyển đến Experiments
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="text-xs text-muted-foreground mb-2">
-                Debug: {completedBacktests.length} backtests available | Raw backtests: {JSON.stringify(backtests.map(b => ({ id: b.id, name: b.name, status: b.status })))}
+                Debug: {availableBacktests.length} backtests available | Raw backtests: {JSON.stringify(backtests.map(b => ({ id: b.id, name: b.name, status: b.status })))}
               </div>
               <Select value={form.backtestId} onValueChange={handleBacktestSelect}>
                 <SelectTrigger id="backtest">
                   <SelectValue placeholder="Chọn backtest" />
                 </SelectTrigger>
                 <SelectContent>
-                  {completedBacktests.length === 0 && (
-                    <SelectItem value="no-backtests" disabled>Không có backtest nào</SelectItem>
-                  )}
-                  {completedBacktests.map((b: any) => (
-                    <SelectItem key={b.id} value={b.id}>{b.name} ({b.strategy_config?.type || b.config?.strategy?.type})</SelectItem>
-                  ))}
+                                {availableBacktests.length === 0 && (
+                <div className="p-3 text-center">
+                  <p className="text-sm text-muted-foreground mb-2">Không có backtest nào</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      // Chuyển đến tab experiments để tạo backtest mới
+                      const event = new CustomEvent('switchTab', { detail: 'experiments' });
+                      window.dispatchEvent(event);
+                    }}
+                  >
+                    Tạo Backtest mới
+                  </Button>
+                </div>
+              )}
+              {availableBacktests.map((b: any) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name} ({b.strategy_config?.type || b.config?.strategy?.type || 'N/A'}) - {b.status}
+                </SelectItem>
+              ))}
                 </SelectContent>
               </Select>
               {selectedBacktest && <BacktestConfigDetails backtest={selectedBacktest} />}
@@ -866,6 +954,53 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="positionSize">
+                Size giao dịch: {form.positionSize}% số dư
+              </Label>
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  id="positionSize"
+                  min="1"
+                  max="100"
+                  value={form.positionSize}
+                  onChange={(e) => handleFormChange('positionSize', parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  style={{
+                    background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${form.positionSize}%, #e5e7eb ${form.positionSize}%, #e5e7eb 100%)`
+                  }}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>1%</span>
+                  <span>25%</span>
+                  <span>50%</span>
+                  <span>75%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Khi đặt 100%, bot sẽ sử dụng toàn bộ số dư USDT để mua hoặc toàn bộ số BTC để bán
+              </p>
+              
+              {/* Cảnh báo khi Position Size cao */}
+              {form.positionSize > 80 && (
+                <div className="p-2 border border-orange-200 bg-orange-50 rounded-md">
+                  <p className="text-xs text-orange-800">
+                    ⚠️ <strong>Cảnh báo:</strong> Position Size {form.positionSize}% rất cao và có thể gây rủi ro lớn!
+                  </p>
+                </div>
+              )}
+              
+              {/* Cảnh báo về balance */}
+              <div className="p-2 border border-blue-200 bg-blue-50 rounded-md">
+                <p className="text-xs text-blue-800">
+                  💡 <strong>Lưu ý:</strong> Bot sẽ tự động tính toán quantity dựa trên balance thực tế và Position Size. 
+                  Nếu balance không đủ, bot sẽ sử dụng tối đa 99% balance có sẵn.
+                </p>
+              </div>
             </div>
 
             {/* Form thêm tài khoản mới */}
@@ -908,7 +1043,12 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
           </div>
           <DialogFooter className="mt-4 flex gap-2 border-t pt-4">
             <Button variant="outline" onClick={handleModalClose}>Hủy</Button>
-            <Button onClick={handleSubmit} disabled={!form.name || !form.backtestId}>Tạo bot</Button>
+            <Button 
+              onClick={handleSubmit} 
+              disabled={!form.name || !form.backtestId || availableBacktests.length === 0}
+            >
+              Tạo bot
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1064,6 +1204,108 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                           <BacktestResultsDetails backtest={{ results: selectedBot.config.results }} />
                         </>
                       )}
+
+                      {/* Cấu hình Position Size */}
+                      <div className="p-4 border rounded-md bg-muted/50">
+                        <h4 className="font-semibold text-foreground mb-3">Cấu hình Position Size</h4>
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="editPositionSize">
+                              Size giao dịch: {selectedBot.config.positionSize || 10}% số dư
+                            </Label>
+                            <div className="space-y-2 mt-2">
+                              <input
+                                type="range"
+                                id="editPositionSize"
+                                min="1"
+                                max="100"
+                                value={selectedBot.config.positionSize || 10}
+                                onChange={(e) => {
+                                  const newValue = parseInt(e.target.value);
+                                  setSelectedBot(prev => prev ? {
+                                    ...prev,
+                                    config: {
+                                      ...prev.config,
+                                      positionSize: newValue
+                                    }
+                                  } : null);
+                                }}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                                style={{
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${selectedBot.config.positionSize || 10}%, #e5e7eb ${selectedBot.config.positionSize || 10}%, #e5e7eb 100%)`
+                                }}
+                              />
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>1%</span>
+                                <span>25%</span>
+                                <span>50%</span>
+                                <span>75%</span>
+                                <span>100%</span>
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Khi đặt 100%, bot sẽ sử dụng toàn bộ số dư USDT để mua hoặc toàn bộ số BTC để bán
+                            </p>
+                            
+                            {/* Cảnh báo khi Position Size cao */}
+                            {(selectedBot.config.positionSize || 10) > 80 && (
+                              <div className="p-2 border border-orange-200 bg-orange-50 rounded-md mt-2">
+                                <p className="text-xs text-orange-800">
+                                  ⚠️ <strong>Cảnh báo:</strong> Position Size {selectedBot.config.positionSize}% rất cao và có thể gây rủi ro lớn!
+                                </p>
+                              </div>
+                            )}
+                            
+                            {/* Cảnh báo về balance */}
+                            <div className="p-2 border border-blue-200 bg-blue-50 rounded-md mt-2">
+                              <p className="text-xs text-blue-800">
+                                💡 <strong>Lưu ý:</strong> Bot sẽ tự động tính toán quantity dựa trên balance thực tế và Position Size. 
+                                Nếu balance không đủ, bot sẽ sử dụng tối đa 99% balance có sẵn.
+                              </p>
+                            </div>
+                            
+                            {/* Cảnh báo về minimum notional */}
+                            <div className="p-2 border border-yellow-200 bg-yellow-50 rounded-md mt-2">
+                              <p className="text-xs text-yellow-800">
+                                ⚠️ <strong>Lưu ý:</strong> Binance yêu cầu giá trị giao dịch tối thiểu 10 USDT. 
+                                Với Position Size nhỏ và balance thấp, bot có thể bỏ qua signal để tránh lỗi NOTIONAL.
+                              </p>
+                            </div>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            onClick={async () => {
+                              try {
+                                const response = await fetch('/api/trading/bot/update-config', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    botId: selectedBot.id,
+                                    positionSize: selectedBot.config.positionSize || 10
+                                  })
+                                });
+                                
+                                if (response.ok) {
+                                  toast({
+                                    title: "Thành công",
+                                    description: "Đã cập nhật position size",
+                                  });
+                                } else {
+                                  throw new Error('Failed to update position size');
+                                }
+                              } catch (error) {
+                                toast({
+                                  title: "Lỗi",
+                                  description: "Không thể cập nhật position size: " + (error as Error).message,
+                                  variant: "destructive"
+                                });
+                              }
+                            }}
+                          >
+                            Lưu thay đổi
+                          </Button>
+                        </div>
+                      </div>
 
                       {/* Thông tin API */}
                       <div className="p-3 border rounded bg-muted max-w-md">

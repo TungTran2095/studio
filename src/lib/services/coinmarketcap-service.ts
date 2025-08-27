@@ -27,7 +27,8 @@ export interface MarketOverview {
  */
 export async function getCryptoPrice(symbol: string): Promise<CryptoPrice | null> {
   if (!COINMARKETCAP_API_KEY) {
-    console.error('Thiếu CoinMarketCap API Key');
+    // Tắt log để giảm spam - chỉ giữ log lỗi quan trọng
+    // console.error('Thiếu CoinMarketCap API Key');
     return null;
   }
 
@@ -74,7 +75,8 @@ export async function getCryptoPrice(symbol: string): Promise<CryptoPrice | null
  */
 export async function getMarketOverview(): Promise<MarketOverview | null> {
   if (!COINMARKETCAP_API_KEY) {
-    console.error('Thiếu CoinMarketCap API Key');
+    // Tắt log để giảm spam - chỉ giữ log lỗi quan trọng
+    // console.error('Thiếu CoinMarketCap API Key');
     return null;
   }
 

@@ -25,9 +25,9 @@ export async function POST(request: Request) {
     }
 
     // 2. Call the Python backend to start the bot
-    // The Python backend is expected to be running on localhost:5001
+    // The Python backend is expected to be running on localhost:5000
     try {
-      const pythonResponse = await fetch('http://localhost:5001/run-bot', {
+      const pythonResponse = await fetch('http://localhost:5000/run-bot', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

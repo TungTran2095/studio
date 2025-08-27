@@ -906,16 +906,26 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       if (trainingData.timeframe === '1m') {
         const response = await fetch(query);
         if (response.ok) {
-          data = await response.json();
+          try {
+            data = await response.json();
+          } catch (parseError) {
+            console.error('Error parsing 1m timeframe data:', parseError);
+            data = null;
+          }
         }
       } else {
         // Nếu timeframe khác 1m, lấy dữ liệu 1m rồi tổng hợp lại
         let baseQuery = query.replace(`&timeframe=${trainingData.timeframe}`, '&timeframe=1m');
         const response = await fetch(baseQuery);
         if (response.ok) {
-          const raw = await response.json();
-          // Hàm tổng hợp dữ liệu 1m thành timeframe lớn hơn
-          data = { data: aggregateOHLCV(raw.data || [], trainingData.timeframe) };
+          try {
+            const raw = await response.json();
+            // Hàm tổng hợp dữ liệu 1m thành timeframe lớn hơn
+            data = { data: aggregateOHLCV(raw.data || [], trainingData.timeframe) };
+          } catch (parseError) {
+            console.error('Error parsing 1m timeframe data for aggregation:', parseError);
+            data = null;
+          }
         }
       }
       if (data) {
@@ -1113,25 +1123,36 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       });
 
       if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Training started with data config:', result);
-        await onRefresh();
-        
-        setShowDataSelector(false);
-        setModelToTrain(null);
-        
-        // If model details modal is open, refresh the model data
-        if (showLogs && selectedModel && selectedModel.id === modelToTrain.id) {
-          await refreshModelDetails(modelToTrain.id);
+        try {
+          const result = await response.json();
+          console.log('✅ Training started with data config:', result);
+          await onRefresh();
+          
+          setShowDataSelector(false);
+          setModelToTrain(null);
+          
+          // If model details modal is open, refresh the model data
+          if (showLogs && selectedModel && selectedModel.id === modelToTrain.id) {
+            await refreshModelDetails(modelToTrain.id);
+          }
+          
+          // Show success message with train/test split info
+          const { trainData, testData } = trainTestSplit;
+          alert(`✅ Training đã bắt đầu!\n📊 Train: ${trainData.length.toLocaleString()} records\n📊 Test: ${testData.length.toLocaleString()} records\n🤖 Algorithm: ${modelToTrain.algorithm || modelToTrain.model_type}`);
+        } catch (parseError) {
+          console.error('Error parsing training response:', parseError);
+          alert('❌ Lỗi khi xử lý phản hồi từ server');
         }
-        
-        // Show success message with train/test split info
-        const { trainData, testData } = trainTestSplit;
-        alert(`✅ Training đã bắt đầu!\n📊 Train: ${trainData.length.toLocaleString()} records\n📊 Test: ${testData.length.toLocaleString()} records\n🤖 Algorithm: ${modelToTrain.algorithm || modelToTrain.model_type}`);
       } else {
-        const error = await response.json();
-        console.error('❌ Failed to train model:', error);
-        alert(`❌ Lỗi training: ${error.error || 'Unknown error'}`);
+        try {
+          const error = await response.json();
+          const errorMessage = error?.error || 'Unknown error';
+          console.error('❌ Failed to train model:', error);
+          alert(`❌ Lỗi training: ${errorMessage}`);
+        } catch (parseError) {
+          console.error('Error parsing error response:', parseError);
+          alert('❌ Lỗi training: Không thể xử lý phản hồi từ server');
+        }
       }
     } catch (error) {
       console.error('❌ Training error:', error);
@@ -1148,37 +1169,43 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       
       const response = await fetch(`/api/research/models?id=${modelId}`);
       if (response.ok) {
-        const data = await response.json();
-        if (data.models && data.models.length > 0) {
-          const latestModel = data.models[0];
-          
-          // Parse training_logs if it's a JSON string
-          if (latestModel.training_logs && typeof latestModel.training_logs === 'string') {
-            try {
-              latestModel.training_logs = JSON.parse(latestModel.training_logs);
-            } catch (e) {
-              console.warn('Failed to parse training_logs:', e);
+        try {
+          const data = await response.json();
+          if (data?.models && Array.isArray(data.models) && data.models.length > 0) {
+            const latestModel = data.models[0];
+            
+            // Parse training_logs if it's a JSON string
+            if (latestModel.training_logs && typeof latestModel.training_logs === 'string') {
+              try {
+                latestModel.training_logs = JSON.parse(latestModel.training_logs);
+              } catch (e) {
+                console.warn('Failed to parse training_logs:', e);
+                latestModel.training_logs = [];
+              }
+            }
+            
+            // Ensure training_logs is an array
+            if (!Array.isArray(latestModel.training_logs)) {
               latestModel.training_logs = [];
             }
-          }
-          
-          // Ensure training_logs is an array
-          if (!Array.isArray(latestModel.training_logs)) {
-            latestModel.training_logs = [];
-          }
-          
-          // Parse performance_metrics if it's a JSON string
-          if (latestModel.performance_metrics && typeof latestModel.performance_metrics === 'string') {
-            try {
-              latestModel.performance_metrics = JSON.parse(latestModel.performance_metrics);
-            } catch (e) {
-              console.warn('Failed to parse performance_metrics:', e);
-              latestModel.performance_metrics = null;
+            
+            // Parse performance_metrics if it's a JSON string
+            if (latestModel.performance_metrics && typeof latestModel.performance_metrics === 'string') {
+              try {
+                latestModel.performance_metrics = JSON.parse(latestModel.performance_metrics);
+              } catch (e) {
+                console.warn('Failed to parse performance_metrics:', e);
+                latestModel.performance_metrics = null;
+              }
             }
+            
+            setSelectedModel(latestModel);
+            console.log('✅ Model details refreshed successfully');
+          } else {
+            console.warn('Invalid models data format:', data);
           }
-          
-          setSelectedModel(latestModel);
-          console.log('✅ Model details refreshed successfully');
+        } catch (parseError) {
+          console.error('Error parsing model details response:', parseError);
         }
       }
     } catch (error) {
@@ -2524,14 +2551,19 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
 
       let result = null;
       if (response.ok) {
-        result = await response.json();
-        // Nếu có trades, update lại bản ghi với trades
-        // if (result && result.trades) {
-        //   await supabase
-        //     .from('research_experiments')
-        //     .update({ trades: result.trades })
-        //     .eq('id', experiment.id);
-        // }
+        try {
+          result = await response.json();
+          // Nếu có trades, update lại bản ghi với trades
+          // if (result && result.trades) {
+          //   await supabase
+          //     .from('research_experiments')
+          //     .update({ trades: result.trades })
+          //     .eq('id', experiment.id);
+          // }
+        } catch (parseError) {
+          console.error('Error parsing backtest response:', parseError);
+          throw new Error('Invalid server response');
+        }
       } else {
         throw new Error('Failed to start backtest');
       }
@@ -2657,28 +2689,27 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const fetchExperiments = async () => {
     try {
       setLoading(true);
-      if (supabase) {
-        const { data, error } = await supabase
-          .from('research_experiments')
-          .select('*')
-          .eq('project_id', projectId);
-
-        if (error) {
-          console.error('Error fetching experiments:', error);
-          if ((error as any).details.includes("does not exist")) {
-            setSetupRequired(true);
-          } else {
-            toast({ title: "Lỗi", description: "Không thể tải danh sách thí nghiệm.", variant: "destructive" });
-          }
-          setExperiments([]);
+      
+      // Sử dụng API thay vì Supabase trực tiếp để tránh timeout
+      const response = await fetch(`/api/research/experiments?project_id=${projectId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error fetching experiments:', errorData);
+        
+        if (errorData.setup_required) {
+          setSetupRequired(true);
         } else {
-          setExperiments(data || []);
-          setSetupRequired(false);
+          console.error('Error fetching experiments:', errorData);
         }
+        setExperiments([]);
+      } else {
+        const data = await response.json();
+        setExperiments(data.experiments || []);
+        setSetupRequired(false);
       }
     } catch (error) {
       console.error('Error fetching experiments:', error);
-      toast({ title: "Lỗi", description: "Lỗi kết nối khi tải thí nghiệm.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -2698,11 +2729,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         if (indicatorsResponse.ok) {
           toast({ title: "Thành công", description: "Setup database và indicators column thành công! Đang tải lại..." });
         } else {
-          toast({ title: "Cảnh báo", description: `Setup database thành công nhưng indicators column thất bại: ${indicatorsData.error}`, variant: "destructive" });
+          const indicatorsErrorMessage = indicatorsData?.error || 'Không thể setup indicators column';
+          toast({ title: "Cảnh báo", description: `Setup database thành công nhưng indicators column thất bại: ${indicatorsErrorMessage}`, variant: "destructive" });
         }
         await fetchExperiments();
       } else {
-        toast({ title: "Lỗi", description: `Setup database thất bại: ${data.error}`, variant: "destructive" });
+        const errorMessage = data?.error || 'Không thể setup database';
+        toast({ title: "Lỗi", description: `Setup database thất bại: ${errorMessage}`, variant: "destructive" });
       }
     } catch (error) {
       console.error('Error setting up database:', error);
@@ -2729,16 +2762,26 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           body: JSON.stringify({ symbol, timeframe, startTime: startTimestamp, endTime: endTimestamp }),
         });
         if (!response.ok) throw new Error('Failed to fetch OHLCV data');
-        const data = await response.json();
-        const formattedData = (data.ohlcv || []).map((candle: any) => ({
-          timestamp: new Date(candle.timestamp).getTime(),
-          open: parseFloat(candle.open),
-          high: parseFloat(candle.high),
-          low: parseFloat(candle.low),
-          close: parseFloat(candle.close),
-          volume: parseFloat(candle.volume)
-        })).filter((c: OHLCV) => !Object.values(c).some(v => isNaN(v)));
-        setExperimentChartData(formattedData);
+        try {
+          const data = await response.json();
+          if (data?.ohlcv && Array.isArray(data.ohlcv)) {
+            const formattedData = data.ohlcv.map((candle: any) => ({
+              timestamp: new Date(candle.timestamp).getTime(),
+              open: parseFloat(candle.open),
+              high: parseFloat(candle.high),
+              low: parseFloat(candle.low),
+              close: parseFloat(candle.close),
+              volume: parseFloat(candle.volume)
+            })).filter((c: OHLCV) => !Object.values(c).some(v => isNaN(v)));
+            setExperimentChartData(formattedData);
+          } else {
+            console.warn('Invalid OHLCV data format:', data);
+            setExperimentChartData([]);
+          }
+        } catch (parseError) {
+          console.error('Error parsing OHLCV data:', parseError);
+          setExperimentChartData([]);
+        }
       } catch (error) {
         console.error('Error loading experiment chart data:', error);
         toast({ title: 'Lỗi', description: 'Không thể tải dữ liệu biểu đồ.', variant: 'destructive' });
@@ -2754,9 +2797,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       const response = await fetch(`/api/research/experiments?id=${experiment.id}`);
       let finalExperiment = experiment;
       if (response.ok) {
-        const data = await response.json();
-        if (data.experiment) {
-          finalExperiment = data.experiment;
+        try {
+          const data = await response.json();
+          if (data?.experiment) {
+            finalExperiment = data.experiment;
+          }
+        } catch (parseError) {
+          console.error('Error parsing experiment data:', parseError);
         }
       }
       // Nếu có trades ở DB, gán vào results để UI bảng giao dịch lấy đúng nguồn
@@ -2787,8 +2834,14 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         await fetchExperiments();
         toast({ title: "Thành công", description: "Đã bắt đầu thí nghiệm!" });
       } else {
-        const error = await response.json();
-        toast({ title: "Lỗi", description: `Lỗi khi bắt đầu thí nghiệm: ${error.error || 'Không xác định'}`, variant: 'destructive' });
+        try {
+          const error = await response.json();
+          const errorMessage = error?.error || 'Không xác định';
+          toast({ title: "Lỗi", description: `Lỗi khi bắt đầu thí nghiệm: ${errorMessage}`, variant: 'destructive' });
+        } catch (parseError) {
+          console.error('Error parsing error response:', parseError);
+          toast({ title: "Lỗi", description: "Lỗi khi bắt đầu thí nghiệm", variant: 'destructive' });
+        }
       }
     } catch (error) {
       console.error('Error starting experiment:', error);
@@ -2814,17 +2867,23 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           }
         })
       });
-      const data = await response.json();
-      if (response.ok) {
-        await fetchExperiments();
-        toast({ title: "Thành công", description: "Đã tạo thí nghiệm backtest MA20 thành công!" });
-      } else {
-        if (data.setup_required) {
-          setSetupRequired(true);
-          toast({ title: "Cảnh báo", description: "Cần setup database trước khi tạo thí nghiệm.", variant: "destructive" });
+      try {
+        const data = await response.json();
+        if (response.ok) {
+          await fetchExperiments();
+          toast({ title: "Thành công", description: "Đã tạo thí nghiệm backtest MA20 thành công!" });
         } else {
-          toast({ title: "Lỗi", description: `Lỗi tạo thí nghiệm: ${data.error || 'Không xác định'}`, variant: "destructive" });
+          if (data?.setup_required) {
+            setSetupRequired(true);
+            toast({ title: "Cảnh báo", description: "Cần setup database trước khi tạo thí nghiệm.", variant: "destructive" });
+          } else {
+            const errorMessage = data?.error || 'Không xác định';
+            toast({ title: "Lỗi", description: `Lỗi tạo thí nghiệm: ${errorMessage}`, variant: "destructive" });
+          }
         }
+      } catch (parseError) {
+        console.error('Error parsing create experiment response:', parseError);
+        toast({ title: "Lỗi", description: "Lỗi khi xử lý phản hồi từ server", variant: "destructive" });
       }
     } catch (error) {
       console.error('❌ Error creating MA20 backtest:', error);
@@ -2864,16 +2923,26 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
         })
       });
       if (!response.ok) throw new Error('Failed to fetch OHLCV data');
-      const data = await response.json();
-      const formattedData = (data.ohlcv || []).map((candle: any) => ({
-        timestamp: new Date(candle.timestamp).getTime(),
-        open: parseFloat(candle.open),
-        high: parseFloat(candle.high),
-        low: parseFloat(candle.low),
-        close: parseFloat(candle.close),
-        volume: parseFloat(candle.volume)
-      })).filter((c: OHLCV) => !Object.values(c).some(v => isNaN(v)));
-      setChartData(formattedData);
+      try {
+        const data = await response.json();
+        if (data?.ohlcv && Array.isArray(data.ohlcv)) {
+          const formattedData = data.ohlcv.map((candle: any) => ({
+            timestamp: new Date(candle.timestamp).getTime(),
+            open: parseFloat(candle.open),
+            high: parseFloat(candle.high),
+            low: parseFloat(candle.low),
+            close: parseFloat(candle.close),
+            volume: parseFloat(candle.volume)
+          })).filter((c: OHLCV) => !Object.values(c).some(v => isNaN(v)));
+          setChartData(formattedData);
+        } else {
+          console.warn('Invalid OHLCV data format:', data);
+          setChartData([]);
+        }
+      } catch (parseError) {
+        console.error('Error parsing OHLCV data:', parseError);
+        setChartData([]);
+      }
     } catch (error) {
       console.error('Error loading chart data:', error);
       toast({ title: 'Lỗi', description: 'Lỗi khi tải dữ liệu biểu đồ', variant: 'destructive' });
@@ -2948,13 +3017,19 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
     try {
       const response = await fetch(`/api/research/experiments?project_id=${projectId}&type=backtest&status=completed`);
       if (response.ok) {
-        const data = await response.json();
-        // Nếu API trả về mảng experiments
-        setBacktests(data.experiments || []);
+        try {
+          const data = await response.json();
+          // Nếu API trả về mảng experiments
+          setBacktests(data?.experiments || []);
+        } catch (parseError) {
+          console.error('Error parsing completed backtests response:', parseError);
+          setBacktests([]);
+        }
       } else {
         setBacktests([]);
       }
     } catch (error) {
+      console.error('Error fetching completed backtests:', error);
       setBacktests([]);
     }
   };
@@ -5578,15 +5653,40 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
   const [backtests, setBacktests] = useState<any[]>([]);
   const fetchCompletedBacktests = async () => {
     try {
-      console.log('🔍 Fetching completed backtests for project:', projectId);
-      const response = await fetch(`/api/research/experiments?project_id=${projectId}&type=backtest&status=completed`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('🔍 Backtests API response:', data);
-        setBacktests(data.experiments || []);
+      console.log('🔍 Fetching backtests for project:', projectId);
+      
+      // Đầu tiên thử lấy tất cả backtests
+      const allBacktestsResponse = await fetch(`/api/research/experiments?project_id=${projectId}&type=backtest`);
+      console.log('🔍 All backtests response status:', allBacktestsResponse.status);
+      
+      if (allBacktestsResponse.ok) {
+        const allBacktestsData = await allBacktestsResponse.json();
+        console.log('🔍 All backtests data:', allBacktestsData);
+        
+        // Lọc các backtest có status phù hợp để tạo bot
+        const availableBacktests = (allBacktestsData.experiments || []).filter((b: any) => 
+          b.status === 'completed' || b.status === 'running' || b.status === 'pending'
+        );
+        
+        console.log('🔍 Available backtests for bot creation:', availableBacktests);
+        setBacktests(availableBacktests);
       } else {
-        console.log('🔍 Backtests API error:', response.status, response.statusText);
-        setBacktests([]);
+        console.log('🔍 All backtests API error:', allBacktestsResponse.status, allBacktestsResponse.statusText);
+        
+        // Thử lấy tất cả experiments không có filter
+        const experimentsResponse = await fetch(`/api/research/experiments?project_id=${projectId}`);
+        if (experimentsResponse.ok) {
+          const experimentsData = await experimentsResponse.json();
+          console.log('🔍 All experiments data:', experimentsData);
+          
+          // Lọc các experiment có type backtest
+          const backtestExperiments = (experimentsData.experiments || []).filter((e: any) => e.type === 'backtest');
+          console.log('🔍 Backtest experiments found:', backtestExperiments);
+          setBacktests(backtestExperiments);
+        } else {
+          console.log('🔍 Experiments API error:', experimentsResponse.status, experimentsResponse.statusText);
+          setBacktests([]);
+        }
       }
     } catch (error) {
       console.error('🔍 Error fetching backtests:', error);
@@ -5598,21 +5698,40 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
     fetchProjectDetails();
     fetchProjectModels();
     fetchCompletedBacktests();
+    
+    // Thêm event listener để chuyển tab
+    const handleSwitchTab = (event: CustomEvent) => {
+      setActiveTab(event.detail);
+    };
+    
+    window.addEventListener('switchTab', handleSwitchTab as EventListener);
+    
+    return () => {
+      window.removeEventListener('switchTab', handleSwitchTab as EventListener);
+    };
   }, [projectId]);
 
   const fetchProjectDetails = async () => {
     try {
       const response = await fetch('/api/research/projects');
       if (response.ok) {
-        const data = await response.json();
-        const foundProject = data.projects.find((p: any) => p.id === projectId);
-        if (foundProject) {
-          setProject(foundProject);
-          setEditForm({
-            name: foundProject.name,
-            description: foundProject.description || '',
-            objective: foundProject.objective || ''
-          });
+        try {
+          const data = await response.json();
+          if (data?.projects && Array.isArray(data.projects)) {
+            const foundProject = data.projects.find((p: any) => p.id === projectId);
+            if (foundProject) {
+              setProject(foundProject);
+              setEditForm({
+                name: foundProject.name,
+                description: foundProject.description || '',
+                objective: foundProject.objective || ''
+              });
+            }
+          } else {
+            console.warn('Invalid projects data format:', data);
+          }
+        } catch (parseError) {
+          console.error('Error parsing project details response:', parseError);
         }
       }
     } catch (error) {
@@ -5624,11 +5743,24 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
     try {
       const response = await fetch(`/api/research/models?project_id=${projectId}`);
       if (response.ok) {
-        const data = await response.json();
-        setModels(data.models || []);
+        try {
+          const data = await response.json();
+          if (data?.models && Array.isArray(data.models)) {
+            setModels(data.models);
+          } else {
+            console.warn('Invalid models data format:', data);
+            setModels([]);
+          }
+        } catch (parseError) {
+          console.error('Error parsing project models response:', parseError);
+          setModels([]);
+        }
+      } else {
+        setModels([]);
       }
     } catch (error) {
       console.error('Error fetching project models:', error);
+      setModels([]);
     } finally {
       setLoading(false);
     }
@@ -5702,10 +5834,22 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
   const [indicatorData, setIndicatorData] = useState<any>(null);
   useEffect(() => {
     async function fetchIndicator() {
-      const res = await fetch(`/api/trading/bot/indicator-history?botId=${projectId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setIndicatorData(data);
+      try {
+        const res = await fetch(`/api/trading/bot/indicator-history?botId=${projectId}`);
+        if (res.ok) {
+          try {
+            const data = await res.json();
+            setIndicatorData(data);
+          } catch (parseError) {
+            console.error('Error parsing indicator data:', parseError);
+            setIndicatorData(null);
+          }
+        } else {
+          setIndicatorData(null);
+        }
+      } catch (error) {
+        console.error('Error fetching indicator data:', error);
+        setIndicatorData(null);
       }
     }
     fetchIndicator();
@@ -5973,7 +6117,54 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         </TabsContent>
 
         <TabsContent value="bots" className="space-y-6">
-          {/* Xoá Card chỉ số indicator & trigger ở đây */}
+          {backtests.length === 0 && (
+            <div className="p-6 border border-dashed border-gray-300 rounded-lg text-center">
+              <div className="text-gray-500 mb-4">
+                <Brain className="h-12 w-12 mx-auto mb-2" />
+                <h3 className="text-lg font-medium">Chưa có backtest nào</h3>
+                <p className="text-sm">Bạn cần tạo ít nhất một backtest trước khi có thể tạo trading bot.</p>
+              </div>
+              <div className="flex gap-2 justify-center">
+                <Button 
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/research/create-sample-backtest', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ projectId })
+                      });
+                      
+                      if (response.ok) {
+                        toast({
+                          title: "Thành công",
+                          description: "Đã tạo backtest mẫu. Vui lòng refresh trang để xem.",
+                          variant: "default"
+                        });
+                        // Refresh backtests
+                        fetchCompletedBacktests();
+                      } else {
+                        throw new Error('Failed to create sample backtest');
+                      }
+                    } catch (error) {
+                      toast({
+                        title: "Lỗi",
+                        description: "Không thể tạo backtest mẫu. Vui lòng thử lại.",
+                        variant: "destructive"
+                      });
+                    }
+                  }}
+                >
+                  Tạo Backtest mẫu
+                </Button>
+                <Button 
+                  onClick={() => setActiveTab('experiments')}
+                >
+                  Chuyển đến Experiments
+                </Button>
+              </div>
+            </div>
+          )}
           <ProjectBotsTab projectId={projectId} backtests={backtests} />
         </TabsContent>
 

@@ -8,10 +8,13 @@ const nextConfig = {
     unoptimized: true,
   },
   
-  // Enable experimental features
+  // Enable experimental features - Fixed deprecated option
   experimental: {
-    serverComponentsExternalPackages: ['@supabase/supabase-js'],
+    // serverComponentsExternalPackages đã được move thành serverExternalPackages
   },
+  
+  // Server external packages configuration
+  serverExternalPackages: ['@supabase/supabase-js'],
   
   // Environment variables
   env: {

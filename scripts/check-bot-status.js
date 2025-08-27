@@ -1,103 +1,90 @@
+#!/usr/bin/env node
+
+/**
+ * Script kiểm tra trực tiếp bot status từ Supabase
+ */
+
+require('dotenv').config();
+
 const { createClient } = require('@supabase/supabase-js');
 
-// Cấu hình Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Thiếu cấu hình Supabase');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+console.log('🔍 Kiểm tra bot status từ Supabase...\n');
 
 async function checkBotStatus() {
   try {
-    console.log('🔍 Đang kiểm tra trạng thái bot...');
+    // Khởi tạo Supabase client
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
-    // Lấy tất cả bot
-    const { data: allBots, error } = await supabase
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.log('❌ Thiếu Supabase credentials');
+      return;
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    console.log('✅ Kết nối Supabase thành công');
+    
+    // Lấy danh sách bot
+    console.log('\n📋 Lấy danh sách bot...');
+    const { data: bots, error } = await supabase
       .from('trading_bots')
       .select('*')
       .order('created_at', { ascending: false });
-
+    
     if (error) {
-      console.error('❌ Lỗi khi lấy danh sách bot:', error);
+      console.log('❌ Lỗi khi lấy bots:', error.message);
       return;
     }
-
-    if (!allBots || allBots.length === 0) {
-      console.log('📝 Không có bot nào trong hệ thống');
+    
+    if (!bots || bots.length === 0) {
+      console.log('❌ Không có bot nào');
       return;
     }
-
-    console.log(`📊 Tổng số bot: ${allBots.length}`);
-    console.log('\n📋 Chi tiết từng bot:');
-    console.log('─'.repeat(80));
-
-    const statusCounts = {
-      idle: 0,
-      running: 0,
-      stopped: 0,
-      error: 0
-    };
-
-    allBots.forEach((bot, index) => {
-      statusCounts[bot.status]++;
-      
-      console.log(`${index + 1}. ${bot.name}`);
+    
+    console.log(`✅ Tìm thấy ${bots.length} bots`);
+    
+    // Hiển thị thông tin từng bot
+    bots.forEach((bot, index) => {
+      console.log(`\n${index + 1}. Bot: ${bot.name}`);
       console.log(`   ID: ${bot.id}`);
       console.log(`   Status: ${bot.status}`);
-      console.log(`   Tổng giao dịch: ${bot.total_trades || 0}`);
-      console.log(`   Lợi nhuận: ${bot.total_profit || 0}%`);
-      console.log(`   Tỷ lệ thắng: ${bot.win_rate || 0}%`);
-      console.log(`   Lần chạy cuối: ${bot.last_run_at || 'Chưa chạy'}`);
-      console.log(`   Cập nhật cuối: ${bot.updated_at}`);
-      console.log(`   Tạo lúc: ${bot.created_at}`);
-      console.log('');
-    });
-
-    console.log('📈 Thống kê theo trạng thái:');
-    console.log(`   Idle: ${statusCounts.idle}`);
-    console.log(`   Running: ${statusCounts.running}`);
-    console.log(`   Stopped: ${statusCounts.stopped}`);
-    console.log(`   Error: ${statusCounts.error}`);
-
-    // Kiểm tra bot đang chạy
-    const runningBots = allBots.filter(bot => bot.status === 'running');
-    if (runningBots.length > 0) {
-      console.log('\n⚠️ CẢNH BÁO: Có bot đang chạy!');
-      console.log('Các bot đang chạy:');
-      runningBots.forEach(bot => {
-        console.log(`   - ${bot.name} (ID: ${bot.id})`);
-      });
-      console.log('\n💡 Gợi ý: Chạy script stop-all-bots.js để dừng tất cả bot');
-    } else {
-      console.log('\n✅ Không có bot nào đang chạy');
-    }
-
-    // Kiểm tra bot có lỗi
-    const errorBots = allBots.filter(bot => bot.status === 'error');
-    if (errorBots.length > 0) {
-      console.log('\n❌ Có bot gặp lỗi:');
-      errorBots.forEach(bot => {
-        console.log(`   - ${bot.name} (ID: ${bot.id})`);
-        if (bot.last_error) {
-          console.log(`     Lỗi: ${bot.last_error}`);
+      console.log(`   Project ID: ${bot.project_id}`);
+      console.log(`   Experiment ID: ${bot.experiment_id}`);
+      
+      if (bot.config) {
+        console.log(`   Strategy: ${bot.config.strategy?.type || 'N/A'}`);
+        console.log(`   Symbol: ${bot.config.symbol || 'N/A'}`);
+        console.log(`   Timeframe: ${bot.config.timeframe || 'N/A'}`);
+        
+        if (bot.config.strategy?.parameters) {
+          console.log(`   Strategy Parameters:`, bot.config.strategy.parameters);
         }
+      }
+      
+      console.log(`   Created: ${new Date(bot.created_at).toLocaleString('vi-VN')}`);
+      console.log(`   Updated: ${new Date(bot.updated_at).toLocaleString('vi-VN')}`);
+    });
+    
+    // Kiểm tra bot đang running
+    const runningBots = bots.filter(bot => bot.status === 'running');
+    if (runningBots.length > 0) {
+      console.log(`\n🚀 Có ${runningBots.length} bot đang running:`);
+      runningBots.forEach(bot => {
+        console.log(`   - ${bot.name} (${bot.id})`);
+        console.log(`     Strategy: ${bot.config?.strategy?.type || 'N/A'}`);
+        console.log(`     Timeframe: ${bot.config?.timeframe || 'N/A'}`);
+        console.log(`     Symbol: ${bot.config?.symbol || 'N/A'}`);
       });
+    } else {
+      console.log('\n⏸️ Không có bot nào đang running');
     }
-
+    
   } catch (error) {
-    console.error('❌ Lỗi:', error);
+    console.log('❌ Lỗi:', error.message);
   }
 }
 
-// Chạy script
+// Chạy check
 checkBotStatus().then(() => {
-  console.log('\n🏁 Hoàn thành kiểm tra');
-  process.exit(0);
-}).catch(error => {
-  console.error('❌ Lỗi:', error);
-  process.exit(1);
-}); 
+  console.log('\n🏁 Kiểm tra hoàn thành!');
+}).catch(console.error); 

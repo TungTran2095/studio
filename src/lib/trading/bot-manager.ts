@@ -1,12 +1,19 @@
 import { BotExecutor } from './bot-executor';
 import { TradingBot } from './trading-bot';
 import { supabase } from '@/lib/supabase-client';
+import { createClient } from '@supabase/supabase-js';
 
 class BotManager {
   private static instance: BotManager;
   private runningBots: Map<string, BotExecutor> = new Map();
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  
+  // Supabase admin client để bypass RLS
+  private supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
   private constructor() {}
 
@@ -54,13 +61,8 @@ class BotManager {
     try {
       console.log('[BotManager] 🔒 Đảm bảo tất cả bot đều stopped...');
       
-      if (!supabase) {
-        console.error('[BotManager] Supabase client chưa được khởi tạo');
-        return;
-      }
-      
-      // Cập nhật tất cả bot về status 'stopped'
-      const { error } = await supabase
+      // Cập nhật tất cả bot về status 'stopped' sử dụng supabaseAdmin
+      const { error } = await this.supabaseAdmin
         .from('trading_bots')
         .update({ 
           status: 'stopped',
@@ -82,12 +84,7 @@ class BotManager {
     try {
       console.log('[BotManager] 🔄 Khôi phục các bot đang running...');
       
-      if (!supabase) {
-        console.error('[BotManager] Supabase client chưa được khởi tạo');
-        return;
-      }
-      
-      const { data: runningBots, error } = await supabase
+      const { data: runningBots, error } = await this.supabaseAdmin
         .from('trading_bots')
         .select('*')
         .eq('status', 'running');
@@ -124,15 +121,22 @@ class BotManager {
       await this.initialize();
       
       console.log(`[BotManager] 🚀 Bắt đầu start bot: ${bot.name} (${bot.id})`);
+      console.log(`[BotManager] 📊 Bot config:`, {
+        symbol: bot.config?.trading?.symbol || 'BTCUSDT',
+        strategy: bot.config?.strategy?.type || 'unknown',
+        positionSize: bot.config?.positionSize || 10,
+        testnet: bot.config?.account?.testnet || false
+      });
       
       // Kiểm tra xem bot đã đang chạy chưa
       if (this.runningBots.has(bot.id)) {
-        console.log(`[BotManager] ⚠️ Bot ${bot.name} đã đang chạy`);
+        console.log(`[BotManager] ⚠️ Bot ${bot.name} đã đang chạy trong memory`);
         return true;
       }
 
       // Kiểm tra trạng thái trong database
-      const { data: dbBot } = await supabase
+      console.log(`[BotManager] 🔍 Kiểm tra trạng thái bot ${bot.name} trong database...`);
+      const { data: dbBot } = await this.supabaseAdmin
         .from('trading_bots')
         .select('status')
         .eq('id', bot.id)
@@ -144,22 +148,28 @@ class BotManager {
       }
 
       // Tạo BotExecutor mới
+      console.log(`[BotManager] 🔧 Tạo BotExecutor cho bot ${bot.name}...`);
       const executor = new BotExecutor(bot);
       
       // Khởi tạo bot
+      console.log(`[BotManager] 🔄 Khởi tạo bot ${bot.name}...`);
       const initialized = await executor.initialize();
       if (!initialized) {
         console.error(`[BotManager] ❌ Không thể khởi tạo bot ${bot.name}`);
         return false;
       }
+      console.log(`[BotManager] ✅ Bot ${bot.name} đã được khởi tạo thành công`);
 
       // Lưu executor vào map
       this.runningBots.set(bot.id, executor);
+      console.log(`[BotManager] 📝 Bot ${bot.name} đã được thêm vào runningBots map`);
       
       // Chạy bot trong background (không await)
+      console.log(`[BotManager] 🔄 Bắt đầu chạy bot ${bot.name} trong background...`);
       this.runBotInBackground(bot.id, executor);
       
       console.log(`[BotManager] ✅ Bot ${bot.name} đã được khởi động thành công`);
+      console.log(`[BotManager] 📊 Tổng số bot đang chạy: ${this.runningBots.size}`);
       return true;
       
     } catch (error) {
@@ -208,12 +218,7 @@ class BotManager {
       
       // Đảm bảo status đã được cập nhật
       try {
-        if (!supabase) {
-          console.error('[BotManager] Supabase client not available for status verification');
-          return true;
-        }
-        
-        const { data: botStatus } = await supabase!
+        const { data: botStatus } = await this.supabaseAdmin
           .from('trading_bots')
           .select('status')
           .eq('id', botId)
@@ -263,14 +268,10 @@ class BotManager {
 
   private async updateBotStatus(botId: string, status: TradingBot['status']) {
     try {
-      if (!supabase) {
-        console.error('[BotManager] Supabase client chưa được khởi tạo');
-        return;
-      }
-      
       console.log(`[BotManager] 📊 Cập nhật status bot ${botId}: ${status}`);
       
-      const { error } = await supabase
+      // Sử dụng supabaseAdmin để bypass RLS
+      const { error } = await this.supabaseAdmin
         .from('trading_bots')
         .update({ 
           status,

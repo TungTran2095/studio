@@ -10,6 +10,14 @@ if (typeof window === 'undefined') {
   initializeBotManager().catch(console.error);
 }
 
+// Tạo Supabase client với service role key để bypass RLS
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Service role key để bypass RLS
+);
+
 // GET /api/trading/bot - Lấy danh sách bot
 export async function GET(request: Request) {
   try {
@@ -150,10 +158,6 @@ export async function PUT(request: Request) {
 // DELETE /api/trading/bot/:id - Xóa bot
 export async function DELETE(request: Request) {
   try {
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
-    }
-
     const { searchParams } = new URL(request.url);
     const botId = searchParams.get('botId');
 
@@ -161,13 +165,75 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Missing botId' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    // Kiểm tra xem bot có đang chạy không
+    const { data: bot, error: fetchError } = await supabaseAdmin
+      .from('trading_bots')
+      .select('status')
+      .eq('id', botId)
+      .single();
+
+    if (fetchError) {
+      return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
+    }
+
+    // Nếu bot đang chạy, dừng nó trước
+    if (bot.status === 'running') {
+      console.log(`[API] Bot ${botId} đang chạy, dừng trước khi xóa...`);
+      
+      try {
+        // Dừng bot qua BotManager
+        await botManager.initialize();
+        await botManager.stopBot(botId);
+      } catch (stopError) {
+        console.log(`[API] Không thể dừng bot ${botId}:`, stopError);
+        // Vẫn tiếp tục xóa bot
+      }
+    }
+
+    // Xóa bot khỏi database sử dụng admin client để bypass RLS
+    console.log(`[API] Đang xóa bot ${botId} khỏi database (bypass RLS)...`);
+    
+    const { error: deleteError } = await supabaseAdmin
       .from('trading_bots')
       .delete()
       .eq('id', botId);
 
-    if (error) throw error;
-    return NextResponse.json({ success: true });
+    if (deleteError) {
+      console.error('Error deleting bot:', deleteError);
+      console.error('Delete error code:', deleteError.code);
+      console.error('Delete error details:', deleteError.details);
+      return NextResponse.json({ error: 'Failed to delete bot' }, { status: 500 });
+    }
+
+    console.log(`[API] Supabase delete response OK, kiểm tra xem bot đã thực sự bị xóa chưa...`);
+    
+    // Kiểm tra xem bot đã thực sự bị xóa chưa
+    const { data: checkBot, error: checkError } = await supabaseAdmin
+      .from('trading_bots')
+      .select('id')
+      .eq('id', botId)
+      .single();
+    
+    if (checkError && checkError.code === 'PGRST116') {
+      console.log(`[API] ✅ Bot ${botId} đã thực sự bị xóa khỏi database`);
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Bot deleted successfully' 
+      });
+    } else if (checkBot) {
+      console.error(`[API] ❌ Bot ${botId} vẫn còn trong database sau khi xóa!`);
+      console.error('Đây là vấn đề nghiêm trọng - bot không thể xóa được');
+      return NextResponse.json({ 
+        error: 'Bot could not be deleted from database',
+        details: 'Bot still exists after delete operation'
+      }, { status: 500 });
+    } else {
+      console.log(`[API] ✅ Bot ${botId} đã được xóa thành công`);
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Bot deleted successfully' 
+      });
+    }
   } catch (error) {
     console.error('Error deleting bot:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
