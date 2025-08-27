@@ -63,7 +63,7 @@ export async function fetchChatHistory(): Promise<FetchHistoryResult> {
     console.log(`[fetchChatHistory] Successfully fetched ${data?.length ?? 0} messages.`);
     // Ensure data is not null before returning
     // Cast the data to MessageHistory[] to ensure type consistency
-    const messages: MessageHistory[] = data?.map(item => ({
+    const messages: MessageHistory[] = data?.map((item: any) => ({
         id: item.id,
         created_at: item.created_at,
         // Ensure role matches the enum - convert 'model' to 'bot' if found
