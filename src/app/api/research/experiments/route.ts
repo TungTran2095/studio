@@ -168,65 +168,6 @@ export async function GET(request: NextRequest) {
         experiments: []
       }, { status: 500 });
     }
-<<<<<<< HEAD
-
-    // Get all experiments for project with results field
-    let query = supabase
-      .from('research_experiments')
-      .select(`
-        id, 
-        project_id, 
-        name, 
-        type, 
-        description, 
-        status, 
-        progress, 
-        created_at, 
-        updated_at,
-        results,
-        config
-      `)
-      .order('created_at', { ascending: false });
-
-    if (projectId) {
-      query = query.eq('project_id', projectId);
-    }
-
-    // Add type filter if specified
-    const type = searchParams.get('type');
-    if (type) {
-      query = query.eq('type', type);
-    }
-
-    // Add status filter if specified
-    const status = searchParams.get('status');
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    // Add limit to prevent timeout
-    query = query.limit(100);
-
-    const { data: experiments, error } = await query;
-
-    if (error) {
-      console.error('Error fetching experiments:', error);
-      
-      // Check if it's a table not found error
-      if (error.code === '42P01') {
-        return NextResponse.json({ 
-          error: 'Experiments table not found. Please run database setup.',
-          setup_required: true,
-          experiments: []
-        }, { status: 404 });
-      }
-      
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ experiments: experiments || [] });
-=======
->>>>>>> 053848fc238fc68e7a694e3ee63123ebccc4eed2
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json({ 
