@@ -18,6 +18,7 @@ export interface RLModelConfig {
 
 export interface State {
   id: string; // ID duy nhất cho state
+  symbol: string; // ký hiệu tài sản để liên kết hành động
   features: Record<string, number>; // Các đặc trưng của state dưới dạng số
 }
 

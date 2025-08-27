@@ -18,6 +18,7 @@ export interface MarketInsight {
   currentPrice: number;
   priceChange24h: number;
   volume24h: number;
+  marketCondition: 'bullish' | 'bearish' | 'sideways';
   indicators: {
     rsi: number;
     macd: {
@@ -164,6 +165,7 @@ export class MarketAnalysisAgent {
     
     return {
       id: stateId,
+      symbol: insight.symbol,
       features
     };
   }
@@ -185,12 +187,17 @@ export class MarketAnalysisAgent {
     const currentPrice = this.extractNumberFromText(analysis, 'giá hiện tại', 1000, 100000);
     const priceChange24h = this.extractPercentFromText(analysis, 'thay đổi 24h', -10, 10);
     
+    // Suy ra điều kiện thị trường giản lược từ biến động và tín hiệu ngẫu nhiên
+    const derivedCondition: 'bullish' | 'bearish' | 'sideways' = 
+      priceChange24h > 2 ? 'bullish' : priceChange24h < -2 ? 'bearish' : 'sideways';
+
     return {
       symbol,
       timeframe,
       currentPrice,
       priceChange24h,
       volume24h: Math.random() * 1000000000,
+      marketCondition: derivedCondition,
       indicators: {
         rsi: this.extractNumberFromText(analysis, 'RSI', 0, 100),
         macd: {
