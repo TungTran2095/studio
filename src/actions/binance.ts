@@ -532,7 +532,7 @@ export async function fetchBinanceTradeHistory(
     apiKey = apiKey.replace(/API Key:\s+/i, '').trim();
 
     // Khởi tạo client mới với phương pháp an toàn 
-    let binance;
+    let binance: any;
     try {
         binance = await createSafeBinanceClient(apiKey, apiSecret, isTestnet);
     } catch (initError: any) {
