@@ -91,19 +91,19 @@ export async function GET(request: NextRequest) {
       console.log('📊 Sample record:', marketData[0]);
 
       // Extract prices for general use
-      const prices = marketData.map(d => parseFloat(d.close.toString()));
+      const prices = marketData.map((d: any) => parseFloat(d.close.toString()));
 
       // Since this is BTC-only data, we'll do different analyses
       if (analysis === 'correlation') {
         // PRICE vs VOLUME CORRELATION ANALYSIS
-        const volumes = marketData.map(d => parseFloat(d.volume.toString()));
+        const volumes = marketData.map((d: any) => parseFloat(d.volume.toString()));
         
         const priceVolumeCorr = calculateCorrelation(prices, volumes);
         
         // High vs Low correlation (volatility analysis) 
-        const highs = marketData.map(d => parseFloat(d.high.toString()));
-        const lows = marketData.map(d => parseFloat(d.low.toString()));
-        const volatility = highs.map((h, i) => h - lows[i]);
+        const highs = marketData.map((d: any) => parseFloat(d.high.toString()));
+        const lows = marketData.map((d: any) => parseFloat(d.low.toString()));
+        const volatility = highs.map((h: number, i: number) => h - lows[i]);
         
         const priceVolatilityCorr = calculateCorrelation(prices, volatility);
 
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
                 `${priceVolatilityCorr > 0 ? 'Higher prices correlate with higher volatility' : 'Higher prices correlate with lower volatility'}` :
                 'Price and volatility show weak correlation'
             },
-            sample_data: marketData.slice(0, 10).map(d => ({
+            sample_data: marketData.slice(0, 10).map((d: any) => ({
               time: d.open_time,
               price: parseFloat(d.close.toString()),
               volume: parseFloat(d.volume.toString()),
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
 
       if (analysis === 'strategy') {
         // REAL MOMENTUM STRATEGY BACKTEST with BTC data
-        const prices = marketData.reverse().map(d => parseFloat(d.close.toString())); // Chronological order
+        const prices = marketData.reverse().map((d: any) => parseFloat(d.close.toString())); // Chronological order
         
         // Simple momentum strategy: buy if price > 20-period MA
         const trades = [];
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
         
         for (let i = 20; i < prices.length; i++) {
           const recentPrices = prices.slice(i-20, i);
-          const ma20 = recentPrices.reduce((a, b) => a + b) / 20;
+          const ma20 = recentPrices.reduce((a: number, b: number) => a + b) / 20;
           const currentPrice = prices[i];
           
           // Strategy logic
@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
           latest_price: parseFloat(marketData[0].close.toString()),
           price_change_24h: prices.length > 1440 ? // 24h = 1440 minutes
             ((prices[0] - prices[1440]) / prices[1440] * 100).toFixed(2) + '%' : 'N/A',
-          volume_24h: marketData.slice(0, 1440).reduce((sum, d) => 
+          volume_24h: marketData.slice(0, 1440).reduce((sum: number, d: any) => 
             sum + parseFloat(d.volume.toString()), 0),
           date_range: {
             start: marketData[marketData.length - 1]?.open_time,

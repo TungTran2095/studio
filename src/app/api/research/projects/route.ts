@@ -150,6 +150,19 @@ export async function POST(request: NextRequest) {
 
 
 export async function PUT(request: NextRequest) {
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.log('⚠️ Supabase client not available - environment variables missing');
+    return NextResponse.json(
+      { 
+        error: 'Database connection not available',
+        details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+        success: false
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { searchParams } = new URL(request.url);
@@ -198,6 +211,19 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.log('⚠️ Supabase client not available - environment variables missing');
+    return NextResponse.json(
+      { 
+        error: 'Database connection not available',
+        details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required',
+        success: false
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('id');
