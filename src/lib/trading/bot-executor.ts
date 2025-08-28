@@ -19,7 +19,14 @@ interface BotExecutorConfig {
   timeframe: string;
 }
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:9002';
+const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.API_BASE_URL || 'http://localhost:9002';
+
+// Debug logging để kiểm tra API_BASE_URL
+console.log('[BotExecutor] 🔍 DEBUG: API_BASE_URL configuration:', {
+  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  API_BASE_URL: process.env.API_BASE_URL,
+  final: API_BASE_URL
+});
 
 // Helper function để chuyển đổi timeframe thành milliseconds
 function timeframeToMs(timeframe: string): number {
@@ -1205,7 +1212,10 @@ export class BotExecutor {
       const priceFetchStart = Date.now();
       
       // Lấy giá hiện tại
-      const priceRes = await fetch(`${API_BASE_URL}/api/trading/binance/price`, {
+      const priceUrl = `${API_BASE_URL}/api/trading/binance/price`;
+      console.log(`[BotExecutor] 🔍 DEBUG: Fetching price from: ${priceUrl}`);
+      
+      const priceRes = await fetch(priceUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1214,6 +1224,9 @@ export class BotExecutor {
           apiSecret: this.bot.config.account.apiSecret,
           isTestnet: this.bot.config.account.testnet,
         })
+      }).catch(error => {
+        console.error(`[BotExecutor] ❌ Fetch error for ${priceUrl}:`, error);
+        throw new Error(`Failed to fetch price: ${error.message}`);
       });
 
       const priceFetchTime = Date.now() - priceFetchStart;
@@ -1259,7 +1272,10 @@ export class BotExecutor {
       });
 
       // Lấy balance thực tế từ Binance
-      const balanceRes = await fetch(`${API_BASE_URL}/api/trading/binance/balance`, {
+      const balanceUrl = `${API_BASE_URL}/api/trading/binance/balance`;
+      console.log(`[BotExecutor] 🔍 DEBUG: Fetching balance from: ${balanceUrl}`);
+      
+      const balanceRes = await fetch(balanceUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1267,6 +1283,9 @@ export class BotExecutor {
           apiSecret: this.bot.config.account.apiSecret,
           isTestnet: this.bot.config.account.testnet,
         })
+      }).catch(error => {
+        console.error(`[BotExecutor] ❌ Fetch error for ${balanceUrl}:`, error);
+        throw new Error(`Failed to fetch balance: ${error.message}`);
       });
 
       if (!balanceRes.ok) {
