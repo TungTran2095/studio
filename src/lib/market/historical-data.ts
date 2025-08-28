@@ -44,12 +44,7 @@ export async function fetchHistoricalPrices(
   try {
     const { apiKey, apiSecret, isTestnet, useDefault, symbols, interval, startTime, endTime, limit } = params;
     
-    const client = await createSafeBinanceClient({
-      apiKey,
-      apiSecret,
-      isTestnet,
-      useDefault
-    });
+    const client = await createSafeBinanceClient(apiKey, apiSecret, isTestnet);
     
     const results: Record<string, PriceData> = {};
     
@@ -61,16 +56,16 @@ export async function fetchHistoricalPrices(
       try {
         const candles = await client.candles({
           symbol: tradingPair,
-          interval: interval as Binance.CandleChartInterval,
+          interval: interval as any,
           startTime,
           endTime,
           limit
         });
         
         if (candles && candles.length > 0) {
-          const prices = candles.map(candle => parseFloat(candle.close));
-          const timestamps = candles.map(candle => candle.closeTime);
-          const volumes = candles.map(candle => parseFloat(candle.volume));
+          const prices = candles.map((candle: any) => parseFloat(candle.close));
+          const timestamps = candles.map((candle: any) => candle.closeTime);
+          const volumes = candles.map((candle: any) => parseFloat(candle.volume));
           
           results[symbol] = {
             symbol,

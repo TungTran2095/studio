@@ -1,5 +1,5 @@
 // Tính Moving Average
-export function calculateMA(data: number[], period: number): number[] {
+export function calculateMA(data: number[], period: number): (number | null)[] {
   const ma = [];
   for (let i = 0; i < data.length; i++) {
     if (i < period - 1) {
@@ -13,7 +13,7 @@ export function calculateMA(data: number[], period: number): number[] {
 }
 
 // Tính Relative Strength Index (RSI)
-export function calculateRSI(data: number[], period: number = 14): number[] {
+export function calculateRSI(data: number[], period: number = 14): (number | null)[] {
   const rsi = [];
   const gains = [];
   const losses = [];
@@ -52,7 +52,7 @@ export function calculateMACD(
   fastPeriod: number = 12,
   slowPeriod: number = 26,
   signalPeriod: number = 9
-): { macd: number[], signal: number[], histogram: number[] } {
+): { macd: (number | null)[], signal: (number | null)[], histogram: (number | null)[] } {
   const fastMA = calculateMA(data, fastPeriod);
   const slowMA = calculateMA(data, slowPeriod);
   
@@ -76,7 +76,7 @@ export function calculateBollingerBands(
   data: number[],
   period: number = 20,
   stdDev: number = 2
-): { upper: number[], middle: number[], lower: number[] } {
+): { upper: (number | null)[], middle: (number | null)[], lower: (number | null)[] } {
   const middle = calculateMA(data, period);
   
   const upper = [];
@@ -91,12 +91,17 @@ export function calculateBollingerBands(
     
     const slice = data.slice(i - period + 1, i + 1);
     const avg = middle[i];
-    const squaredDiffs = slice.map(x => Math.pow(x - avg, 2));
-    const variance = squaredDiffs.reduce((a, b) => a + b, 0) / period;
-    const standardDeviation = Math.sqrt(variance);
-    
-    upper.push(avg + (standardDeviation * stdDev));
-    lower.push(avg - (standardDeviation * stdDev));
+    if (avg !== null) {
+      const squaredDiffs = slice.map(x => Math.pow(x - avg, 2));
+      const variance = squaredDiffs.reduce((a, b) => a + b, 0) / period;
+      const standardDeviation = Math.sqrt(variance);
+      
+      upper.push(avg + (standardDeviation * stdDev));
+      lower.push(avg - (standardDeviation * stdDev));
+    } else {
+      upper.push(null);
+      lower.push(null);
+    }
   }
   
   return { upper, middle, lower };
@@ -108,7 +113,7 @@ export function calculateATR(
   low: number[],
   close: number[],
   period: number = 14
-): number[] {
+): (number | null)[] {
   const tr = [];
   const atr = [];
   

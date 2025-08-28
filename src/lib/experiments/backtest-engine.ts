@@ -24,7 +24,7 @@ export async function runBacktest(
     
     // Check for entry conditions
     if (state.positions.size < (config.maxPositions || 1)) {
-      await checkEntryConditions(state, candle, config);
+      await checkEntryConditions(state, candle, config, marketData);
     }
   }
 
@@ -70,7 +70,8 @@ async function checkExitConditions(
 async function checkEntryConditions(
   state: BacktestState,
   candle: any,
-  config: ExperimentConfig
+  config: ExperimentConfig,
+  marketData: MarketData
 ) {
   // TODO: Implement entry strategy
   // This is where you would implement your trading strategy

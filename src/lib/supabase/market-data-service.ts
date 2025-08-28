@@ -104,7 +104,8 @@ export class MarketDataService {
   // Data Sources Management
   async saveDataSource(source: DataSource): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const client = getSupabaseClient();
+      const { error } = await client
         .from('data_sources')
         .upsert({
           id: source.id,

@@ -28,10 +28,10 @@ export async function calculatePortfolioRisk(
   const returns = calculateDailyReturns(historicalPrices);
   
   // Tính tổng giá trị danh mục
-  const portfolioValue = assets.reduce((sum, asset) => sum + asset.valueUsd, 0);
+  const portfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
   
   // Tính trọng số từng tài sản
-  const weights = assets.map(asset => asset.valueUsd / portfolioValue);
+  const weights = assets.map(asset => asset.totalValue / portfolioValue);
   
   // Tính ma trận hiệp phương sai
   const covarianceMatrix = calculateCovarianceMatrix(returns);
@@ -333,8 +333,8 @@ export function analyzeRiskContribution(
   assets: Asset[],
   covarianceMatrix: number[][]
 ): AssetRiskContribution[] {
-  const portfolioValue = assets.reduce((sum, asset) => sum + asset.valueUsd, 0);
-  const weights = assets.map(asset => asset.valueUsd / portfolioValue);
+  const portfolioValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
+  const weights = assets.map(asset => asset.totalValue / portfolioValue);
   
   const portfolioVolatility = calculatePortfolioVolatility(weights, covarianceMatrix);
   const riskContributions: AssetRiskContribution[] = [];

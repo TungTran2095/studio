@@ -319,10 +319,10 @@ export function rebalancePortfolio(
   transactionCost: number = 0.001 // Chi phí giao dịch mặc định 0.1%
 ): { asset: string; currentWeight: number; targetWeight: number; action: 'buy' | 'sell' | 'hold'; amount: number }[] {
   // Tính tổng giá trị danh mục
-  const portfolioValue = currentPortfolio.reduce((sum, asset) => sum + asset.valueUsd, 0);
+  const portfolioValue = currentPortfolio.reduce((sum, asset) => sum + asset.totalValue, 0);
   
   // Tính trọng số hiện tại
-  const currentWeights = currentPortfolio.map(asset => asset.valueUsd / portfolioValue);
+  const currentWeights = currentPortfolio.map(asset => asset.totalValue / portfolioValue);
   
   // Tạo kế hoạch tái cân bằng
   const rebalancePlan = currentPortfolio.map((asset, index) => {

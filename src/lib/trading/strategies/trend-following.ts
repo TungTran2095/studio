@@ -340,7 +340,7 @@ export class TrendFollowingStrategy implements TradingStrategy {
             activationPercentage: this.params.trailingStopActivation,
             trailingDistance: this.params.trailingStopDistance,
             entryPrice: currentPosition.entryPrice,
-            direction: isLong ? 'LONG' : 'SHORT',
+            direction: isLong ? 'LONG' as const : 'SHORT' as const,
             currentPrice: closePrice
           };
           
@@ -412,7 +412,7 @@ export class TrendFollowingStrategy implements TradingStrategy {
           result.totalTrades++;
           
           // Thời gian nắm giữ
-          const holdingTime = currentPosition.exitTime - currentPosition.entryTime;
+          const holdingTime = (currentPosition.exitTime ?? 0) - currentPosition.entryTime;
           totalHoldingTime += holdingTime;
           
           if (result.maxHoldingTime === 0 || holdingTime > result.maxHoldingTime) {
@@ -491,7 +491,7 @@ export class TrendFollowingStrategy implements TradingStrategy {
         // Tính stop loss và take profit
         const stopLossParams = {
           entryPrice: closePrice,
-          direction: direction === PositionDirection.LONG ? 'LONG' : 'SHORT',
+          direction: direction === PositionDirection.LONG ? 'LONG' as const : 'SHORT' as const,
           riskPercentage: this.params.stopLossPercentage
         };
         
@@ -501,7 +501,7 @@ export class TrendFollowingStrategy implements TradingStrategy {
         const takeProfitParams = {
           entryPrice: closePrice,
           stopLossPrice,
-          direction: direction === PositionDirection.LONG ? 'LONG' : 'SHORT',
+          direction: direction === PositionDirection.LONG ? 'LONG' as const : 'SHORT' as const,
           riskRewardRatio: this.params.riskRewardRatio
         };
         
@@ -590,7 +590,7 @@ export class TrendFollowingStrategy implements TradingStrategy {
         
         monthlyData[monthKey] = {
           pnl: 0,
-          initialEquity
+          initialEquity: initialMonthEquity
         };
       }
       

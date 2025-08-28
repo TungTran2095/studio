@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Download,
   RefreshCw,
-  Compare,
   Settings
 } from 'lucide-react';
 
@@ -356,7 +355,7 @@ export default function MonteCarloComparison({
               textAnchor="middle"
               className="text-xs fill-red-600 font-bold"
             >
-              {backtestValue.toFixed(1)}
+              {backtestValue?.toFixed(1) || 'N/A'}
             </text>
           </g>
         )}
@@ -379,7 +378,7 @@ export default function MonteCarloComparison({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Compare className="h-5 w-5" />
+            <BarChart3 className="h-5 w-5" />
             So Sánh Monte Carlo Analysis
           </CardTitle>
         </CardHeader>
@@ -404,7 +403,7 @@ export default function MonteCarloComparison({
                 size="sm"
                 onClick={() => setShowComparison(!showComparison)}
               >
-                <Compare className="h-4 w-4 mr-2" />
+                <BarChart3 className="h-4 w-4 mr-2" />
                 {showComparison ? 'So sánh' : 'Chi tiết'}
               </Button>
               

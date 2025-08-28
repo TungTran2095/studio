@@ -42,7 +42,7 @@ export function createYinsenMcpServer() {
         },
         required: ["symbol"]
       },
-      handler: async ({ symbol, timeframe = "1d", indicators = ["RSI", "MACD"] }) => {
+      handler: async ({ symbol, timeframe = "1d", indicators = ["RSI", "MACD"] }: { symbol: string; timeframe?: string; indicators?: string[] }) => {
         console.log(`[MCP/market_analysis] Phân tích ${symbol} với timeframe ${timeframe}`);
         try {
           // Gọi đến công cụ phân tích kỹ thuật
@@ -97,7 +97,7 @@ export function createYinsenMcpServer() {
         },
         required: ["symbol", "side", "type", "quantity"]
       },
-      handler: async ({ symbol, side, type, quantity, price }) => {
+      handler: async ({ symbol, side, type, quantity, price }: { symbol: string; side: string; type: string; quantity: number; price?: number }) => {
         console.log(`[MCP/place_order] Đặt lệnh ${side} ${quantity} ${symbol}`);
         
         try {

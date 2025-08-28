@@ -235,7 +235,7 @@ export class TTest {
     const cohensD = (mean1 - mean2) / pooledSD;
     
     // Calculate confidence interval
-    const ci = [
+    const ci: [number, number] = [
       (mean1 - mean2) - tCrit * standardError,
       (mean1 - mean2) + tCrit * standardError
     ];

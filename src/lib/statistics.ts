@@ -10,6 +10,24 @@ function standardDeviation(data: number[]): number {
   return Math.sqrt(variance);
 }
 
+// Tính normal CDF (xấp xỉ)
+function normalCDF(x: number): number {
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const p = 0.3275911;
+
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x) / Math.sqrt(2.0);
+
+  const t = 1.0 / (1.0 + p * x);
+  const erf = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+
+  return 0.5 * (1.0 + sign * erf);
+}
+
 // Tính t-statistic
 function tStatistic(data: number[], mu0: number = 0): number {
   const m = mean(data);
@@ -54,7 +72,7 @@ export function ztest(data: number[], alpha: number = 0.05) {
   const z = (m - 0) / (s / Math.sqrt(n));
   
   // Tính p-value cho z-test
-  const pValue = 2 * (1 - 0.5 * (1 + Math.erf(Math.abs(z) / Math.sqrt(2))));
+  const pValue = 2 * (1 - normalCDF(Math.abs(z)));
   
   return {
     statistic: z,
