@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       const currentSignal = signal[i];
 
       // Logic giao dịch dựa trên chiến lược - Mua khi có signal mua, bán khi có signal bán
-      if (config.strategy.type === 'moving_average') {
+      if (config.strategy.type === 'moving_average' && currentMA !== null) {
         // Tín hiệu mua: giá hiện tại > MA và chưa có vị thế
         if (currentPrice > currentMA && position <= 0) {
           // Tín hiệu mua
