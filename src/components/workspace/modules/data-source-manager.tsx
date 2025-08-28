@@ -368,6 +368,7 @@ function AddDataSourceForm({ onClose }: { onClose: () => void }) {
             <SelectItem value="websocket">WebSocket</SelectItem>
             <SelectItem value="database">Database</SelectItem>
             <SelectItem value="file">File</SelectItem>
+            <SelectItem value="webhook">Webhook</SelectItem>
           </SelectContent>
         </Select>
       </div>

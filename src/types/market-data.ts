@@ -41,7 +41,7 @@ export interface MacroEconomicData {
 export interface DataSource {
   id: string;
   name: string;
-  type: 'api' | 'websocket' | 'file' | 'database';
+  type: 'api' | 'websocket' | 'file' | 'database' | 'webhook';
   endpoint: string;
   isActive: boolean;
   status: 'connected' | 'disconnected' | 'error' | 'testing';
