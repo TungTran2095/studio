@@ -39,7 +39,10 @@ interface Trade {
 }
 
 export const TradeHistory: React.FC = () => {
-  const { apiKey, apiSecret, isTestnet, isConnected, ownedSymbols } = useAssetStore();
+  const { apiKey, apiSecret, isTestnet, accounts, activeAccountId } = useAssetStore();
+  const activeAccount = accounts.find(acc => acc.id === activeAccountId);
+  const isConnected = activeAccount?.isConnected || false;
+  const ownedSymbols = activeAccount?.ownedSymbols || [];
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
