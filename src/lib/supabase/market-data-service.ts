@@ -13,16 +13,38 @@ let cachedClient: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient {
   if (cachedClient) return cachedClient;
+  
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  // Ưu tiên SERVICE_ROLE ở server-side, fallback sang ANON nếu có
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
+    console.error('Missing Supabase environment variables:', {
+      url: supabaseUrl ? 'SET' : 'MISSING',
+      key: supabaseKey ? 'SET' : 'MISSING'
+    });
     throw new Error('Supabase URL and Service Role Key are required.');
   }
 
-  cachedClient = createClient(supabaseUrl, supabaseKey);
-  return cachedClient;
+  try {
+    cachedClient = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      }
+    });
+    
+    // Test connection
+    console.log('Supabase client created successfully');
+    return cachedClient;
+  } catch (error) {
+    console.error('Failed to create Supabase client:', error);
+    throw new Error(`Failed to create Supabase client: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 export class MarketDataService {
@@ -105,6 +127,12 @@ export class MarketDataService {
   async saveDataSource(source: DataSource): Promise<{ success: boolean; error?: string }> {
     try {
       const client = getSupabaseClient();
+      
+      // Validate connection first
+      if (!client) {
+        throw new Error('Supabase client not available');
+      }
+
       const { error } = await client
         .from('data_sources')
         .upsert({
@@ -118,10 +146,18 @@ export class MarketDataService {
           status: source.status
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database upsert error:', error);
+        throw error;
+      }
+      
       return { success: true };
     } catch (error) {
-      return { success: false, error: (error as Error).message };
+      console.error('Error saving data source:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown database error' 
+      };
     }
   }
 

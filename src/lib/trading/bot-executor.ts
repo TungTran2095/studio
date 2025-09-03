@@ -736,7 +736,9 @@ export class BotExecutor {
       }
 
       const closes = candles.map(c => c.close);
-      console.log('[BotExecutor] Calculate Signal Debug - Extracted closes length:', closes.length);
+      const highs = candles.map(c => c.high);
+      const lows = candles.map(c => c.low);
+      console.log('[BotExecutor] Calculate Signal Debug - Extracted data length:', closes.length);
       console.log('[BotExecutor] Calculate Signal Debug - First 5 closes:', closes.slice(0, 5));
       console.log('[BotExecutor] Calculate Signal Debug - Last 5 closes:', closes.slice(-5));
       
@@ -815,7 +817,7 @@ export class BotExecutor {
             timestamp: new Date().toISOString()
           });
           
-          signalResult = this.calculateIchimokuSignal(closes, strategy.parameters);
+          signalResult = this.calculateIchimokuSignal(closes, highs, lows, strategy.parameters);
           break;
           
         default:
@@ -940,108 +942,132 @@ export class BotExecutor {
     return null;
   }
 
-  private calculateIchimokuSignal(closes: number[], params: any): 'buy' | 'sell' | null {
+  private calculateIchimokuSignal(closes: number[], highs: number[], lows: number[], params: any): 'buy' | 'sell' | null {
     try {
-      console.log('[BotExecutor] Ichimoku Signal Debug - Starting calculation');
+      console.log('[BotExecutor] Ichimoku Signal Debug - Starting calculation (NEW CROSSOVER LOGIC)');
       console.log('[BotExecutor] Ichimoku Signal Debug - Parameters:', params);
       console.log('[BotExecutor] Ichimoku Signal Debug - Closes length:', closes.length);
       
       const tenkanPeriod = params.tenkanPeriod || 9;
       const kijunPeriod = params.kijunPeriod || 26;
       const senkouSpanBPeriod = params.senkouSpanBPeriod || 52;
+      const displacement = 26; // Standard Ichimoku displacement
       
-      if (closes.length < senkouSpanBPeriod) {
+      // Cần ít nhất 52 + 26 = 78 candles để tính đầy đủ Ichimoku
+      if (closes.length < senkouSpanBPeriod + displacement) {
         console.log('[BotExecutor] Ichimoku Signal Debug - Not enough data for calculation');
         return null;
       }
       
-      // Tính Tenkan-sen (Conversion Line)
-      const tenkanSen = this.calculateSMA(closes, tenkanPeriod);
+      // Tính Tenkan-sen (Conversion Line) - sử dụng high/low thực tế
+      const tenkanSen = this.calculateTenkanSen(highs, lows, tenkanPeriod);
       const currentTenkan = tenkanSen[tenkanSen.length - 1];
+      const prevTenkan = tenkanSen[tenkanSen.length - 2];
       
-      // Tính Kijun-sen (Base Line)
-      const kijunSen = this.calculateSMA(closes, kijunPeriod);
+      // Tính Kijun-sen (Base Line) - sử dụng high/low thực tế
+      const kijunSen = this.calculateKijunSen(highs, lows, kijunPeriod);
       const currentKijun = kijunSen[kijunSen.length - 1];
+      const prevKijun = kijunSen[kijunSen.length - 2];
       
-      // Tính Senkou Span A (Leading Span A)
+      // Tính Senkou Span A (Leading Span A) - shifted forward
       const senkouSpanA = (currentTenkan + currentKijun) / 2;
       
-      // Tính Senkou Span B (Leading Span B)
-      const senkouSpanB = this.calculateSMA(closes, senkouSpanBPeriod);
+      // Tính Senkou Span B (Leading Span B) - shifted forward
+      const senkouSpanB = this.calculateSenkouSpanB(highs, lows, senkouSpanBPeriod);
       const currentSenkouB = senkouSpanB[senkouSpanB.length - 1];
+      
+      // Tính Chikou Span (Lagging Span) - shifted backward
+      const chikouSpan = closes[closes.length - 1 - displacement];
       
       const currentPrice = closes[closes.length - 1];
       
       console.log('[BotExecutor] Ichimoku Signal Debug - Current values:', {
         price: currentPrice,
         tenkan: currentTenkan,
+        prevTenkan: prevTenkan,
         kijun: currentKijun,
+        prevKijun: prevKijun,
         senkouA: senkouSpanA,
-        senkouB: currentSenkouB
+        senkouB: currentSenkouB,
+        chikou: chikouSpan
       });
       
-      // Sử dụng logic giống hệt như trong backtest (technical-analysis-tool.ts)
-      let bullishPoints = 0;
-      let bearishPoints = 0;
+      // SỬ DỤNG LOGIC CROSSOVER GIỐNG BACKTEST
+      console.log('[BotExecutor] Ichimoku Signal Debug - Using CROSSOVER logic (like backtest)');
       
-      console.log('[BotExecutor] Ichimoku Signal Debug - Using backtest logic (point system)');
+      // 1. Kiểm tra crossover Tenkan và Kijun
+      const tenkanCrossAboveKijun = currentTenkan > currentKijun && prevTenkan <= prevKijun;
+      const tenkanCrossBelowKijun = currentTenkan < currentKijun && prevTenkan >= prevKijun;
       
-      // 1. Vị trí giá so với mây (Kumo)
-      if (currentPrice > Math.max(senkouSpanA, currentSenkouB)) {
-        bullishPoints += 2;
-        console.log('[BotExecutor] Ichimoku Signal Debug - Price above Kumo cloud (+2 bullish)');
-      } else if (currentPrice < Math.min(senkouSpanA, currentSenkouB)) {
-        bearishPoints += 2;
-        console.log('[BotExecutor] Ichimoku Signal Debug - Price below Kumo cloud (+2 bearish)');
-      } else {
-        console.log('[BotExecutor] Ichimoku Signal Debug - Price inside Kumo cloud (neutral)');
-      }
+      console.log('[BotExecutor] Ichimoku Signal Debug - Crossover check:', {
+        tenkanCrossAboveKijun,
+        tenkanCrossBelowKijun,
+        currentTenkan,
+        prevTenkan,
+        currentKijun,
+        prevKijun
+      });
       
-      // 2. Tenkan-sen so với Kijun-sen
-      if (currentTenkan > currentKijun) {
-        bullishPoints += 1;
-        console.log('[BotExecutor] Ichimoku Signal Debug - Tenkan above Kijun (+1 bullish)');
-      } else if (currentTenkan < currentKijun) {
-        bearishPoints += 1;
-        console.log('[BotExecutor] Ichimoku Signal Debug - Tenkan below Kijun (+1 bearish)');
-      }
+      // 2. Kiểm tra vị trí giá so với cloud
+      const priceAboveCloud = currentPrice > Math.max(senkouSpanA, currentSenkouB);
+      const priceBelowCloud = currentPrice < Math.min(senkouSpanA, currentSenkouB);
       
-      // 3. Kiểm tra giao cắt (cross) gần đây
-      const prevClosePrices = closes.slice(-5);
-      if (prevClosePrices.length >= 2) {
-        if (currentTenkan > currentKijun && prevClosePrices[prevClosePrices.length - 2] < prevClosePrices[prevClosePrices.length - 1]) {
-          bullishPoints += 2;
-          console.log('[BotExecutor] Ichimoku Signal Debug - Recent bullish cross (+2 bullish)');
-        } else if (currentTenkan < currentKijun && prevClosePrices[prevClosePrices.length - 2] > prevClosePrices[prevClosePrices.length - 1]) {
-          bearishPoints += 2;
-          console.log('[BotExecutor] Ichimoku Signal Debug - Recent bearish cross (+2 bearish)');
+      console.log('[BotExecutor] Ichimoku Signal Debug - Cloud position:', {
+        priceAboveCloud,
+        priceBelowCloud,
+        cloudTop: Math.max(senkouSpanA, currentSenkouB),
+        cloudBottom: Math.min(senkouSpanA, currentSenkouB)
+      });
+      
+      // 3. Kiểm tra Chikou confirmation
+      const chikouConfirmsBullish = chikouSpan > currentPrice;
+      const chikouConfirmsBearish = chikouSpan < currentPrice;
+      
+      console.log('[BotExecutor] Ichimoku Signal Debug - Chikou confirmation:', {
+        chikouConfirmsBullish,
+        chikouConfirmsBearish,
+        chikouSpan,
+        currentPrice
+      });
+      
+      // 4. LOGIC MUA - giống hệt backtest
+      const buyCondition = (
+        priceAboveCloud && 
+        tenkanCrossAboveKijun && 
+        chikouConfirmsBullish
+      );
+      
+      // 5. LOGIC BÁN - giống hệt backtest
+      const sellCondition = (
+        priceBelowCloud && 
+        tenkanCrossBelowKijun && 
+        chikouConfirmsBearish
+      );
+      
+      console.log('[BotExecutor] Ichimoku Signal Debug - Signal conditions:', {
+        buyCondition,
+        sellCondition,
+        allBuyConditions: {
+          priceAboveCloud,
+          tenkanCrossAboveKijun,
+          chikouConfirmsBullish
+        },
+        allSellConditions: {
+          priceBelowCloud,
+          tenkanCrossBelowKijun,
+          chikouConfirmsBearish
         }
-      }
-      
-      // 4. Senkou Span A so với Senkou Span B (hình dạng mây)
-      if (senkouSpanA > currentSenkouB) {
-        bullishPoints += 1;
-        console.log('[BotExecutor] Ichimoku Signal Debug - Senkou A above Senkou B (+1 bullish)');
-      } else if (senkouSpanA < currentSenkouB) {
-        bearishPoints += 1;
-        console.log('[BotExecutor] Ichimoku Signal Debug - Senkou A below Senkou B (+1 bearish)');
-      }
-      
-      console.log('[BotExecutor] Ichimoku Signal Debug - Point calculation:', {
-        bullishPoints: bullishPoints,
-        bearishPoints: bearishPoints,
-        difference: bullishPoints - bearishPoints
       });
       
-      // Xác định tín hiệu cuối cùng - giống hệt backtest
-      if (bullishPoints > bearishPoints) {
-        console.log(`[BotExecutor] Ichimoku Signal Debug - BUY signal: ${bullishPoints} bullish vs ${bearishPoints} bearish`);
+      // 6. Xác định tín hiệu cuối cùng
+      if (buyCondition) {
+        console.log('[BotExecutor] Ichimoku Signal Debug - BUY signal: All conditions met');
         return 'buy';
-      } else if (bearishPoints > bullishPoints) {
-        console.log(`[BotExecutor] Ichimoku Signal Debug - SELL signal: ${bearishPoints} bearish vs ${bullishPoints} bullish`);
+      } else if (sellCondition) {
+        console.log('[BotExecutor] Ichimoku Signal Debug - SELL signal: All conditions met');
         return 'sell';
       } else {
-        console.log('[BotExecutor] Ichimoku Signal Debug - NEUTRAL signal: Equal points');
+        console.log('[BotExecutor] Ichimoku Signal Debug - NO signal: Conditions not met');
         return null;
       }
       
@@ -1058,6 +1084,54 @@ export class BotExecutor {
       sma.push(sum / period);
     }
     return sma;
+  }
+
+  /**
+   * Tính Tenkan-sen (Conversion Line) - sử dụng high/low thực tế
+   * Tenkan = (Highest High + Lowest Low) / 2 trong 9 periods
+   */
+  private calculateTenkanSen(highs: number[], lows: number[], period: number): number[] {
+    const tenkan = [];
+    for (let i = period - 1; i < highs.length; i++) {
+      const highSlice = highs.slice(i - period + 1, i + 1);
+      const lowSlice = lows.slice(i - period + 1, i + 1);
+      const highest = Math.max(...highSlice);
+      const lowest = Math.min(...lowSlice);
+      tenkan.push((highest + lowest) / 2);
+    }
+    return tenkan;
+  }
+
+  /**
+   * Tính Kijun-sen (Base Line) - sử dụng high/low thực tế
+   * Kijun = (Highest High + Lowest Low) / 2 trong 26 periods
+   */
+  private calculateKijunSen(highs: number[], lows: number[], period: number): number[] {
+    const kijun = [];
+    for (let i = period - 1; i < highs.length; i++) {
+      const highSlice = highs.slice(i - period + 1, i + 1);
+      const lowSlice = lows.slice(i - period + 1, i + 1);
+      const highest = Math.max(...highSlice);
+      const lowest = Math.min(...lowSlice);
+      kijun.push((highest + lowest) / 2);
+    }
+    return kijun;
+  }
+
+  /**
+   * Tính Senkou Span B (Leading Span B) - sử dụng high/low thực tế
+   * Senkou Span B = (Highest High + Lowest Low) / 2 trong 52 periods, shifted forward 26 periods
+   */
+  private calculateSenkouSpanB(highs: number[], lows: number[], period: number): number[] {
+    const senkouB = [];
+    for (let i = period - 1; i < highs.length; i++) {
+      const highSlice = highs.slice(i - period + 1, i + 1);
+      const lowSlice = lows.slice(i - period + 1, i + 1);
+      const highest = Math.max(...highSlice);
+      const lowest = Math.min(...lowSlice);
+      senkouB.push((highest + lowest) / 2);
+    }
+    return senkouB;
   }
 
   private calculateRSI(data: number[], period: number): number[] {
