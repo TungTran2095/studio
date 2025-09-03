@@ -229,13 +229,13 @@ export class BotExecutor {
             .single();
           
           if (botStatus && botStatus.status !== 'running') {
-            console.log(`[BotExecutor] 🛑 Bot status in database is ${botStatus.status}, stopping execution immediately`);
+            console.log(`[${this.bot.name}] 🛑 Status: ${botStatus.status}, stopping`);
             this.isRunning = false;
             break; // Thoát khỏi vòng lặp
           }
         } catch (error) {
           console.error('[BotExecutor] Error checking status in main loop:', error);
-          console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+          console.log(`[${this.bot.name}] 🛑 Cannot check status, stopping for safety`);
           this.isRunning = false;
           break; // Thoát khỏi vòng lặp
         }
@@ -291,7 +291,7 @@ export class BotExecutor {
     try {
       // Kiểm tra xem bot có đang chạy không - kiểm tra cả isRunning và status từ database
       if (!this.isRunning) {
-        console.log('[BotExecutor] Bot is stopped (isRunning=false), skipping strategy execution');
+        console.log(`[${this.bot.name}] ⏸️ Bot stopped, skipping execution`);
         return;
       }
 
@@ -310,13 +310,12 @@ export class BotExecutor {
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status from database:', error);
-        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+        console.log(`[${this.bot.name}] 🛑 Cannot check status, stopping for safety`);
         this.isRunning = false;
         return;
       }
       
-      console.log('[BotExecutor] 🎯 Executing strategy...');
-      console.log(`[BotExecutor] 📈 Symbol: ${this.config.symbol}, Timeframe: ${this.config.timeframe}`);
+      console.log(`[${this.bot.name}] 🎯 Running ${this.config.strategy.type} strategy on ${this.config.symbol} (${this.config.timeframe})`);
       
       // Enhanced detailed logging
       botLogger.info('Strategy execution started', {
@@ -512,7 +511,7 @@ export class BotExecutor {
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status before trade:', error);
-        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+        console.log(`[${this.bot.name}] 🛑 Cannot check status, stopping for safety`);
         this.isRunning = false;
         return;
       }
@@ -694,78 +693,24 @@ export class BotExecutor {
 
   private async calculateSignal(candles: any[]): Promise<'buy' | 'sell' | null> {
     try {
-      console.log('[BotExecutor] Calculate Signal Debug - Starting signal calculation');
-      console.log('[BotExecutor] Calculate Signal Debug - Candles length:', candles.length);
-      
-      // Enhanced signal calculation logging
-      botLogger.debug('Signal calculation started', {
-        botName: this.bot.name,
-        symbol: this.config.symbol,
-        candlesLength: candles.length,
-        timestamp: new Date().toISOString()
-      });
-      
-      console.log(`[BotExecutor] 🔍 DEBUG: Signal calculation input analysis:`, {
-        candlesLength: candles.length,
-        firstCandle: candles[0],
-        lastCandle: candles[candles.length - 1],
-        timeRange: {
-          from: new Date(candles[0].openTime).toISOString(),
-          to: new Date(candles[candles.length - 1].openTime).toISOString()
-        },
-        strategy: this.config.strategy.type,
-        strategyParams: this.config.strategy.parameters
-      });
+      console.log(`[${this.bot.name}] 🔍 Analyzing ${candles.length} candles...`);
       
       if (candles.length < 50) {
-        console.log('[BotExecutor] Calculate Signal Debug - Not enough data for signal calculation');
-        console.log(`[BotExecutor] 🔍 DEBUG: Insufficient data:`, {
-          required: 50,
-          available: candles.length,
-          missing: 50 - candles.length
-        });
-        
-        botLogger.warn('Insufficient data for signal calculation', {
-          botName: this.bot.name,
-          symbol: this.config.symbol,
-          required: 50,
-          available: candles.length
-        });
-        
+        console.log(`[${this.bot.name}] ⚠️ Not enough data (need 50, have ${candles.length})`);
         return null;
       }
 
       const closes = candles.map(c => c.close);
       const highs = candles.map(c => c.high);
       const lows = candles.map(c => c.low);
-      console.log('[BotExecutor] Calculate Signal Debug - Extracted data length:', closes.length);
-      console.log('[BotExecutor] Calculate Signal Debug - First 5 closes:', closes.slice(0, 5));
-      console.log('[BotExecutor] Calculate Signal Debug - Last 5 closes:', closes.slice(-5));
+      const currentPrice = closes[closes.length - 1];
       
-      // Enhanced closes data logging
-      console.log(`[BotExecutor] 🔍 DEBUG: Closes data analysis:`, {
-        totalCloses: closes.length,
-        first5Closes: closes.slice(0, 5),
-        last5Closes: closes.slice(-5),
-        priceRange: {
-          min: Math.min(...closes),
-          max: Math.max(...closes),
-          current: closes[closes.length - 1]
-        },
-        volatility: {
-          avg: closes.reduce((a, b) => a + b, 0) / closes.length,
-          stdDev: Math.sqrt(closes.reduce((sq, n) => sq + Math.pow(n - (closes.reduce((a, b) => a + b, 0) / closes.length), 2), 0) / closes.length)
-        }
-      });
+      console.log(`[${this.bot.name}] 💰 Current price: $${currentPrice.toFixed(2)}`);
+      
+
       
       const strategy = this.config.strategy;
-      console.log('[BotExecutor] Calculate Signal Debug - Strategy:', strategy);
-
-      console.log(`[BotExecutor] 🔍 DEBUG: Strategy selection:`, {
-        strategyType: strategy.type,
-        strategyParams: strategy.parameters,
-        timestamp: new Date().toISOString()
-      });
+      console.log(`[${this.bot.name}] 📊 Using ${strategy.type} strategy`);
       
       let signalResult: 'buy' | 'sell' | null = null;
       const strategyStartTime = Date.now();
@@ -773,50 +718,20 @@ export class BotExecutor {
       switch (strategy.type.toLowerCase()) {
         case 'ma_crossover':
         case 'ma_cross':
-          console.log('[BotExecutor] Calculate Signal Debug - Using MA_CROSSOVER strategy');
-          console.log(`[BotExecutor] 🔍 DEBUG: MA Crossover parameters:`, {
-            fastPeriod: strategy.parameters.fastPeriod,
-            slowPeriod: strategy.parameters.slowPeriod,
-            timestamp: new Date().toISOString()
-          });
-          
           signalResult = this.calculateMACrossoverSignal(closes, strategy.parameters);
           break;
           
         case 'rsi':
-          console.log('[BotExecutor] Calculate Signal Debug - Using RSI strategy');
-          console.log(`[BotExecutor] 🔍 DEBUG: RSI parameters:`, {
-            period: strategy.parameters.period,
-            oversold: strategy.parameters.oversold,
-            overbought: strategy.parameters.overbought,
-            timestamp: new Date().toISOString()
-          });
-          
           signalResult = this.calculateRSISignal(closes, strategy.parameters);
           break;
           
         case 'bollinger_bands':
         case 'bollinger':
         case 'bb':
-          console.log('[BotExecutor] Calculate Signal Debug - Using BOLLINGER_BANDS strategy');
-          console.log(`[BotExecutor] 🔍 DEBUG: Bollinger Bands parameters:`, {
-            period: strategy.parameters.period,
-            stdDev: strategy.parameters.stdDev,
-            timestamp: new Date().toISOString()
-          });
-          
           signalResult = this.calculateBollingerBandsSignal(closes, strategy.parameters);
           break;
           
         case 'ichimoku':
-          console.log('[BotExecutor] Calculate Signal Debug - Using ICHIMOKU strategy');
-          console.log(`[BotExecutor] 🔍 DEBUG: Ichimoku parameters:`, {
-            tenkanPeriod: strategy.parameters.tenkanPeriod,
-            kijunPeriod: strategy.parameters.kijunPeriod,
-            senkouSpanBPeriod: strategy.parameters.senkouSpanBPeriod,
-            timestamp: new Date().toISOString()
-          });
-          
           signalResult = this.calculateIchimokuSignal(closes, highs, lows, strategy.parameters);
           break;
           
@@ -836,24 +751,15 @@ export class BotExecutor {
       
       const strategyExecutionTime = Date.now() - strategyStartTime;
       
-      console.log(`[BotExecutor] 🔍 DEBUG: Strategy execution completed:`, {
-        strategy: strategy.type,
-        executionTime: strategyExecutionTime,
-        result: signalResult,
-        timestamp: new Date().toISOString()
-      });
-      
-      botLogger.debug('Strategy execution completed', {
-        botName: this.bot.name,
-        symbol: this.config.symbol,
-        strategy: strategy.type,
-        executionTime: strategyExecutionTime,
-        result: signalResult
-      });
+      if (signalResult) {
+        console.log(`[${this.bot.name}] 🎯 Signal: ${signalResult.toUpperCase()} (${strategyExecutionTime}ms)`);
+      } else {
+        console.log(`[${this.bot.name}] ⏸️ No signal (${strategyExecutionTime}ms)`);
+      }
       
       return signalResult;
     } catch (error) {
-      console.error('[BotExecutor] Calculate Signal Debug - Error calculating signal:', error);
+      console.error(`[${this.bot.name}] ❌ Signal calculation error:`, (error as Error).message);
       return null;
     }
   }
@@ -944,9 +850,6 @@ export class BotExecutor {
 
   private calculateIchimokuSignal(closes: number[], highs: number[], lows: number[], params: any): 'buy' | 'sell' | null {
     try {
-      console.log('[BotExecutor] Ichimoku Signal Debug - Starting calculation (NEW CROSSOVER LOGIC)');
-      console.log('[BotExecutor] Ichimoku Signal Debug - Parameters:', params);
-      console.log('[BotExecutor] Ichimoku Signal Debug - Closes length:', closes.length);
       
       const tenkanPeriod = params.tenkanPeriod || 9;
       const kijunPeriod = params.kijunPeriod || 26;
@@ -955,7 +858,6 @@ export class BotExecutor {
       
       // Cần ít nhất 52 + 26 = 78 candles để tính đầy đủ Ichimoku
       if (closes.length < senkouSpanBPeriod + displacement) {
-        console.log('[BotExecutor] Ichimoku Signal Debug - Not enough data for calculation');
         return null;
       }
       
@@ -981,54 +883,17 @@ export class BotExecutor {
       
       const currentPrice = closes[closes.length - 1];
       
-      console.log('[BotExecutor] Ichimoku Signal Debug - Current values:', {
-        price: currentPrice,
-        tenkan: currentTenkan,
-        prevTenkan: prevTenkan,
-        kijun: currentKijun,
-        prevKijun: prevKijun,
-        senkouA: senkouSpanA,
-        senkouB: currentSenkouB,
-        chikou: chikouSpan
-      });
-      
-      // SỬ DỤNG LOGIC CROSSOVER GIỐNG BACKTEST
-      console.log('[BotExecutor] Ichimoku Signal Debug - Using CROSSOVER logic (like backtest)');
-      
       // 1. Kiểm tra crossover Tenkan và Kijun
       const tenkanCrossAboveKijun = currentTenkan > currentKijun && prevTenkan <= prevKijun;
       const tenkanCrossBelowKijun = currentTenkan < currentKijun && prevTenkan >= prevKijun;
-      
-      console.log('[BotExecutor] Ichimoku Signal Debug - Crossover check:', {
-        tenkanCrossAboveKijun,
-        tenkanCrossBelowKijun,
-        currentTenkan,
-        prevTenkan,
-        currentKijun,
-        prevKijun
-      });
       
       // 2. Kiểm tra vị trí giá so với cloud
       const priceAboveCloud = currentPrice > Math.max(senkouSpanA, currentSenkouB);
       const priceBelowCloud = currentPrice < Math.min(senkouSpanA, currentSenkouB);
       
-      console.log('[BotExecutor] Ichimoku Signal Debug - Cloud position:', {
-        priceAboveCloud,
-        priceBelowCloud,
-        cloudTop: Math.max(senkouSpanA, currentSenkouB),
-        cloudBottom: Math.min(senkouSpanA, currentSenkouB)
-      });
-      
       // 3. Kiểm tra Chikou confirmation
       const chikouConfirmsBullish = chikouSpan > currentPrice;
       const chikouConfirmsBearish = chikouSpan < currentPrice;
-      
-      console.log('[BotExecutor] Ichimoku Signal Debug - Chikou confirmation:', {
-        chikouConfirmsBullish,
-        chikouConfirmsBearish,
-        chikouSpan,
-        currentPrice
-      });
       
       // 4. LOGIC MUA - giống hệt backtest
       const buyCondition = (
@@ -1044,35 +909,17 @@ export class BotExecutor {
         chikouConfirmsBearish
       );
       
-      console.log('[BotExecutor] Ichimoku Signal Debug - Signal conditions:', {
-        buyCondition,
-        sellCondition,
-        allBuyConditions: {
-          priceAboveCloud,
-          tenkanCrossAboveKijun,
-          chikouConfirmsBullish
-        },
-        allSellConditions: {
-          priceBelowCloud,
-          tenkanCrossBelowKijun,
-          chikouConfirmsBearish
-        }
-      });
-      
       // 6. Xác định tín hiệu cuối cùng
       if (buyCondition) {
-        console.log('[BotExecutor] Ichimoku Signal Debug - BUY signal: All conditions met');
         return 'buy';
       } else if (sellCondition) {
-        console.log('[BotExecutor] Ichimoku Signal Debug - SELL signal: All conditions met');
         return 'sell';
       } else {
-        console.log('[BotExecutor] Ichimoku Signal Debug - NO signal: Conditions not met');
         return null;
       }
       
     } catch (error) {
-      console.error('[BotExecutor] Ichimoku Signal Debug - Error calculating signal:', error);
+      console.error(`[${this.bot.name}] ❌ Ichimoku calculation error:`, (error as Error).message);
       return null;
     }
   }
@@ -1135,18 +982,13 @@ export class BotExecutor {
   }
 
   private calculateRSI(data: number[], period: number): number[] {
-    console.log(`[BotExecutor] RSI Debug - Input data length: ${data.length}, period: ${period}`);
-    console.log(`[BotExecutor] RSI Debug - First 5 prices:`, data.slice(0, 5));
-    console.log(`[BotExecutor] RSI Debug - Last 5 prices:`, data.slice(-5));
-    
     if (data.length < period + 1) {
-      console.error(`[BotExecutor] RSI Error - Not enough data. Need ${period + 1}, got ${data.length}`);
       return [];
     }
 
     // Kiểm tra dữ liệu đầu vào
     if (data.some(price => isNaN(price) || price <= 0)) {
-      console.error('[BotExecutor] RSI Error - Invalid price data detected');
+      console.error(`[${this.bot.name}] ❌ RSI: Invalid price data`);
       return [];
     }
 
@@ -1164,12 +1006,8 @@ export class BotExecutor {
       }
     }
 
-    console.log(`[BotExecutor] RSI Debug - Initial gains: ${gains}, losses: ${losses}`);
-
     let avgGain = gains / period;
     let avgLoss = losses / period;
-
-    console.log(`[BotExecutor] RSI Debug - Initial avgGain: ${avgGain}, avgLoss: ${avgLoss}`);
 
     // Tính RSI cho các giá trị tiếp theo
     for (let i = period + 1; i < data.length; i++) {
@@ -1202,12 +1040,7 @@ export class BotExecutor {
       }
     }
 
-    console.log(`[BotExecutor] RSI Debug - Final avgGain: ${avgGain}, avgLoss: ${avgLoss}`);
-    console.log(`[BotExecutor] RSI Debug - RSI array length: ${rsi.length}`);
-    if (rsi.length > 0) {
-      console.log(`[BotExecutor] RSI Debug - Last RSI: ${rsi[rsi.length - 1]}`);
-      console.log(`[BotExecutor] RSI Debug - Last 5 RSI values:`, rsi.slice(-5));
-    }
+
     
     return rsi;
   }
@@ -1273,21 +1106,16 @@ export class BotExecutor {
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status for trade execution:', error);
-        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+        console.log(`[${this.bot.name}] 🛑 Cannot check status, stopping for safety`);
         this.isRunning = false;
         return;
       }
 
-      console.log(`[BotExecutor] 🚀 Executing ${signal.toUpperCase()} trade...`);
-      console.log(`[BotExecutor] 📊 Current price check for ${this.config.symbol}`);
-
-      // Enhanced price fetching logging
-      console.log(`[BotExecutor] 🔍 DEBUG: Fetching current price...`);
+      console.log(`[${this.bot.name}] 🚀 Executing ${signal.toUpperCase()} trade...`);
       const priceFetchStart = Date.now();
       
       // Lấy giá hiện tại
       const priceUrl = `${API_BASE_URL}/api/trading/binance/price`;
-      console.log(`[BotExecutor] 🔍 DEBUG: Fetching price from: ${priceUrl}`);
       
       const priceRes = await fetch(priceUrl, {
         method: 'POST',
@@ -1485,7 +1313,7 @@ export class BotExecutor {
         }
       } catch (error) {
         console.error('[BotExecutor] Error checking bot status before order placement:', error);
-        console.log('[BotExecutor] 🛑 Cannot check database status, stopping for safety');
+        console.log(`[${this.bot.name}] 🛑 Cannot check status, stopping for safety`);
         this.isRunning = false;
         return;
       }
@@ -1814,12 +1642,12 @@ export class BotExecutor {
         .single();
 
       if (error) {
-        console.error('[BotExecutor] Error saving trade:', error);
+        console.error(`[${this.bot.name}] ❌ Error saving trade:`, (error as Error).message);
       } else {
-        console.log('[BotExecutor] Trade saved successfully:', data);
+        console.log(`[${this.bot.name}] ✅ Trade saved: ${tradeData.side.toUpperCase()} ${tradeData.quantity} ${tradeData.symbol}`);
       }
     } catch (error) {
-      console.error('[BotExecutor] Error saving trade:', error);
+      console.error(`[${this.bot.name}] ❌ Error saving trade:`, (error as Error).message);
     }
   }
 
@@ -1857,12 +1685,12 @@ export class BotExecutor {
         .eq('id', lastTrade.id);
 
       if (updateError) {
-        console.error('[BotExecutor] Error updating trade:', updateError);
+        console.error(`[${this.bot.name}] ❌ Error updating trade:`, updateError.message);
       } else {
-        console.log('[BotExecutor] Trade updated successfully');
+        console.log(`[${this.bot.name}] ✅ Trade closed: PnL $${(updateData.pnl || 0).toFixed(2)}`);
       }
     } catch (error) {
-      console.error('[BotExecutor] Error updating trade:', error);
+      console.error(`[${this.bot.name}] ❌ Error updating trade:`, (error as Error).message);
     }
   }
 
