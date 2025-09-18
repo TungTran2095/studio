@@ -2,19 +2,23 @@ import { createClient } from '@supabase/supabase-js';
 
 // Cấu hình timeout cho Supabase
 export const SUPABASE_TIMEOUT_CONFIG = {
+  // Timeout cho các query đơn giản (10 giây)
+  SIMPLE_TIMEOUT: 10000,
+  
   // Timeout cho các query thông thường (30 giây)
   DEFAULT_TIMEOUT: 30000,
   
-  // Timeout cho các query phức tạp (5 phút)
-  COMPLEX_QUERY_TIMEOUT: 300000,
+  // Timeout cho các query phức tạp (2 phút)
+  COMPLEX_QUERY_TIMEOUT: 120000,
   
-  // Timeout cho các query rất phức tạp (10 phút)
-  HEAVY_QUERY_TIMEOUT: 600000,
+  // Timeout cho các query rất phức tạp (5 phút)
+  HEAVY_QUERY_TIMEOUT: 300000,
   
   // Limit cho các query để tránh timeout
   DEFAULT_LIMIT: 10000,
   MEDIUM_LIMIT: 5000,
   SMALL_LIMIT: 1000,
+  LIST_LIMIT: 50, // Cho danh sách experiments
   
   // Batch size cho các operation lớn
   BATCH_SIZE: 1000

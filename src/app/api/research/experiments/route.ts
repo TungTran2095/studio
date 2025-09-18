@@ -134,13 +134,29 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ experiment });
       }
 
-      // Get all experiments for project with timeout handling
+      // Get experiments with minimal data for listing (optimized for performance)
       const queryFn = async () => {
+        // Chỉ lấy các trường cần thiết cho danh sách, không lấy results/trades/indicators lớn
+        const selectFields = [
+          'id',
+          'project_id', 
+          'name',
+          'type',
+          'description',
+          'status',
+          'progress',
+          'created_at',
+          'updated_at',
+          'started_at',
+          'completed_at',
+          'error'
+        ].join(', ');
+
         let query = supabase
           .from('research_experiments')
-          .select('*')
+          .select(selectFields)
           .order('created_at', { ascending: false })
-          .limit(SUPABASE_TIMEOUT_CONFIG.DEFAULT_LIMIT);
+          .limit(50); // Giảm limit xuống 50 để tăng tốc
 
         if (projectId) {
           query = query.eq('project_id', projectId);
@@ -151,7 +167,7 @@ export async function GET(request: NextRequest) {
 
       const { data: experiments, error } = await executeWithTimeout(
         queryFn,
-        SUPABASE_TIMEOUT_CONFIG.COMPLEX_QUERY_TIMEOUT
+        SUPABASE_TIMEOUT_CONFIG.SIMPLE_TIMEOUT
       );
 
       if (error) {
