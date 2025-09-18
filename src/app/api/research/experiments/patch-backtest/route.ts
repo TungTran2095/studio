@@ -452,7 +452,13 @@ async function savePatchBacktestResults(experimentId: string, totalResults: any,
     };
 
     // Chuẩn bị dữ liệu update
-    const updateData = {
+    const updateData: {
+      status: string;
+      results: any;
+      completed_at: string;
+      trades?: any[];
+      indicators?: any;
+    } = {
       status: 'completed',
       results: performanceMetrics,
       completed_at: new Date().toISOString()
