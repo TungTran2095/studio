@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { 
   LayoutDashboard, 
   Database, 
@@ -40,12 +40,14 @@ import {
   BarChart3,
   Calendar,
   Target,
-  AlertTriangle
+  AlertTriangle,
+  Terminal
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { TotalAssetsCard } from "@/components/trading/total-assets-card";
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase-client';
+import TradingBotDetailModal from '@/components/trading/trading-bot-detail-modal';
 
 interface WorkspaceContentProps {
   activeModule: ModuleId;
@@ -161,6 +163,8 @@ function handleForward(type: string, data: any) {
   console.log('handleForward called:', type, data);
 }
 
+// (Đã chuyển modal chi tiết bot sang component dùng chung)
+
 // Modal chi tiết
 function DetailModal({ open, onClose, type, data }: { open: boolean, onClose: () => void, type: string, data: any }) {
   const jsonFields = ['metrics', 'config', 'params', 'result', 'extra', 'details'];
@@ -209,7 +213,7 @@ function TradingBotsList() {
   const [bots, setBots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBot, setSelectedBot] = useState<any>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   useEffect(() => {
     async function fetchBots() {
@@ -280,6 +284,25 @@ function TradingBotsList() {
     } catch (error) {
       console.error(`Error ${action}ing bot:`, error);
     }
+  };
+
+  const handleToggleBot = async (bot: any) => {
+    const action = bot.status === 'running' ? 'stop' : 'start';
+    await handleBotAction(bot.id, action);
+    
+    // Cập nhật trạng thái bot trong state
+    setBots(prevBots => 
+      prevBots.map(b => 
+        b.id === bot.id 
+          ? { ...b, status: action === 'start' ? 'running' : 'stopped' }
+          : b
+      )
+    );
+  };
+
+  const handleShowDetail = async (bot: any) => {
+    setSelectedBot(bot);
+    setShowDetailModal(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -424,10 +447,7 @@ function TradingBotsList() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
-                        setSelectedBot(bot);
-                        setModalOpen(true);
-                      }}
+                      onClick={() => handleShowDetail(bot)}
                     >
                       <Eye className="h-3 w-3" />
                     </Button>
@@ -445,71 +465,13 @@ function TradingBotsList() {
         </CardContent>
       </Card>
 
-      {/* Modal chi tiết bot */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Chi tiết Trading Bot</DialogTitle>
-          </DialogHeader>
-          {selectedBot && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Tên bot</label>
-                  <p className="text-sm">{selectedBot.name}</p>
-                </div>
-                                 <div>
-                   <label className="text-sm font-medium text-muted-foreground">Dự án ID</label>
-                   <p className="text-sm">{selectedBot.project_id || 'Không xác định'}</p>
-                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Trạng thái</label>
-                  <Badge className={getStatusColor(selectedBot.status)}>
-                    {getStatusText(selectedBot.status)}
-                  </Badge>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Tổng giao dịch</label>
-                  <p className="text-sm">{selectedBot.total_trades || 0}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Tổng lợi nhuận</label>
-                  <p className={`text-sm ${(selectedBot.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    ${(selectedBot.total_profit || 0).toFixed(2)}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Win Rate</label>
-                  <p className="text-sm">{(selectedBot.win_rate || 0).toFixed(1)}%</p>
-                </div>
-              </div>
-              
-              {selectedBot.description && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Mô tả</label>
-                  <p className="text-sm">{selectedBot.description}</p>
-                </div>
-              )}
 
-              {selectedBot.last_run_at && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Lần chạy cuối</label>
-                  <p className="text-sm">{new Date(selectedBot.last_run_at).toLocaleString('vi-VN')}</p>
-                </div>
-              )}
-
-              {selectedBot.config && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Cấu hình</label>
-                  <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-32">
-                    {JSON.stringify(selectedBot.config, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <TradingBotDetailModal
+        open={showDetailModal}
+        onOpenChange={setShowDetailModal}
+        bot={selectedBot}
+        onToggleBot={handleToggleBot}
+      />
     </>
   );
 }
