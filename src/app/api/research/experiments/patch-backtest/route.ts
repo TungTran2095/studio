@@ -212,7 +212,12 @@ export async function POST(req: Request): Promise<Response> {
         '--config', JSON.stringify(processedConfig),
         '--supabase_url', process.env.NEXT_PUBLIC_SUPABASE_URL || '',
         '--supabase_key', process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-      ]);
+      ], {
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: 'utf-8'
+        }
+      });
 
       let scriptOutput = '';
       let scriptError = '';
@@ -290,12 +295,20 @@ export async function POST(req: Request): Promise<Response> {
               totalTrades: results.results?.totalTrades
             });
 
+            // Debug: Log dữ liệu từ Python script
+            console.log('🔍 Debug Python script output:');
+            console.log('  - results.trades type:', typeof results.trades);
+            console.log('  - results.trades is array:', Array.isArray(results.trades));
+            console.log('  - results.trades length:', results.trades?.length || 0);
+            console.log('  - results.indicators type:', typeof results.indicators);
+            console.log('  - results.indicators keys:', results.indicators ? Object.keys(results.indicators) : 'No data');
+
             // Lưu kết quả vào database
             await savePatchBacktestResults(
               experimentId,
               results.results,
               results.patches || [],
-              results.allTrades || [],
+              results.trades || [], // Sửa từ allTrades thành trades
               results.indicators || {}
             );
 
@@ -402,19 +415,75 @@ async function savePatchBacktestResults(experimentId: string, totalResults: any,
       return;
     }
 
+    // Debug: Log dữ liệu trades
+    console.log('🔍 Debug trades data:');
+    console.log('  - allTrades type:', typeof allTrades);
+    console.log('  - allTrades is array:', Array.isArray(allTrades));
+    console.log('  - allTrades length:', allTrades?.length || 0);
+    console.log('  - allTrades sample:', allTrades?.slice(0, 2) || 'No data');
+
+    // Debug: Log dữ liệu indicators
+    console.log('🔍 Debug indicators data:');
+    console.log('  - indicators type:', typeof indicators);
+    console.log('  - indicators keys:', indicators ? Object.keys(indicators) : 'No data');
+
+    // Tạo cấu trúc results phẳng như yêu cầu với cả camelCase và snake_case
+    const performanceMetrics = {
+      avgWin: totalResults.avgWin || totalResults.avg_win,
+      avgLoss: totalResults.avgLoss || totalResults.avg_loss,
+      avg_win: totalResults.avgWin || totalResults.avg_win,
+      winRate: totalResults.winRate || totalResults.win_rate,
+      avg_loss: totalResults.avgLoss || totalResults.avg_loss,
+      win_rate: totalResults.winRate || totalResults.win_rate,
+      maxDrawdown: totalResults.maxDrawdown || totalResults.max_drawdown,
+      patch_based: true,
+      patch_count: patches.length,
+      sharpeRatio: totalResults.sharpeRatio || totalResults.sharpe_ratio,
+      totalReturn: totalResults.totalReturn || totalResults.total_return,
+      totalTrades: totalResults.totalTrades || totalResults.total_trades,
+      completed_at: new Date().toISOString(),
+      finalCapital: totalResults.finalCapital || totalResults.final_capital,
+      max_drawdown: totalResults.maxDrawdown || totalResults.max_drawdown,
+      sharpe_ratio: totalResults.sharpeRatio || totalResults.sharpe_ratio,
+      total_return: totalResults.totalReturn || totalResults.total_return,
+      total_trades: totalResults.totalTrades || totalResults.total_trades,
+      final_capital: totalResults.finalCapital || totalResults.final_capital,
+      initialCapital: totalResults.initialCapital
+    };
+
+    // Chuẩn bị dữ liệu update
+    const updateData = {
+      status: 'completed',
+      results: performanceMetrics,
+      completed_at: new Date().toISOString()
+    };
+
+    // Chỉ thêm trades nếu có dữ liệu
+    if (allTrades && Array.isArray(allTrades) && allTrades.length > 0) {
+      updateData.trades = allTrades;
+      console.log('✅ Adding trades data to update');
+    } else {
+      console.log('⚠️ No trades data to save');
+    }
+
+    // Chỉ thêm indicators nếu có dữ liệu
+    if (indicators && Object.keys(indicators).length > 0) {
+      updateData.indicators = indicators;
+      console.log('✅ Adding indicators data to update');
+    } else {
+      console.log('⚠️ No indicators data to save');
+    }
+
+    console.log('🔍 Final update data:', {
+      status: updateData.status,
+      hasTrades: !!updateData.trades,
+      hasIndicators: !!updateData.indicators,
+      hasResults: !!updateData.results
+    });
+
     const { error } = await supabase
       .from('research_experiments')
-      .update({
-        status: 'completed',
-        results: {
-          totalResults,
-          patches,
-          allTrades,
-          indicators,
-          completed_at: new Date().toISOString()
-        },
-        completed_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', experimentId);
 
     if (error) {

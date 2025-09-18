@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
 import json
@@ -525,7 +526,13 @@ def main():
             patch_results.append(patch_result)
             
             # Aggregate trades
-            all_trades.extend(patch_result.get('trades', []))
+            patch_trades = patch_result.get('trades', [])
+            # Debug: Log patch trades (commented out to avoid JSON parsing issues)
+            # print(f"[INFO] Patch {i+1} trades: {len(patch_trades)} trades")
+            # Debug: Log sample trade (commented out to avoid JSON parsing issues)
+            # if patch_trades:
+            #     print(f"  - Sample trade: {patch_trades[0] if patch_trades else 'None'}")
+            all_trades.extend(patch_trades)
             
             # Aggregate indicators
             patch_indicators = patch_result.get('indicators', {})

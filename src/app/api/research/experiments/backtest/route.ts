@@ -102,22 +102,48 @@ export async function POST(req: Request) {
     const winningTrades = trades.filter(t => t.type === 'sell' && t.price > trades[trades.indexOf(t)-1]?.price).length;
     const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
 
-    // Cập nhật kết quả vào database
+    // Tính toán indicators data để lưu vào cột indicators
+    const indicatorsData = {
+      timestamps: ohlcvData.map(d => new Date(d.open_time).getTime()),
+      close_prices: prices,
+      ma20: ma20,
+      rsi: rsi,
+      macd: macd,
+      signal: signal
+    };
+
+    // Tạo cấu trúc results phẳng như yêu cầu
+    const flatResults = {
+      avgWin: 0, // Sẽ được tính từ trades
+      avgLoss: 0, // Sẽ được tính từ trades
+      avg_win: 0,
+      winRate: winRate,
+      avg_loss: 0,
+      win_rate: winRate,
+      maxDrawdown: maxDrawdown,
+      patch_based: false,
+      patch_count: 0,
+      sharpeRatio: sharpeRatio,
+      totalReturn: totalReturn * 100,
+      totalTrades: totalTrades,
+      completed_at: new Date().toISOString(),
+      finalCapital: equity[equity.length - 1],
+      max_drawdown: maxDrawdown,
+      sharpe_ratio: sharpeRatio,
+      total_return: totalReturn * 100,
+      total_trades: totalTrades,
+      final_capital: equity[equity.length - 1],
+      initialCapital: equity[0]
+    };
+
+    // Cập nhật kết quả vào database - phân tách dữ liệu vào các cột đúng
     const { error: updateError } = await supabase
       .from('research_experiments')
       .update({
         status: 'completed',
-        results: {
-          trades,
-          equity,
-          performance: {
-            totalReturn: totalReturn * 100,
-            sharpeRatio,
-            maxDrawdown,
-            totalTrades,
-            winRate
-          }
-        },
+        trades: trades, // Lưu trades vào cột trades
+        indicators: indicatorsData, // Lưu indicators vào cột indicators
+        results: flatResults, // Lưu results theo cấu trúc phẳng
         completed_at: new Date().toISOString()
       })
       .eq('id', experimentId);

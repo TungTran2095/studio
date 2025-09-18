@@ -53,7 +53,12 @@ export async function POST(request: Request) {
       pythonScript,
       '--experiment_id', experimentId,
       '--config', JSON.stringify(config)
-    ]);
+    ], {
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8'
+      }
+    });
     
     let scriptOutput = '';
     let scriptError = '';

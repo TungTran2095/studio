@@ -38,7 +38,12 @@ export async function POST(request: NextRequest) {
       args.push('--sample');
     }
 
-    const pythonProcess = spawn('python', args);
+    const pythonProcess = spawn('python', args, {
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8'
+      }
+    });
     
     let scriptOutput = '';
     let scriptError = '';

@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Tuple
-from backtest_strategies.base_strategy import BaseStrategy
+from base_strategy import BaseStrategy
 
 class EnhancedStrategy(BaseStrategy):
     """

@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS research_experiments (
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'stopped')),
   progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
   results JSONB,
+  trades JSONB DEFAULT NULL,
+  indicators JSONB DEFAULT NULL,
   error TEXT,
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
@@ -25,6 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_research_experiments_project_id ON research_exper
 CREATE INDEX IF NOT EXISTS idx_research_experiments_status ON research_experiments(status);
 CREATE INDEX IF NOT EXISTS idx_research_experiments_type ON research_experiments(type);
 CREATE INDEX IF NOT EXISTS idx_research_experiments_created_at ON research_experiments(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_research_experiments_trades ON research_experiments USING GIN (trades);
+CREATE INDEX IF NOT EXISTS idx_research_experiments_indicators ON research_experiments USING GIN (indicators);
 
 -- Enable Row Level Security
 ALTER TABLE research_experiments ENABLE ROW LEVEL SECURITY;

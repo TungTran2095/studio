@@ -301,28 +301,28 @@ class BaseStrategy(ABC):
             losing_trade_ratios = [t['profit_ratio'] for t in trades if t['pnl'] < 0]
             avg_loss_net = np.mean(losing_trade_ratios) if losing_trade_ratios else 0
             
-            # Debug: in ra để kiểm tra
-            print(f"Debug - Total trades: {total_trades}")
-            print(f"Debug - Winning trades: {winning_trades}")
-            print(f"Debug - Losing trades: {losing_trades}")
-            print(f"Debug - Win rate: {win_rate * 100:.2f}%")
-            print(f"Debug - Avg win net: {avg_win_net:.4f}%")
-            print(f"Debug - Avg loss net: {avg_loss_net:.4f}%")
+            # Debug: in ra để kiểm tra (commented out to avoid JSON parsing issues)
+            # print(f"Debug - Total trades: {total_trades}")
+            # print(f"Debug - Winning trades: {winning_trades}")
+            # print(f"Debug - Losing trades: {losing_trades}")
+            # print(f"Debug - Win rate: {win_rate * 100:.2f}%")
+            # print(f"Debug - Avg win net: {avg_win_net:.4f}%")
+            # print(f"Debug - Avg loss net: {avg_loss_net:.4f}%")
             
-            # In ra chi tiết từng trade để kiểm tra
-            print("\n=== DEBUG TRADES ===")
-            for i, trade in enumerate(trades[:5]):  # Chỉ in 5 trades đầu
-                entry_value = trade['entry_price'] * trade['size']
-                net_pnl = trade['pnl']
-                profit_ratio = trade['profit_ratio']
-                print(f"Trade {i+1}: entry_price={trade['entry_price']:.2f}, exit_price={trade['exit_price']:.2f}, size={trade['size']:.6f}")
-                print(f"  entry_value={entry_value:.2f}, net_pnl={net_pnl:.4f}, profit_ratio={profit_ratio:.4f}%")
-                print(f"  pnl_pct={trade['pnl_pct']:.6f}, pnl_pct%={trade['pnl_pct']*100:.4f}%")
-                print(f"  Check: profit_ratio = ({net_pnl:.4f} / {entry_value:.2f}) * 100 = {profit_ratio:.4f}%")
-                print("---")
+            # In ra chi tiết từng trade để kiểm tra (commented out to avoid JSON parsing issues)
+            # print("\n=== DEBUG TRADES ===")
+            # for i, trade in enumerate(trades[:5]):  # Chỉ in 5 trades đầu
+            #     entry_value = trade['entry_price'] * trade['size']
+            #     net_pnl = trade['pnl']
+            #     profit_ratio = trade['profit_ratio']
+            #     print(f"Trade {i+1}: entry_price={trade['entry_price']:.2f}, exit_price={trade['exit_price']:.2f}, size={trade['size']:.6f}")
+            #     print(f"  entry_value={entry_value:.2f}, net_pnl={net_pnl:.4f}, profit_ratio={profit_ratio:.4f}%")
+            #     print(f"  pnl_pct={trade['pnl_pct']:.6f}, pnl_pct%={trade['pnl_pct']*100:.4f}%")
+            #     print(f"  Check: profit_ratio = ({net_pnl:.4f} / {entry_value:.2f}) * 100 = {profit_ratio:.4f}%")
+            #     print("---")
             
-            if len(trades) > 5:
-                print(f"... và {len(trades)-5} trades khác")
+            # if len(trades) > 5:
+            #     print(f"... và {len(trades)-5} trades khác")
         
         total_return = (current_capital - self.initial_capital) / self.initial_capital * 100
         
