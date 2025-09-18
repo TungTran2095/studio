@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClientWithTimeout, executeWithTimeout, SUPABASE_TIMEOUT_CONFIG } from '@/lib/supabase/timeout-config';
 
 // Check if environment variables are available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -133,20 +134,38 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ experiment });
       }
 
-      // Get all experiments for project
-      let query = supabase
-        .from('research_experiments')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Get all experiments for project with timeout handling
+      const queryFn = async () => {
+        let query = supabase
+          .from('research_experiments')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(SUPABASE_TIMEOUT_CONFIG.DEFAULT_LIMIT);
 
-      if (projectId) {
-        query = query.eq('project_id', projectId);
-      }
+        if (projectId) {
+          query = query.eq('project_id', projectId);
+        }
 
-      const { data: experiments, error } = await query;
+        return await query;
+      };
+
+      const { data: experiments, error } = await executeWithTimeout(
+        queryFn,
+        SUPABASE_TIMEOUT_CONFIG.COMPLEX_QUERY_TIMEOUT
+      );
 
       if (error) {
         console.error('Error fetching experiments:', error);
+        
+        // Check if it's a timeout error
+        if (error.code === '57014') {
+          return NextResponse.json({ 
+            error: 'Database query timeout. Please try again or contact support.',
+            timeout: true,
+            details: 'Query took too long to execute. This might be due to large dataset or database performance issues.',
+            experiments: []
+          }, { status: 504 });
+        }
         
         // Check if it's a table not found error
         if (error.code === '42P01') {
