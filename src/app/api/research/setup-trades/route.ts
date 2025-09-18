@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { supabase } from '@/lib/supabase-client';
 
 export async function POST() {
   // Check if Supabase client is available
-  if (!createClient) {
+  if (!supabase) {
     return NextResponse.json(
       {
         error: 'Supabase client not available',
@@ -16,8 +16,6 @@ export async function POST() {
 
   try {
     console.log('🔧 Adding trades column to research_experiments table...');
-
-    const supabase = createClient();
 
     // SQL để thêm column trades
     const sql = `
