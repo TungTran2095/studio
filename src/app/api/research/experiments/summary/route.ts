@@ -68,7 +68,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate summary statistics
-    const summary = {
+    const summary: {
+      total: number;
+      byStatus: Record<'pending' | 'running' | 'completed' | 'failed' | 'stopped', number>;
+      byType: Record<'backtest' | 'hypothesis_test' | 'optimization' | 'monte_carlo', number>;
+      recent: any[];
+      performance: { avgWinRate: number; totalTrades: number; avgReturn: number };
+    } = {
       total: experiments?.length || 0,
       byStatus: {
         pending: 0,
@@ -93,15 +99,17 @@ export async function GET(request: NextRequest) {
 
     // Process experiments data
     if (experiments) {
-      experiments.forEach(exp => {
+      experiments.forEach((exp: any) => {
         // Count by status
-        if (summary.byStatus.hasOwnProperty(exp.status)) {
-          summary.byStatus[exp.status]++;
+        const status = exp.status as keyof typeof summary.byStatus;
+        if (Object.prototype.hasOwnProperty.call(summary.byStatus, status)) {
+          summary.byStatus[status]++;
         }
 
         // Count by type
-        if (summary.byType.hasOwnProperty(exp.type)) {
-          summary.byType[exp.type]++;
+        const typeKey = exp.type as keyof typeof summary.byType;
+        if (Object.prototype.hasOwnProperty.call(summary.byType, typeKey)) {
+          summary.byType[typeKey]++;
         }
 
         // Calculate performance metrics from results
