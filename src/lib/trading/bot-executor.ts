@@ -15,6 +15,7 @@ interface BotExecutorConfig {
     positionSize: number;
     stopLoss: number;
     takeProfit: number;
+    useTakeProfit?: boolean;
   };
   timeframe: string;
 }
@@ -58,7 +59,8 @@ export class BotExecutor {
       initialCapital: 0,
       positionSize: 0,
       stopLoss: 0,
-      takeProfit: 0
+      takeProfit: 0,
+      useTakeProfit: true
     },
     timeframe: '1m'
   };
@@ -106,7 +108,10 @@ export class BotExecutor {
         initialCapital: config.config?.trading?.initialCapital,
         positionSize: config.config?.trading?.positionSize,
         stopLoss: config.config?.riskManagement?.stopLoss,
-        takeProfit: config.config?.riskManagement?.takeProfit
+        takeProfit: config.config?.riskManagement?.takeProfit,
+        useTakeProfit: (config.config?.riskManagement?.useTakeProfit !== undefined)
+          ? config.config?.riskManagement?.useTakeProfit
+          : true
       },
       timeframe: config.config?.trading?.timeframe || '1m'
     };
@@ -1494,7 +1499,7 @@ export class BotExecutor {
         const exitPrice = parseFloat(closeOrder.fills[0].price);
 
         // Cập nhật giao dịch đã đóng và ghi nhận lý do
-        const exit_reason = profit > 0 && (this.config.riskManagement?.useTakeProfit ?? true) ? 'take_profit' :
+        const exit_reason = profit > 0 && (this.config.riskManagement.useTakeProfit ?? true) ? 'take_profit' :
                             profit < 0 ? 'stoploss' : 'signal';
         await this.updateLastTrade({
           exit_price: exitPrice,
