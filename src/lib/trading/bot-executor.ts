@@ -1384,7 +1384,11 @@ export class BotExecutor {
         stop_loss: this.currentPosition.stopLoss,
         take_profit: this.currentPosition.takeProfit,
         status: 'open',
-        open_time: new Date().toISOString()
+        open_time: new Date().toISOString(),
+        // Record signal reasons for UI display
+        entry_reason: this.config.strategy?.type === 'ichimoku' ? 'ichimoku_entry' : (signal === 'buy' ? 'signal_buy' : 'signal_sell'),
+        buy_signal: signal === 'buy' ? (this.config.strategy?.type || 'signal') : null,
+        sell_signal: signal === 'sell' ? (this.config.strategy?.type || 'signal') : null
       });
       console.log(`[BotExecutor] ✅ Trade saved to database`);
 
@@ -1489,12 +1493,15 @@ export class BotExecutor {
         const closeOrder = JSON.parse(await orderRes.text());
         const exitPrice = parseFloat(closeOrder.fills[0].price);
 
-        // Cập nhật giao dịch đã đóng
+        // Cập nhật giao dịch đã đóng và ghi nhận lý do
+        const exit_reason = profit > 0 && (this.config.riskManagement?.useTakeProfit ?? true) ? 'take_profit' :
+                            profit < 0 ? 'stoploss' : 'signal';
         await this.updateLastTrade({
           exit_price: exitPrice,
           status: 'closed',
           close_time: new Date().toISOString(),
-          pnl: profit
+          pnl: profit,
+          exit_reason
         });
 
         // Cập nhật thống kê
@@ -1615,6 +1622,9 @@ export class BotExecutor {
     take_profit: number;
     status: string;
     open_time: string;
+    entry_reason?: string | null;
+    buy_signal?: string | null;
+    sell_signal?: string | null;
   }) {
     try {
       if (!supabase) {
@@ -1650,6 +1660,7 @@ export class BotExecutor {
     status: string;
     close_time?: string;
     pnl?: number;
+    exit_reason?: string;
   }) {
     try {
       console.log('[BotExecutor] Updating last trade:', updateData);
