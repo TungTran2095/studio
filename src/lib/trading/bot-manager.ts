@@ -59,24 +59,25 @@ class BotManager {
 
   private async ensureAllBotsStopped() {
     try {
-      console.log('[BotManager] 🔒 Đảm bảo tất cả bot đều stopped...');
+      console.log('[BotManager] 🔍 Kiểm tra trạng thái bot hiện tại...');
       
-      // Cập nhật tất cả bot về status 'stopped' sử dụng supabaseAdmin
-      const { error } = await this.supabaseAdmin
+      // Chỉ kiểm tra trạng thái, không force stop tất cả bot
+      const { data: runningBots, error } = await this.supabaseAdmin
         .from('trading_bots')
-        .update({ 
-          status: 'stopped',
-          updated_at: new Date().toISOString()
-        })
+        .select('id, name, status')
         .eq('status', 'running');
 
       if (error) {
-        console.error('[BotManager] Lỗi khi cập nhật bot status:', error);
+        console.error('[BotManager] Lỗi khi kiểm tra bot status:', error);
       } else {
-        console.log('[BotManager] ✅ Đã đảm bảo tất cả bot đều stopped');
+        console.log(`[BotManager] 📊 Tìm thấy ${runningBots?.length || 0} bot đang running:`);
+        runningBots?.forEach(bot => {
+          console.log(`  - ${bot.name} (${bot.id})`);
+        });
+        console.log('[BotManager] ✅ Không force stop bot - cho phép multiple bots chạy song song');
       }
     } catch (error) {
-      console.error('[BotManager] Lỗi khi ensure all bots stopped:', error);
+      console.error('[BotManager] Lỗi khi kiểm tra bot status:', error);
     }
   }
 
@@ -99,15 +100,28 @@ class BotManager {
         return;
       }
 
-      console.log(`[BotManager] ⚠️ Tìm thấy ${runningBots.length} bot đang running, sẽ dừng chúng...`);
+      console.log(`[BotManager] 🔄 Tìm thấy ${runningBots.length} bot đang running, khôi phục chúng...`);
 
       for (const bot of runningBots) {
         try {
-          // Cập nhật status về stopped thay vì khôi phục
-          await this.updateBotStatus(bot.id, 'stopped');
-          console.log(`[BotManager] ✅ Đã dừng bot ${bot.name} (${bot.id})`);
+          // Khôi phục bot thay vì dừng chúng
+          console.log(`[BotManager] 🔄 Khôi phục bot ${bot.name} (${bot.id})...`);
+          const executor = new BotExecutor(bot);
+          const initialized = await executor.initialize();
+          
+          if (initialized) {
+            this.runningBots.set(bot.id, executor);
+            executor.start().catch(async (error) => {
+              console.error(`[BotManager] ❌ Bot ${bot.id} gặp lỗi:`, error);
+              await this.stopBot(bot.id);
+            });
+            console.log(`[BotManager] ✅ Đã khôi phục bot ${bot.name} (${bot.id})`);
+          } else {
+            console.log(`[BotManager] ⚠️ Không thể khôi phục bot ${bot.name}, dừng nó`);
+            await this.updateBotStatus(bot.id, 'stopped');
+          }
         } catch (error) {
-          console.error(`[BotManager] ❌ Lỗi khi dừng bot ${bot.name}:`, error);
+          console.error(`[BotManager] ❌ Lỗi khi khôi phục bot ${bot.name}:`, error);
         }
       }
     } catch (error) {
@@ -143,8 +157,8 @@ class BotManager {
         .single();
 
       if (dbBot && dbBot.status === 'running') {
-        console.log(`[BotManager] ⚠️ Bot ${bot.name} đã running trong database, dừng trước`);
-        await this.stopBot(bot.id);
+        console.log(`[BotManager] ⚠️ Bot ${bot.name} đã running trong database, không cần start lại`);
+        return true; // Bot đã đang chạy, không cần start lại
       }
 
       // Tạo BotExecutor mới

@@ -515,7 +515,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                           </div>
                         )}
                         <div className="p-2 border border-blue-200 bg-blue-50 rounded-md mt-2">
-                          <p className="text-xs text-blue-800">💡 <strong>Lưu ý:</strong> Bot sẽ tự động tính toán quantity dựa trên balance thực tế và Position Size. Nếu balance không đủ, bot sẽ sử dụng tối đa 99% balance có sẵn.</p>
+                          <p className="text-xs text-blue-800">💡 <strong>Smart Balance:</strong> Bot sử dụng thuật toán thông minh để tối đa hóa balance (99.9%) với safety buffer động cho fees, precision và network latency.</p>
                         </div>
                         <div className="p-2 border border-yellow-200 bg-yellow-50 rounded-md mt-2">
                           <p className="text-xs text-yellow-800">⚠️ <strong>Lưu ý:</strong> Binance yêu cầu giá trị giao dịch tối thiểu 10 USDT. Với Position Size nhỏ và balance thấp, bot có thể bỏ qua signal để tránh lỗi NOTIONAL.</p>

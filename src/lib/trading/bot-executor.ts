@@ -1214,8 +1214,8 @@ export class BotExecutor {
           return; // Thoát mà không throw error
         }
         
-        // Sử dụng 100% USDT balance (99% để tránh lỗi)
-        const usdtToUse = usdtBalance * 0.99;
+        // Smart balance calculation với safety buffer động
+        const usdtToUse = await this.calculateSmartBalance(usdtBalance, 'USDT', currentPrice);
         
         // Tính quantity dựa trên 100% USDT balance
         quantity = usdtToUse / currentPrice;
@@ -1236,8 +1236,8 @@ export class BotExecutor {
           return; // Thoát mà không throw error
         }
         
-        // Sử dụng 100% BTC balance (99% để tránh lỗi)
-        quantity = btcBalance * 0.99;
+        // Smart balance calculation với safety buffer động
+        quantity = await this.calculateSmartBalance(btcBalance, 'BTC', currentPrice);
         
         console.log(`[BotExecutor] 🛒 SELL Signal Details (100% BTC):`);
         console.log(`[BotExecutor] ₿ BTC balance: ${btcBalance}`);
@@ -1318,7 +1318,7 @@ export class BotExecutor {
         return;
       }
 
-      // Thực hiện order
+      // Thực hiện order với retry mechanism
       console.log(`[BotExecutor] 📤 Placing ${signal.toUpperCase()} order...`);
       console.log(`[BotExecutor] 📋 Order details:`, {
         symbol: this.config.symbol,
@@ -1328,27 +1328,21 @@ export class BotExecutor {
         price: currentPrice
       });
       
-      const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: this.config.symbol,
-          side: signal.toUpperCase(),
-          type: 'MARKET',
-          quantity: quantity.toFixed(6),
-          apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret,
-          isTestnet: this.bot.config.account.testnet,
-        })
+      const order = await this.executeOrderWithRetry({
+        symbol: this.config.symbol,
+        side: signal.toUpperCase(),
+        type: 'MARKET',
+        quantity: quantity.toFixed(6),
+        apiKey: this.bot.config.account.apiKey,
+        apiSecret: this.bot.config.account.apiSecret,
+        isTestnet: this.bot.config.account.testnet,
       });
 
-      if (!orderRes.ok) {
+      if (!order) {
         // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
         console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Không thể thực hiện order`);
         return;
       }
-
-      const order = await orderRes.json();
       console.log(`[BotExecutor] ✅ Order executed successfully:`, order);
       console.log(`[BotExecutor] 📊 Order fills:`, order.fills);
       console.log(`[BotExecutor] 💰 Entry price: ${parseFloat(order.fills[0].price)}`);
@@ -1737,6 +1731,163 @@ export class BotExecutor {
     } catch (err) {
       console.error('[BotExecutor] Lỗi ghi log indicator:', err);
     }
+  }
+
+  // Smart balance calculation với safety buffer động
+  private async calculateSmartBalance(balance: number, asset: string, price: number): Promise<number> {
+    try {
+      console.log(`[BotExecutor] 🧠 Smart balance calculation cho ${asset}:`, {
+        originalBalance: balance,
+        price: price,
+        asset: asset
+      });
+
+      // 1. Tính toán fees ước tính
+      const estimatedFee = await this.calculateEstimatedFees(asset, price, balance);
+      
+      // 2. Tính toán minimum buffer dựa trên precision
+      const precisionBuffer = this.calculatePrecisionBuffer(asset, balance);
+      
+      // 3. Tính toán network latency buffer
+      const networkBuffer = this.calculateNetworkBuffer(asset, balance);
+      
+      // 4. Tính toán total buffer
+      const totalBuffer = estimatedFee + precisionBuffer + networkBuffer;
+      
+      // 5. Smart calculation: sử dụng 100% nhưng trừ đi buffer
+      const smartBalance = Math.max(0, balance - totalBuffer);
+      
+      // 6. Đảm bảo không vượt quá 100% (fallback safety)
+      const finalBalance = Math.min(smartBalance, balance * 0.999); // 99.9% max để an toàn tuyệt đối
+      
+      console.log(`[BotExecutor] 🧠 Smart balance breakdown:`, {
+        originalBalance: balance,
+        estimatedFee: estimatedFee,
+        precisionBuffer: precisionBuffer,
+        networkBuffer: networkBuffer,
+        totalBuffer: totalBuffer,
+        smartBalance: smartBalance,
+        finalBalance: finalBalance,
+        efficiency: `${((finalBalance / balance) * 100).toFixed(2)}%`
+      });
+
+      return finalBalance;
+      
+    } catch (error) {
+      console.error(`[BotExecutor] ❌ Error in smart balance calculation:`, error);
+      // Fallback to 99% nếu có lỗi
+      return balance * 0.99;
+    }
+  }
+
+  // Tính toán fees ước tính
+  private async calculateEstimatedFees(asset: string, price: number, quantity: number): Promise<number> {
+    try {
+      // Binance fees: 0.1% cho spot trading
+      const feeRate = 0.001; // 0.1%
+      
+      if (asset === 'USDT') {
+        // BUY: fee tính bằng USDT
+        return quantity * feeRate;
+      } else {
+        // SELL: fee tính bằng asset (BTC)
+        return quantity * feeRate;
+      }
+    } catch (error) {
+      console.error(`[BotExecutor] Error calculating estimated fees:`, error);
+      return 0.001; // Fallback fee
+    }
+  }
+
+  // Tính toán precision buffer
+  private calculatePrecisionBuffer(asset: string, balance: number): number {
+    try {
+      if (asset === 'USDT') {
+        // USDT precision: 2 decimal places
+        return 0.01; // 1 cent buffer
+      } else if (asset === 'BTC') {
+        // BTC precision: 8 decimal places
+        return 0.00000001; // 1 satoshi buffer
+      }
+      return 0.000001; // Default buffer
+    } catch (error) {
+      console.error(`[BotExecutor] Error calculating precision buffer:`, error);
+      return 0.001; // Fallback buffer
+    }
+  }
+
+  // Tính toán network latency buffer
+  private calculateNetworkBuffer(asset: string, balance: number): number {
+    try {
+      // Network latency có thể gây thay đổi balance nhỏ
+      // Buffer = 0.01% của balance để cover network delays
+      return balance * 0.0001; // 0.01%
+    } catch (error) {
+      console.error(`[BotExecutor] Error calculating network buffer:`, error);
+      return 0.001; // Fallback buffer
+    }
+  }
+
+  // Execute order với retry mechanism
+  private async executeOrderWithRetry(orderParams: any, maxRetries: number = 3): Promise<any> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[BotExecutor] 🔄 Order attempt ${attempt}/${maxRetries}...`);
+        
+        const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderParams)
+        });
+
+        if (orderRes.ok) {
+          const order = await orderRes.json();
+          console.log(`[BotExecutor] ✅ Order successful on attempt ${attempt}`);
+          return order;
+        }
+
+        const errorData = await orderRes.json().catch(() => ({}));
+        console.log(`[BotExecutor] ⚠️ Order failed on attempt ${attempt}:`, {
+          status: orderRes.status,
+          error: errorData
+        });
+
+        // Nếu là lỗi Insufficient Balance, thử giảm quantity
+        if (errorData.message?.includes('Insufficient Balance') || 
+            errorData.message?.includes('insufficient balance')) {
+          console.log(`[BotExecutor] 🔧 Insufficient balance detected, reducing quantity...`);
+          
+          // Giảm quantity 5% cho lần thử tiếp theo
+          const currentQuantity = parseFloat(orderParams.quantity);
+          const newQuantity = currentQuantity * 0.95;
+          orderParams.quantity = newQuantity.toFixed(6);
+          
+          console.log(`[BotExecutor] 🔧 Reduced quantity: ${currentQuantity} -> ${newQuantity}`);
+        }
+
+        // Đợi trước khi retry
+        if (attempt < maxRetries) {
+          const delay = Math.min(1000 * attempt, 3000); // 1s, 2s, 3s
+          console.log(`[BotExecutor] ⏳ Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+
+      } catch (error) {
+        console.error(`[BotExecutor] ❌ Error on attempt ${attempt}:`, error);
+        
+        if (attempt === maxRetries) {
+          console.error(`[BotExecutor] ❌ All ${maxRetries} attempts failed`);
+          return null;
+        }
+        
+        // Đợi trước khi retry
+        const delay = Math.min(1000 * attempt, 3000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    console.error(`[BotExecutor] ❌ Order failed after ${maxRetries} attempts`);
+    return null;
   }
 
   // Kiểm tra balance trước khi thực hiện signal để tránh lỗi liên tiếp
