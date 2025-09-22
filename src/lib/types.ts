@@ -7,4 +7,6 @@ export type WorkLogEntry = {
   timestamp: Date;
   startTime: string;
   endTime: string;
+  fileName?: string;
+  fileUrl?: string;
 };

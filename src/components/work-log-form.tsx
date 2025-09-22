@@ -1,19 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { useTransition } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import {
   Form,
   FormControl,
@@ -22,13 +13,19 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 import { ClipboardPenLine, Loader2 } from 'lucide-react';
 import type { WorkLogEntry } from '@/lib/types';
-import { db } from '@/lib/firebase';
-import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
+import { submitWorkLog } from '@/app/actions';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -37,6 +34,7 @@ const formSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
+  attachment: z.instanceof(File).optional(),
 });
 
 type WorkLogFormProps = {
@@ -47,7 +45,7 @@ type WorkLogFormProps = {
 export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
-  
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -55,49 +53,44 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       description: '',
       startTime: '',
       endTime: '',
+      attachment: undefined,
     },
   });
 
+  const fileRef = form.register('attachment');
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    const { title, description, startTime, endTime } = values;
-    
+    const formData = new FormData();
+    formData.append('userId', userId);
+    formData.append('title', values.title);
+    formData.append('description', values.description);
+    formData.append('startTime', values.startTime);
+    formData.append('endTime', values.endTime);
+    if (values.attachment && values.attachment.size > 0) {
+      formData.append('attachment', values.attachment);
+    }
+
     startTransition(async () => {
       try {
-        const { category } = await classifyWorkLogEntry({ title, description });
+        const result = await submitWorkLog(formData);
 
-        const docData = {
-          userId,
-          title,
-          description,
-          startTime,
-          endTime,
-          category: category || 'Other',
-          timestamp: serverTimestamp(),
-        };
-
-        const docRef = await addDoc(collection(db, 'worklogs'), docData);
-
-        const newEntry: WorkLogEntry = {
-          id: docRef.id,
-          userId,
-          title,
-          description,
-          startTime,
-          endTime,
-          category: category || 'Other',
-          timestamp: new Date(),
-        };
+        if (result.error) {
+          throw new Error(result.error);
+        }
         
-        onAddEntry(newEntry);
-        toast({
-          title: 'Thành công!',
-          description: 'Đã ghi nhận công việc của bạn.',
-        });
-        form.reset();
+        if (result.newEntry) {
+          onAddEntry(result.newEntry);
+          toast({
+            title: 'Thành công!',
+            description: 'Đã ghi nhận công việc của bạn.',
+          });
+          form.reset();
+        } else {
+           throw new Error('Không nhận được thông tin công việc đã tạo.');
+        }
 
       } catch (error: any) {
         console.error("Error submitting work log:", error);
-        
         toast({
           variant: 'destructive',
           title: 'Đã có lỗi xảy ra',
@@ -106,8 +99,6 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       }
     });
   }
-  
-  const isSubmitting = isPending;
 
   return (
     <Card>
@@ -117,7 +108,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
           Báo cáo công việc
         </CardTitle>
         <CardDescription>
-          Điền thông tin chi tiết về công việc bạn đã hoàn thành. AI sẽ tự động phân loại giúp bạn.
+          Điền thông tin chi tiết công việc. AI sẽ tự động phân loại. Bạn có thể đính kèm một tệp nếu cần.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -130,13 +121,13 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                 <FormItem>
                   <FormLabel>Tên công việc *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ví dụ: Thiết kế giao diện trang chủ" {...field} disabled={isSubmitting} />
+                    <Input placeholder="Ví dụ: Thiết kế giao diện trang chủ" {...field} disabled={isPending} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-             <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
               <FormField
                 control={form.control}
                 name="startTime"
@@ -144,7 +135,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                   <FormItem className="flex-1">
                     <FormLabel>Giờ bắt đầu *</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} disabled={isSubmitting} />
+                      <Input type="time" {...field} disabled={isPending} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -157,7 +148,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                   <FormItem className="flex-1">
                     <FormLabel>Giờ kết thúc *</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} disabled={isSubmitting} />
+                      <Input type="time" {...field} disabled={isPending} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -175,15 +166,28 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                       placeholder="Mô tả các bước đã thực hiện, kết quả đạt được..."
                       className="min-h-[120px]"
                       {...field}
-                      disabled={isSubmitting}
+                      disabled={isPending}
                     />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={isSubmitting} className="w-full">
-              {isSubmitting ? (
+             <FormField
+              control={form.control}
+              name="attachment"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tệp đính kèm</FormLabel>
+                  <FormControl>
+                    <Input type="file" {...fileRef} disabled={isPending} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={isPending} className="w-full">
+              {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Đang xử lý...

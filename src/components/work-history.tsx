@@ -23,6 +23,7 @@ import {
   Calendar as CalendarIcon,
   Search,
   Clock,
+  Paperclip,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
@@ -151,13 +152,24 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                       })}
                     </span>
                   </div>
-                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                   <div className="flex items-center flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
                     <Badge variant="secondary">{entry.category}</Badge>
                      {entry.startTime && entry.endTime && (
                        <div className="flex items-center gap-1">
                          <Clock className="h-3 w-3" />
                          <span>{entry.startTime} - {entry.endTime}</span>
                        </div>
+                     )}
+                     {entry.fileUrl && (
+                        <a 
+                          href={entry.fileUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          <span>{entry.fileName}</span>
+                        </a>
                      )}
                    </div>
                   <p className="text-muted-foreground text-sm">{entry.description}</p>
