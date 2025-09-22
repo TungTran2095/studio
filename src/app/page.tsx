@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import type { WorkLogEntry } from '@/lib/types';
 import { WorkLogForm } from '@/components/work-log-form';
 import { WorkHistory } from '@/components/work-history';
@@ -31,10 +32,28 @@ const initialEntries: WorkLogEntry[] = [
 
 export default function Home() {
   const [entries, setEntries] = useState<WorkLogEntry[]>(initialEntries);
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+
+  useEffect(() => {
+    // In a real app, you'd check a token or session
+    const loggedIn = sessionStorage.getItem('isAuthenticated');
+    if (loggedIn) {
+      setIsAuthenticated(true);
+    } else {
+      router.push('/login');
+    }
+  }, [router]);
 
   const handleAddEntry = (newEntry: WorkLogEntry) => {
     setEntries((prevEntries) => [newEntry, ...prevEntries]);
   };
+
+  if (!isAuthenticated) {
+    // You can return a loader here while checking auth
+    return null;
+  }
 
   return (
     <main className="container mx-auto p-4 md:p-8">

@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -13,6 +14,15 @@ import { Label } from '@/components/ui/label';
 import { LogIn } from 'lucide-react';
 
 export default function LoginPage() {
+  const router = useRouter();
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // In a real app, you would validate credentials here
+    sessionStorage.setItem('isAuthenticated', 'true');
+    router.push('/');
+  };
+
   return (
     <main className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-sm">
@@ -28,7 +38,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -36,6 +46,7 @@ export default function LoginPage() {
                 type="email"
                 placeholder="email@example.com"
                 required
+                defaultValue="demo@example.com"
               />
             </div>
             <div className="space-y-2">
@@ -48,12 +59,12 @@ export default function LoginPage() {
                   Quên mật khẩu?
                 </a>
               </div>
-              <Input id="password" type="password" required />
+              <Input id="password" type="password" required defaultValue="password" />
             </div>
             <Button type="submit" className="w-full">
               Đăng nhập
             </Button>
-          </div>
+          </form>
           <div className="mt-4 text-center text-sm">
             Chưa có tài khoản?{' '}
             <a href="#" className="underline">
