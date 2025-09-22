@@ -19,12 +19,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   History,
-  FileText,
   Inbox,
   Calendar as CalendarIcon,
   Search,
   Clock,
-  Download
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
@@ -163,14 +161,6 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                      )}
                    </div>
                   <p className="text-muted-foreground text-sm">{entry.description}</p>
-                  {entry.fileName && entry.fileUrl && (
-                    <Button variant="outline" size="sm" asChild className="w-fit">
-                       <a href={entry.fileUrl} target="_blank" rel="noopener noreferrer">
-                         <Download className="mr-2 h-4 w-4" />
-                         {entry.fileName}
-                       </a>
-                    </Button>
-                  )}
                 </div>
               ))}
             </div>

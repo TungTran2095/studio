@@ -3,8 +3,6 @@ export type WorkLogEntry = {
   userId: string;
   title: string;
   description: string;
-  fileName?: string;
-  fileUrl?: string;
   category: string;
   timestamp: Date;
   startTime: string;
