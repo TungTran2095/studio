@@ -13,6 +13,7 @@ const FormSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc là bắt buộc.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
+  // These fields are optional on the form data itself, but required for the action
   fileName: z.string().min(1, "Tên tệp là bắt buộc."),
   fileUrl: z.string().url("URL tệp không hợp lệ."),
 });
