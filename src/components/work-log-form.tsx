@@ -88,7 +88,16 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
               setUploadProgress(progress);
             },
             (error) => {
-              console.error("Upload failed", error);
+              console.error("File upload failed:", error);
+              let description = 'Đã có lỗi xảy ra khi tải tệp. Vui lòng kiểm tra console.';
+              if (error.code === 'storage/unauthorized') {
+                description = 'Lỗi quyền truy cập Storage. Vui lòng kiểm tra lại quy tắc bảo mật của bạn.';
+              }
+              toast({
+                variant: 'destructive',
+                title: 'Tải tệp lên thất bại',
+                description: description,
+              });
               reject(error);
             },
             async () => {
@@ -138,16 +147,11 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       if (fileInput) fileInput.value = '';
 
     } catch (error: any) {
+      // This will catch errors from the Promise rejection (e.g., upload failure)
+      // or any other error in the try block.
       console.error("Error submitting work log:", error);
-       let description = 'Đã có lỗi xảy ra. Vui lòng thử lại.';
-        if (error.code === 'storage/unauthorized' || error.code === 'permission-denied') {
-            description = 'Lỗi quyền truy cập. Vui lòng kiểm tra lại quy tắc bảo mật của Storage hoặc Firestore.';
-        }
-      toast({
-        variant: 'destructive',
-        title: 'Ghi nhận thất bại',
-        description,
-      });
+      // The specific upload error toast is already handled inside the promise.
+      // We can add a general toast here if needed, but it might be redundant.
     } finally {
       setIsSubmitting(false);
       setUploadProgress(null);
