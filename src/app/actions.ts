@@ -1,7 +1,7 @@
 'use server';
 import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
 import type { WorkLogEntry } from '@/lib/types';
-import { v4 as uuidv4 } from 'uuid';
+import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
 
 export async function submitWorkLog(formData: FormData) {
   const adminDb = getAdminDb();
@@ -14,11 +14,13 @@ export async function submitWorkLog(formData: FormData) {
     const startTime = formData.get('startTime') as string;
     const endTime = formData.get('endTime') as string;
     const attachment = formData.get('attachment') as File | null;
-    const category = 'Other'; // AI classification can be re-integrated later
 
     if (!title || !description || !userId || !startTime || !endTime) {
       throw new Error('Thông tin không đầy đủ.');
     }
+    
+    // Call AI to classify the entry in parallel
+    const classificationPromise = classifyWorkLogEntry({ title, description });
 
     let fileUrl: string | undefined;
     let fileName: string | undefined;
@@ -36,7 +38,7 @@ export async function submitWorkLog(formData: FormData) {
         },
       });
 
-      // Use getSignedUrl to generate a public URL
+      // Use getSignedUrl to generate a long-lived public URL
       const [url] = await file.getSignedUrl({
         action: 'read',
         expires: '03-09-2491', // A very long-lived URL
@@ -45,6 +47,11 @@ export async function submitWorkLog(formData: FormData) {
       fileUrl = url;
       fileName = attachment.name;
     }
+    
+    // Wait for AI classification result
+    const classificationResult = await classificationPromise;
+    const category = classificationResult.category || 'Other';
+
 
     const docData: Omit<WorkLogEntry, 'id' | 'timestamp'> & { timestamp: any } = {
       userId,
@@ -52,7 +59,7 @@ export async function submitWorkLog(formData: FormData) {
       description,
       startTime,
       endTime,
-      category: category || 'Other',
+      category,
       timestamp: new Date(),
       ...(fileUrl && { fileUrl }),
       ...(fileName && { fileName }),
