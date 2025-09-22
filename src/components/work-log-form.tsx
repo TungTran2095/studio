@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { createWorkLogEntry } from '@/app/actions';
 
@@ -65,69 +65,68 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    startTransition(async () => {
-      setUploadProgress(0);
-      let fileUrl: string;
-      let uploadedFileName: string;
-
-      try {
-        // Simulate progress for small files
-        let progress = 10;
-        const interval = setInterval(() => {
-           progress = Math.min(progress + 15, 90);
-           setUploadProgress(progress);
-        }, 200);
-
+    startTransition(() => {
+        setUploadProgress(0);
         const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${values.file.name}`);
-        const snapshot = await uploadBytes(storageRef, values.file);
-        fileUrl = await getDownloadURL(snapshot.ref);
-        uploadedFileName = values.file.name;
-        
-        clearInterval(interval);
-        setUploadProgress(100);
+        const uploadTask = uploadBytesResumable(storageRef, values.file);
 
-      } catch (error) {
-        console.error("Upload failed", error);
-        toast({
-          variant: 'destructive',
-          title: 'Tải tệp lên thất bại',
-          description: 'Không thể tải tệp lên. Vui lòng thử lại.',
-        });
-        setUploadProgress(null);
-        return; // Stop execution if upload fails
-      }
+        uploadTask.on('state_changed',
+            (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                setUploadProgress(progress);
+            },
+            (error) => {
+                console.error("Upload failed", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Tải tệp lên thất bại',
+                    description: 'Không thể tải tệp lên. Vui lòng kiểm tra lại quy tắc bảo mật Storage.',
+                });
+                setUploadProgress(null);
+            },
+            async () => {
+                try {
+                    const fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                    const uploadedFileName = values.file.name;
+                    
+                    const result = await createWorkLogEntry({
+                        userId,
+                        title: values.title,
+                        description: values.description,
+                        startTime: values.startTime,
+                        endTime: values.endTime,
+                        fileName: uploadedFileName,
+                        fileUrl: fileUrl,
+                    });
 
-      // Ensure we only proceed if file upload was successful
-      const result = await createWorkLogEntry({
-        userId,
-        title: values.title,
-        description: values.description,
-        startTime: values.startTime,
-        endTime: values.endTime,
-        fileName: uploadedFileName,
-        fileUrl: fileUrl,
-      });
-
-      if (result.success && result.newEntry) {
-        onAddEntry(result.newEntry);
-        toast({
-          title: 'Thành công!',
-          description: 'Đã ghi nhận công việc của bạn.',
-        });
-        form.reset();
-        setFileName('');
-        setUploadProgress(null);
-        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-        if (fileInput) fileInput.value = '';
-
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Có lỗi xảy ra',
-          description: result.error || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
-        });
-        setUploadProgress(null);
-      }
+                    if (result.success && result.newEntry) {
+                        onAddEntry(result.newEntry);
+                        toast({
+                            title: 'Thành công!',
+                            description: 'Đã ghi nhận công việc của bạn.',
+                        });
+                        form.reset();
+                        setFileName('');
+                        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+                        if (fileInput) fileInput.value = '';
+                    } else {
+                        toast({
+                            variant: 'destructive',
+                            title: 'Có lỗi xảy ra',
+                            description: result.error || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
+                        });
+                    }
+                } catch (e) {
+                     toast({
+                        variant: 'destructive',
+                        title: 'Lỗi ghi dữ liệu',
+                        description: 'Không thể lưu vào Firestore. Vui lòng kiểm tra quy tắc bảo mật.',
+                    });
+                } finally {
+                    setUploadProgress(null);
+                }
+            }
+        );
     });
   }
   

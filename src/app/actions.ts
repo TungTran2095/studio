@@ -3,26 +3,23 @@
 import { z } from 'zod';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-// import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
 import type { WorkLogEntry } from '@/lib/types';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-// This schema is now strictly for data being passed to the server action
 const ActionInputSchema = z.object({
   userId: z.string(),
   title: z.string().min(1, 'Tên công việc là bắt buộc.'),
   description: z.string().min(1, 'Chi tiết công việc là bắt buộc.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
-  fileName: z.string().min(1, "Tên tệp là bắt buộc."),
-  fileUrl: z.string().url("URL tệp không hợp lệ."),
+  fileName: z.string().optional(),
+  fileUrl: z.string().url().optional(),
 });
 
 export async function createWorkLogEntry(
   data: z.infer<typeof ActionInputSchema>
 ): Promise<{ success: boolean; newEntry?: WorkLogEntry; error?: string }> {
-  // Validate the final data object that includes the fileUrl from storage
   const validatedFields = ActionInputSchema.safeParse(data);
 
   if (!validatedFields.success) {
@@ -36,33 +33,32 @@ export async function createWorkLogEntry(
   const { title, description, startTime, endTime, fileName, fileUrl, userId } = validatedFields.data;
   
   try {
-    // const classification = await classifyWorkLogEntry({ title, description });
     const category = "Other"; // Default category
     const timestamp = new Date();
 
     const docRef = await addDoc(collection(db, 'worklogs'), {
-      userId: userId,
+      userId,
       title,
       description,
       startTime,
       endTime,
-      fileName: fileName,
-      fileUrl: fileUrl,
-      category: category,
-      timestamp: timestamp,
+      fileName,
+      fileUrl,
+      category,
+      timestamp,
     });
     
     const newEntry: WorkLogEntry = {
       id: docRef.id,
-      userId: userId,
+      userId,
       title,
       description,
       startTime,
       endTime,
-      fileName: fileName,
-      fileUrl: fileUrl,
-      category: category,
-      timestamp: timestamp,
+      fileName,
+      fileUrl,
+      category,
+      timestamp,
     };
     
     return { success: true, newEntry };
