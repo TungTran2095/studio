@@ -18,6 +18,117 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY! // Service role key để bypass RLS
 );
 
+// Helper function để tính toán stats cho một bot
+async function calculateBotStatsFromTrades(botId: string) {
+  try {
+    const { data: trades, error } = await supabaseAdmin
+      .from('trades')
+      .select('*')
+      .eq('bot_id', botId)
+      .order('open_time', { ascending: true });
+
+    if (error || !trades || trades.length === 0) {
+      return {
+        total_trades: 0,
+        total_profit: 0,
+        win_rate: 0,
+        avg_win_net: 0,
+        avg_loss_net: 0
+      };
+    }
+
+    // Logic tính toán giống như trong modal
+    const groupedTrades = [];
+    let currentGroup = null;
+
+    for (const trade of trades) {
+      if (!currentGroup || currentGroup.side !== trade.side) {
+        if (currentGroup) {
+          groupedTrades.push(currentGroup);
+        }
+        currentGroup = {
+          side: trade.side,
+          trades: [trade],
+          totalQuantity: Number(trade.quantity || 0),
+          totalValue: Number(trade.quantity || 0) * Number(trade.entry_price || 0),
+          avgPrice: Number(trade.entry_price || 0),
+          startTime: trade.open_time || trade.created_at,
+          endTime: trade.open_time || trade.created_at
+        };
+      } else {
+        currentGroup.trades.push(trade);
+        currentGroup.totalQuantity += Number(trade.quantity || 0);
+        currentGroup.totalValue += Number(trade.quantity || 0) * Number(trade.entry_price || 0);
+        currentGroup.avgPrice = currentGroup.totalValue / currentGroup.totalQuantity;
+        currentGroup.endTime = trade.open_time || trade.created_at;
+      }
+    }
+
+    if (currentGroup) {
+      groupedTrades.push(currentGroup);
+    }
+
+    // Ghép cặp buy-sell
+    const pairs = [];
+    let lastBuyGroup = null;
+
+    for (const group of groupedTrades) {
+      if (group.side === 'buy') {
+        lastBuyGroup = group;
+      } else if (group.side === 'sell' && lastBuyGroup) {
+        pairs.push({ 
+          buy: lastBuyGroup, 
+          sell: group,
+          buyValue: lastBuyGroup.totalValue,
+          sellValue: group.totalValue,
+          pnl: group.totalValue - lastBuyGroup.totalValue
+        });
+        lastBuyGroup = null;
+      }
+    }
+
+    // Tính toán stats
+    const totalTrades = pairs.length;
+    const totalProfit = pairs.reduce((sum, pair) => sum + pair.pnl, 0);
+    
+    const winPairs = pairs.filter(pair => pair.pnl > 0);
+    const lossPairs = pairs.filter(pair => pair.pnl < 0);
+    const winRate = totalTrades > 0 ? (winPairs.length / totalTrades) * 100 : 0;
+    
+    const totalWinBuyValue = winPairs.reduce((sum, pair) => sum + pair.buyValue, 0);
+    const totalWinSellValue = winPairs.reduce((sum, pair) => sum + pair.sellValue, 0);
+    
+    const totalLossBuyValue = lossPairs.reduce((sum, pair) => sum + pair.buyValue, 0);
+    const totalLossSellValue = lossPairs.reduce((sum, pair) => sum + pair.sellValue, 0);
+    
+    const avgWinNet = totalWinBuyValue > 0 
+      ? ((totalWinSellValue - totalWinBuyValue) / totalWinBuyValue) * 100 
+      : 0;
+    
+    const avgLossNet = totalLossBuyValue > 0 
+      ? ((totalLossBuyValue - totalLossSellValue) / totalLossBuyValue) * 100 
+      : 0;
+
+    return {
+      total_trades: totalTrades,
+      total_profit: totalProfit,
+      win_rate: winRate,
+      avg_win_net: avgWinNet,
+      avg_loss_net: avgLossNet
+    };
+
+  } catch (error) {
+    console.error('Error calculating bot stats:', error);
+    return {
+      total_trades: 0,
+      total_profit: 0,
+      win_rate: 0,
+      avg_win_net: 0,
+      avg_loss_net: 0
+    };
+  }
+}
+
 // GET /api/trading/bot - Lấy danh sách bot
 export async function GET(request: Request) {
   try {
@@ -28,17 +139,35 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('projectId');
 
-    if (!projectId) {
-      return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
-    }
-
-    const { data: bots, error } = await supabase
+    let query = supabase
       .from('trading_bots')
       .select('*')
-      .eq('project_id', projectId)
       .order('created_at', { ascending: false });
 
+    // Nếu projectId = 'all' thì lấy tất cả bots, ngược lại filter theo projectId
+    if (projectId && projectId !== 'all') {
+      query = query.eq('project_id', projectId);
+    }
+
+    const { data: bots, error } = await query;
+
     if (error) throw error;
+
+    // Tính toán stats cho tất cả bots
+    if (bots && bots.length > 0) {
+      const botsWithStats = await Promise.all(
+        bots.map(async (bot) => {
+          const calculatedStats = await calculateBotStatsFromTrades(bot.id);
+          return {
+            ...bot,
+            ...calculatedStats
+          };
+        })
+      );
+      
+      return NextResponse.json(botsWithStats);
+    }
+
     return NextResponse.json(bots);
   } catch (error) {
     console.error('Error fetching bots:', error);

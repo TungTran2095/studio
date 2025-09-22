@@ -1,0 +1,42 @@
+{
+  "name": "Tester01",
+  "type": "rsi",
+  "config": {
+    "trading": {
+      "symbol": "BTCUSDT",
+      "timeframe": "1m",
+      "positionSize": 10,
+      "initialCapital": 10000
+    },
+    "strategy": {
+      "type": "rsi",
+      "parameters": {
+        "period": 14,
+        "overbought": 60,
+        "oversold": 50
+      }
+    },
+    "riskManagement": {
+      "stopLoss": 2,
+      "takeProfit": 4,
+      "maxDrawdown": 10,
+      "maxPositions": 1,
+      "trailingStop": true,
+      "useTakeProfit": true,
+      "prioritizeStoploss": true,
+      "trailingStopDistance": 1
+    },
+    "transaction_costs": {
+      "maker_fee": 0.1,
+      "taker_fee": 0.1
+    }
+  },
+  "account": {
+    "apiKey": "i4rthsqeFN9A9jrRPk2oyy1yIxJAVf7t2LDFN10IpXuLVzlRKkvS3DCVtS7RcQVX",
+    "testnet": true,
+    "apiSecret": "SxZYti5Llva2sl8bGtM1x2rtW3DCpQkek1R8RBWkmtQ2MJQbsocPIYA5gdzHO6zT"
+  }
+}
+
+
+

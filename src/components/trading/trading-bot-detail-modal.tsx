@@ -6,10 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Play, Pause, Terminal, ChevronDown, ChevronRight } from 'lucide-react';
+import { Play, Pause, ChevronDown, ChevronRight } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { PriceChart } from '@/components/research/price-chart';
-import { BotDebugPanel } from '@/components/research/tabs/bot-debug-panel';
 
 type TradingBot = any; // If a proper type exists, replace any with it
 
@@ -503,7 +502,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
               <TabsList className="mb-4">
                 <TabsTrigger value="performance">Performance</TabsTrigger>
                 <TabsTrigger value="info">Thông tin chung</TabsTrigger>
-                <TabsTrigger value="debug">Debug</TabsTrigger>
               </TabsList>
               <TabsContent value="performance">
                 {/* Thống kê hiệu suất tổng quan - tất cả trong 1 hàng */}
@@ -888,9 +886,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                   </div>
                 </div>
               </TabsContent>
-              <TabsContent value="debug">
-                <BotDebugPanel botId={bot.id} />
-              </TabsContent>
             </Tabs>
           </div>
           <div className="flex gap-2 mt-4">
@@ -903,9 +898,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                 <Pause className="h-4 w-4 mr-2" />Stop Bot
               </Button>
             )}
-            <Button variant="outline" className="w-full">
-              <Terminal className="h-4 w-4 mr-2" />Xem logs
-            </Button>
           </div>
         </div>
       </DialogContent>

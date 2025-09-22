@@ -228,31 +228,39 @@ function TradingBotsList() {
       try {
         console.log('Fetching trading bots...');
         
-        // Thử lấy từ bảng trading_bots trước
-        let { data: botsData, error } = await supabase
-          .from('trading_bots')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.log('trading_bots table error:', error);
-          // Thử với bảng khác nếu có
-          const { data: altBotsData, error: altError } = await supabase
-            .from('research_experiments')
-            .select('*')
-            .eq('type', 'backtest')
-            .order('created_at', { ascending: false });
-          
-          if (altError) {
-            console.error('Both tables failed:', altError);
-            setBots([]);
-          } else {
-            console.log('Using research_experiments as bots:', altBotsData);
-            setBots(altBotsData || []);
-          }
-        } else {
-          console.log('Fetched bots from trading_bots:', botsData);
+        // Sử dụng API endpoint để lấy bots với stats đã tính toán
+        const response = await fetch('/api/trading/bot?projectId=all');
+        if (response.ok) {
+          const botsData = await response.json();
+          console.log('Fetched bots with stats:', botsData);
           setBots(botsData || []);
+        } else {
+          // Fallback: thử lấy từ bảng trading_bots trực tiếp
+          let { data: botsData, error } = await supabase
+            .from('trading_bots')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (error) {
+            console.log('trading_bots table error:', error);
+            // Thử với bảng khác nếu có
+            const { data: altBotsData, error: altError } = await supabase
+              .from('research_experiments')
+              .select('*')
+              .eq('type', 'backtest')
+              .order('created_at', { ascending: false });
+            
+            if (altError) {
+              console.error('Both tables failed:', altError);
+              setBots([]);
+            } else {
+              console.log('Using research_experiments as bots:', altBotsData);
+              setBots(altBotsData || []);
+            }
+          } else {
+            console.log('Fetched bots from trading_bots:', botsData);
+            setBots(botsData || []);
+          }
         }
       } catch (error) {
         console.error('Error fetching bots:', error);
@@ -404,7 +412,7 @@ function TradingBotsList() {
                     </Badge>
                   </div>
                   
-                  <div className="grid grid-cols-3 gap-2 text-xs mb-3">
+                  <div className="grid grid-cols-5 gap-1 text-xs mb-3">
                     <div>
                       <span className="text-muted-foreground">Giao dịch:</span>
                       <div className="font-medium">{bot.total_trades || 0}</div>
@@ -418,6 +426,14 @@ function TradingBotsList() {
                     <div>
                       <span className="text-muted-foreground">Win Rate:</span>
                       <div className="font-medium">{(bot.win_rate || 0).toFixed(1)}%</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">% Avg Win:</span>
+                      <div className="font-medium text-green-600">{(bot.avg_win_net || 0).toFixed(1)}%</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">% Avg Loss:</span>
+                      <div className="font-medium text-red-600">{(bot.avg_loss_net || 0).toFixed(1)}%</div>
                     </div>
                   </div>
 
@@ -496,7 +512,7 @@ function DashboardModule() {
       </div>
 
       {/* News Ticker ở trên dãy card */}
-      <NewsTicker />
+      {/* <NewsTicker /> */}
 
       {/* Dãy card nhỏ: Tổng tài sản + placeholder */}
       <div className="flex flex-row gap-4 mb-2 w-full">
@@ -713,4 +729,4 @@ export function WorkspaceContent({ activeModule }: WorkspaceContentProps) {
       {renderModule()}
     </div>
   );
-} 
+}

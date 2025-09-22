@@ -34,6 +34,8 @@ export interface TradingBot {
   total_trades: number;
   total_profit: number;
   win_rate: number;
+  avg_win_net?: number;
+  avg_loss_net?: number;
   last_run_at?: string;
   last_error?: string;
   created_at: string;
@@ -45,6 +47,8 @@ export interface TradingBotStats {
   total_trades: number;
   total_profit: number;
   win_rate: number;
+  avg_win_net?: number;
+  avg_loss_net?: number;
 }
 
 export interface Position {

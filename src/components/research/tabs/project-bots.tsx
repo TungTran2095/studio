@@ -466,8 +466,23 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
 
   // Fetch danh sách bots
   const loadBots = async () => {
-    const botsList = await fetchTradingBots(projectId);
-    setBots(botsList);
+    try {
+      // Sử dụng API endpoint để lấy bots với stats đã tính toán
+      const response = await fetch(`/api/trading/bot?projectId=${projectId}`);
+      if (response.ok) {
+        const botsList = await response.json();
+        setBots(botsList || []);
+      } else {
+        // Fallback: sử dụng function cũ
+        const botsList = await fetchTradingBots(projectId);
+        setBots(botsList);
+      }
+    } catch (error) {
+      console.error('Error loading bots:', error);
+      // Fallback: sử dụng function cũ
+      const botsList = await fetchTradingBots(projectId);
+      setBots(botsList);
+    }
   };
 
   useEffect(() => {
@@ -773,18 +788,28 @@ export function ProjectBotsTab({ projectId, backtests }: ProjectBotsTabProps) {
                 {/* Thống kê */}
                 <div className="flex flex-col space-y-1">
                   <Label>Thống kê</Label>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-5 gap-2">
                     <div>
-                      <div className="text-sm text-muted-foreground">Tổng GD</div>
-                      <div className="font-medium">{Number(bot.total_trades ?? 0)}</div>
+                      <div className="text-xs text-muted-foreground">Tổng GD</div>
+                      <div className="font-medium text-sm">{Number(bot.total_trades ?? 0)}</div>
                     </div>
                     <div>
-                      <div className="text-sm text-muted-foreground">Lợi nhuận</div>
-                      <div className="font-medium">{safeToFixed(bot.total_profit)}%</div>
+                      <div className="text-xs text-muted-foreground">Lợi nhuận</div>
+                      <div className={`font-medium text-sm ${(bot.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ${safeToFixed(bot.total_profit)}
+                      </div>
                     </div>
                     <div>
-                      <div className="text-sm text-muted-foreground">Tỷ lệ thắng</div>
-                      <div className="font-medium">{safeToFixed(bot.win_rate)}%</div>
+                      <div className="text-xs text-muted-foreground">Win Rate</div>
+                      <div className="font-medium text-sm">{safeToFixed(bot.win_rate)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">% Avg Win</div>
+                      <div className="font-medium text-sm text-green-600">{safeToFixed(bot.avg_win_net)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">% Avg Loss</div>
+                      <div className="font-medium text-sm text-red-600">{safeToFixed(bot.avg_loss_net)}%</div>
                     </div>
                   </div>
                 </div>
