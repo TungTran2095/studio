@@ -156,7 +156,7 @@ export async function GET(request: Request) {
     // Tính toán stats cho tất cả bots
     if (bots && bots.length > 0) {
       const botsWithStats = await Promise.all(
-        bots.map(async (bot) => {
+        bots.map(async (bot: any) => {
           const calculatedStats = await calculateBotStatsFromTrades(bot.id);
           return {
             ...bot,
