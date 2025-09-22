@@ -1,12 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { storage, db } from '@/lib/firebase';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -29,10 +26,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { ClipboardPenLine, Loader2, Upload } from 'lucide-react';
 import type { WorkLogEntry } from '@/lib/types';
-import { Progress } from '@/components/ui/progress';
-
+import { createWorkLogEntry } from '@/app/actions';
+import { Progress } from './ui/progress';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+// Helper to convert file to base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+};
 
 const formSchema = z.object({
   title: z.string().min(1, 'Tên công việc không được để trống.'),
@@ -48,11 +55,10 @@ type WorkLogFormProps = {
 };
 
 export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const [fileName, setFileName] = useState('');
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -65,99 +71,56 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    setIsSubmitting(true);
-    setUploadProgress(null);
+    const { file, ...otherValues } = values;
+    
+    startTransition(async () => {
+      try {
+        let fileData: { content: string; name: string; type: string } | undefined;
 
-    const { title, description, startTime, endTime, file } = values;
+        if (file) {
+          const base64String = await fileToBase64(file);
+          fileData = {
+            content: base64String,
+            name: file.name,
+            type: file.type,
+          };
+        }
 
-    try {
-      let fileUrl = '';
-      let uploadedFileName = '';
+        const result = await createWorkLogEntry({
+          ...otherValues,
+          userId,
+          fileData,
+        });
 
-      // Step 1: Upload file to Storage if it exists
-      if (file) {
-        setUploadProgress(0);
-        uploadedFileName = file.name;
-        const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
-        const uploadTask = uploadBytesResumable(storageRef, file);
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        
+        if (result.newEntry) {
+          onAddEntry(result.newEntry);
+          toast({
+            title: 'Thành công!',
+            description: 'Đã ghi nhận công việc của bạn.',
+          });
+          form.reset();
+          setFileName('');
+          const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+          if (fileInput) fileInput.value = '';
+        }
 
-        fileUrl = await new Promise((resolve, reject) => {
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              setUploadProgress(progress);
-            },
-            (error) => {
-              console.error("File upload failed:", error);
-              let description = 'Đã có lỗi xảy ra khi tải tệp. Vui lòng kiểm tra console.';
-              if (error.code === 'storage/unauthorized') {
-                description = 'Lỗi quyền truy cập Storage. Vui lòng kiểm tra lại quy tắc bảo mật của bạn.';
-              }
-              toast({
-                variant: 'destructive',
-                title: 'Tải tệp lên thất bại',
-                description: description,
-              });
-              reject(error);
-            },
-            async () => {
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve(downloadURL);
-            }
-          );
+      } catch (error: any) {
+        console.error("Error submitting work log:", error);
+        toast({
+          variant: 'destructive',
+          title: 'Đã có lỗi xảy ra',
+          description: error.message || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
         });
       }
-      
-      // Step 2: Add document to Firestore
-      const docData = {
-        userId,
-        title,
-        description,
-        startTime,
-        endTime,
-        fileName: uploadedFileName,
-        fileUrl,
-        category: 'Other', // Default category
-        timestamp: serverTimestamp(),
-      };
-
-      const docRef = await addDoc(collection(db, 'worklogs'), docData);
-      
-      const newEntry: WorkLogEntry = {
-        id: docRef.id,
-        userId,
-        title,
-        description,
-        startTime,
-        endTime,
-        fileName: uploadedFileName,
-        fileUrl,
-        category: 'Other',
-        timestamp: new Date(), // Use client-side date for immediate UI update
-      };
-
-      onAddEntry(newEntry);
-      toast({
-        title: 'Thành công!',
-        description: 'Đã ghi nhận công việc của bạn.',
-      });
-      form.reset();
-      setFileName('');
-      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
-
-    } catch (error: any) {
-      // This will catch errors from the Promise rejection (e.g., upload failure)
-      // or any other error in the try block.
-      console.error("Error submitting work log:", error);
-      // The specific upload error toast is already handled inside the promise.
-      // We can add a general toast here if needed, but it might be redundant.
-    } finally {
-      setIsSubmitting(false);
-      setUploadProgress(null);
-    }
+    });
   }
   
+  const isSubmitting = isPending;
+
   return (
     <Card>
       <CardHeader>
@@ -267,12 +230,6 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                     <p className="text-sm text-muted-foreground mt-2">
                       Tệp đã chọn: {fileName}
                     </p>
-                  )}
-                   {uploadProgress !== null && (
-                    <div className="space-y-2 mt-2">
-                        <Progress value={uploadProgress} className="w-full" />
-                        <p className="text-sm text-muted-foreground">{`Đang tải lên: ${fileName}`}</p>
-                    </div>
                   )}
                   <FormMessage />
                 </FormItem>
