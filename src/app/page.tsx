@@ -2,9 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import type { WorkLogEntry } from '@/lib/types';
 import { WorkLogForm } from '@/components/work-log-form';
 import { WorkHistory } from '@/components/work-history';
+import { Skeleton } from '@/components/ui/skeleton';
+
 
 // Sample data to show the history component's functionality on first load
 const initialEntries: WorkLogEntry[] = [
@@ -33,25 +37,48 @@ const initialEntries: WorkLogEntry[] = [
 export default function Home() {
   const [entries, setEntries] = useState<WorkLogEntry[]>(initialEntries);
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
 
   useEffect(() => {
-    // In a real app, you'd check a token or session
-    const loggedIn = sessionStorage.getItem('isAuthenticated');
-    if (loggedIn) {
-      setIsAuthenticated(true);
-    } else {
-      router.push('/login');
-    }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        router.push('/login');
+      }
+      setLoading(false);
+    });
+    
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, [router]);
 
   const handleAddEntry = (newEntry: WorkLogEntry) => {
     setEntries((prevEntries) => [newEntry, ...prevEntries]);
   };
 
-  if (!isAuthenticated) {
-    // You can return a loader here while checking auth
+  if (loading) {
+    return (
+       <main className="container mx-auto p-4 md:p-8">
+        <div className="text-center mb-12">
+          <Skeleton className="h-12 w-48 mx-auto" />
+          <Skeleton className="h-6 w-96 mx-auto mt-4" />
+        </div>
+        <div className="grid md:grid-cols-5 gap-8">
+          <div className="md:col-span-2">
+            <Skeleton className="h-[500px] w-full" />
+          </div>
+          <div className="md:col-span-3">
+            <Skeleton className="h-[500px] w-full" />
+          </div>
+        </div>
+      </main>
+    );
+  }
+  
+  if (!user) {
     return null;
   }
 
