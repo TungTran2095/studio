@@ -1774,7 +1774,7 @@ export class BotExecutor {
       const smartBalance = Math.max(0, balance - totalBuffer);
       
       // 6. Đảm bảo không vượt quá 100% (fallback safety)
-      const finalBalance = Math.min(smartBalance, balance * 0.999); // 99.9% max để an toàn tuyệt đối
+      const finalBalance = Math.min(smartBalance, balance * 1.0); // 100% max để tối đa hóa hiệu quả
       
       console.log(`[BotExecutor] 🧠 Smart balance breakdown:`, {
         originalBalance: balance,
@@ -1791,8 +1791,8 @@ export class BotExecutor {
       
     } catch (error) {
       console.error(`[BotExecutor] ❌ Error in smart balance calculation:`, error);
-      // Fallback to 99% nếu có lỗi
-      return balance * 0.99;
+      // Fallback to 100% nếu có lỗi
+      return balance * 1.0;
     }
   }
 

@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Play, Pause, Terminal } from 'lucide-react';
+import { Play, Pause, Terminal, ChevronDown, ChevronRight } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { PriceChart } from '@/components/research/price-chart';
 import { BotDebugPanel } from '@/components/research/tabs/bot-debug-panel';
@@ -246,6 +246,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
   const [showApiSecret, setShowApiSecret] = useState(false);
   const [experimentConfig, setExperimentConfig] = useState<any>({});
   const [experimentResults, setExperimentResults] = useState<any>({});
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!open || !bot) return;
@@ -336,6 +337,160 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
     }
   );
 
+  // Tính toán lãi/lỗ tổng dựa trên lệnh buy/sell
+  const totalBuyValue = botTrades.filter(t => t.side === 'buy').reduce((sum, t) => sum + (t.quantity * t.entry_price), 0);
+  const totalSellValue = botTrades.filter(t => t.side === 'sell').reduce((sum, t) => sum + (t.quantity * t.entry_price), 0);
+  const totalPnL = totalSellValue - totalBuyValue;
+
+  // Tính toán Winrate - Logic đúng: gộp các giao dịch cùng side liên tiếp và ghép cặp buy-sell
+  function calculateCorrectWinrate(trades: any[]) {
+    if (!trades || trades.length === 0) {
+      return { 
+        winRate: 0, 
+        totalPairs: 0, 
+        winPairs: 0, 
+        openTrades: 0,
+        avgWinNet: 0,
+        avgLossNet: 0,
+        pairs: []
+      };
+    }
+
+    // Sắp xếp trades theo thời gian
+    const sortedTrades = [...trades].sort((a, b) => 
+      new Date(a.open_time || a.created_at).getTime() - new Date(b.open_time || b.created_at).getTime()
+    );
+
+    // Gộp các giao dịch cùng side liên tiếp
+    const groupedTrades = [];
+    let currentGroup = null;
+
+    for (const trade of sortedTrades) {
+      if (!currentGroup || currentGroup.side !== trade.side) {
+        // Bắt đầu nhóm mới
+        if (currentGroup) {
+          groupedTrades.push(currentGroup);
+        }
+        currentGroup = {
+          side: trade.side,
+          trades: [trade],
+          totalQuantity: Number(trade.quantity || 0),
+          totalValue: Number(trade.quantity || 0) * Number(trade.entry_price || 0),
+          avgPrice: Number(trade.entry_price || 0),
+          startTime: trade.open_time || trade.created_at,
+          endTime: trade.open_time || trade.created_at,
+          signals: [trade.entry_reason || trade.reason || trade.buy_signal || trade.sell_signal || trade.signal || '-']
+        };
+      } else {
+        // Thêm vào nhóm hiện tại
+        currentGroup.trades.push(trade);
+        currentGroup.totalQuantity += Number(trade.quantity || 0);
+        currentGroup.totalValue += Number(trade.quantity || 0) * Number(trade.entry_price || 0);
+        currentGroup.avgPrice = currentGroup.totalValue / currentGroup.totalQuantity;
+        currentGroup.endTime = trade.open_time || trade.created_at;
+        currentGroup.signals.push(trade.entry_reason || trade.reason || trade.buy_signal || trade.sell_signal || trade.signal || '-');
+      }
+    }
+
+    // Thêm nhóm cuối cùng
+    if (currentGroup) {
+      groupedTrades.push(currentGroup);
+    }
+
+    // Ghép cặp buy-sell
+    const pairs = [];
+    let lastBuyGroup = null;
+    let openTrades = 0;
+
+    for (const group of groupedTrades) {
+      if (group.side === 'buy') {
+        if (lastBuyGroup) {
+          // Có buy group trước đó chưa được ghép cặp, tính là open trade
+          openTrades++;
+        }
+        lastBuyGroup = group;
+      } else if (group.side === 'sell' && lastBuyGroup) {
+        // Ghép cặp buy-sell group thành công
+        pairs.push({ 
+          buy: lastBuyGroup, 
+          sell: group,
+          buyValue: lastBuyGroup.totalValue,
+          sellValue: group.totalValue,
+          pnl: group.totalValue - lastBuyGroup.totalValue
+        });
+        lastBuyGroup = null; // Reset để tìm cặp tiếp theo
+      }
+    }
+
+    // Nếu còn buy group cuối cùng chưa được ghép cặp
+    if (lastBuyGroup) {
+      openTrades++;
+    }
+
+    // Tính số cặp thắng (P&L > 0) và tỷ lệ lãi/lỗ
+    const pairsWithRatios = pairs.map(pair => ({
+      ...pair,
+      profitRatio: pair.buyValue > 0 ? (pair.pnl / pair.buyValue) * 100 : 0
+    }));
+
+    const winPairs = pairsWithRatios.filter(pair => pair.pnl > 0);
+    const lossPairs = pairsWithRatios.filter(pair => pair.pnl < 0);
+    
+    const winRate = pairs.length > 0 ? (winPairs.length / pairs.length) * 100 : 0;
+    
+    // Tính tổng giá trị buy và sell của các cặp thắng
+    const totalWinBuyValue = winPairs.reduce((sum, pair) => sum + (pair.buyValue || 0), 0);
+    const totalWinSellValue = winPairs.reduce((sum, pair) => sum + (pair.sellValue || 0), 0);
+    
+    // Tính tổng giá trị buy và sell của các cặp thua
+    const totalLossBuyValue = lossPairs.reduce((sum, pair) => sum + (pair.buyValue || 0), 0);
+    const totalLossSellValue = lossPairs.reduce((sum, pair) => sum + (pair.sellValue || 0), 0);
+    
+    // Debug: Log để kiểm tra
+    console.log('Debug Avg Win/Loss:', {
+      winPairs: winPairs.length,
+      lossPairs: lossPairs.length,
+      totalWinBuyValue,
+      totalWinSellValue,
+      totalLossBuyValue,
+      totalLossSellValue,
+      winProfit: totalWinSellValue - totalWinBuyValue,
+      lossLoss: totalLossBuyValue - totalLossSellValue
+    });
+    
+    // Avg Win Net = (Tổng sell - Tổng buy) của các giao dịch thắng / Tổng buy của các giao dịch thắng
+    const avgWinNet = totalWinBuyValue > 0 
+      ? ((totalWinSellValue - totalWinBuyValue) / totalWinBuyValue) * 100 
+      : 0;
+    
+    // Avg Loss Net = (Tổng buy - Tổng sell) của các giao dịch thua / Tổng buy của các giao dịch thua
+    const avgLossNet = totalLossBuyValue > 0 
+      ? ((totalLossBuyValue - totalLossSellValue) / totalLossBuyValue) * 100 
+      : 0;
+
+    return { 
+      winRate, 
+      totalPairs: pairs.length, 
+      winPairs: winPairs.length,
+      openTrades,
+      avgWinNet,
+      avgLossNet,
+      pairs: pairsWithRatios
+    };
+  }
+
+  const winrateResult = calculateCorrectWinrate(botTrades);
+
+  const toggleRowExpansion = (index: number) => {
+    const newExpandedRows = new Set(expandedRows);
+    if (newExpandedRows.has(index)) {
+      newExpandedRows.delete(index);
+    } else {
+      newExpandedRows.add(index);
+    }
+    setExpandedRows(newExpandedRows);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[1100px] h-[95vh] flex flex-col">
@@ -351,36 +506,39 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                 <TabsTrigger value="debug">Debug</TabsTrigger>
               </TabsList>
               <TabsContent value="performance">
-                <div className="border rounded bg-background p-4 mb-4" style={{height: 180}}>
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    Tổng tài sản BTC+USDT
-                    <span className="text-primary font-bold text-base">{totalAsset.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</span>
-                  </div>
-                  <div className="h-[120px]">
-                    <PriceChart symbol="Tổng tài sản" timeframe="1h" data={assetData.map(item => ({ timestamp: item.timestamp, open: item.value, high: item.value, low: item.value, close: item.value }))} />
-                  </div>
-                </div>
-
-                <BotIndicatorChart botId={bot.id} />
-
-                <div className="grid grid-cols-3 gap-4 max-w-lg mb-4">
+                {/* Thống kê hiệu suất tổng quan - tất cả trong 1 hàng */}
+                <div className="grid grid-cols-5 gap-4 mb-4">
                   <div className="p-3 border rounded">
                     <div className="text-muted-foreground text-sm">Tổng giao dịch</div>
-                    <div className="text-2xl font-semibold">{bot.total_trades}</div>
+                    <div className="text-lg font-semibold">{bot.total_trades}</div>
                   </div>
                   <div className="p-3 border rounded">
-                    <div className="text-muted-foreground text-sm">Tỷ lệ thắng</div>
-                    <div className="text-2xl font-semibold">{safeToFixed(bot.win_rate, 1)}%</div>
+                    <div className="text-muted-foreground text-sm">Lãi/Lỗ tổng</div>
+                    <div className={`text-lg font-semibold ${totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>{totalPnL.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</div>
                   </div>
                   <div className="p-3 border rounded">
-                    <div className="text-muted-foreground text-sm">Tổng lợi nhuận</div>
-                    <div className={`text-2xl font-semibold ${Number(bot.total_profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{safeToFixed(bot.total_profit, 2)} USDT</div>
+                    <div className="text-muted-foreground text-sm">Winrate</div>
+                    <div className="text-lg font-semibold">
+                      {winrateResult.winRate.toFixed(2)}% ({winrateResult.winPairs}/{winrateResult.totalPairs} cặp thắng)
+                    </div>
+                  </div>
+                  <div className="p-3 border rounded">
+                    <div className="text-muted-foreground text-sm">% Avg Win Net</div>
+                    <div className="text-lg font-semibold text-green-600">
+                      {(winrateResult.avgWinNet || 0).toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="p-3 border rounded">
+                    <div className="text-muted-foreground text-sm">% Avg Loss Net</div>
+                    <div className="text-lg font-semibold text-red-600">
+                      {(winrateResult.avgLossNet || 0).toFixed(2)}%
+                    </div>
                   </div>
                 </div>
 
                 <div className="mt-4">
                   <div className="flex justify-between items-center mb-2">
-                    <div className="font-semibold">Danh sách giao dịch</div>
+                    <div className="font-semibold">Danh sách giao dịch hoàn thành</div>
                     <Button
                       variant="outline"
                       size="sm"
@@ -407,50 +565,222 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                     <table className="min-w-full text-xs border">
                       <thead className="bg-muted">
                         <tr>
-                          <th className="p-2 text-left">Thời gian</th>
-                          <th className="p-2 text-center">Loại</th>
-                          <th className="p-2 text-center">Trạng thái</th>
-                          <th className="p-2 text-right">Giá</th>
+                          <th className="p-2 text-center w-8"></th>
+                          <th className="p-2 text-left">Thời gian mua</th>
+                          <th className="p-2 text-left">Thời gian bán</th>
+                          <th className="p-2 text-right">Giá mua</th>
+                          <th className="p-2 text-right">Giá bán</th>
                           <th className="p-2 text-center">Signal mua</th>
                           <th className="p-2 text-center">Signal bán</th>
-                          <th className="p-2 text-right">Số lượng</th>
                           <th className="p-2 text-right">Lợi nhuận</th>
+                          <th className="p-2 text-center">Trạng thái</th>
                         </tr>
                       </thead>
                       <tbody>
                         {tradesLoading ? (
                           <tr>
-                            <td colSpan={8} className="p-4 text-center text-muted-foreground">Đang tải...</td>
+                            <td colSpan={9} className="p-4 text-center text-muted-foreground">Đang tải...</td>
                           </tr>
-                        ) : botTrades.length > 0 ? (
-                          botTrades.map((trade: any, idx: number) => (
-                            <tr key={trade.id || idx} className="border-b">
-                              <td className="p-2">{new Date(trade.open_time).toLocaleString('vi-VN')}</td>
-                              <td className="p-2 text-center capitalize">{trade.side}</td>
-                              <td className="p-2 text-center">
-                                <Badge variant={trade.status === 'closed' ? 'default' : 'secondary'} className="text-xs">
-                                  {trade.status === 'closed' ? 'Đã đóng' : 'Đang mở'}
-                                </Badge>
-                              </td>
-                              <td className="p-2 text-right">
-                                {trade.status === 'closed' && trade.exit_price 
-                                  ? `${trade.entry_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })} → ${trade.exit_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-                                  : trade.entry_price?.toLocaleString('en-US', { maximumFractionDigits: 2 })
-                                }
-                              </td>
-                              <td className="p-2 text-center text-xs">{getBotBuySignalText(bot, trade)}</td>
-                              <td className="p-2 text-center text-xs">{getBotSellSignalText(bot, trade)}</td>
-                              <td className="p-2 text-right">{trade.quantity}</td>
-                              <td className="p-2 text-right">
-                                <span className={trade.pnl !== undefined && trade.pnl !== null ? (trade.pnl >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-500'}>
-                                  {trade.pnl !== undefined && trade.pnl !== null ? trade.pnl.toFixed(2) : '-'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
+                        ) : winrateResult.pairs.length > 0 ? (
+                          winrateResult.pairs.map((pair: any, idx: number) => {
+                            // Sử dụng dữ liệu từ grouped trades
+                            const buyGroup = pair.buy;
+                            const sellGroup = pair.sell;
+                            const pnl = pair.pnl;
+                            const profitRatio = pair.profitRatio;
+                            const isExpanded = expandedRows.has(idx);
+                            
+                            return (
+                              <React.Fragment key={idx}>
+                                <tr className="border-b hover:bg-muted/50">
+                                  <td className="p-2 text-center">
+                                    <button
+                                      onClick={() => toggleRowExpansion(idx)}
+                                      className="p-1 hover:bg-muted rounded"
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronDown className="h-4 w-4" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  </td>
+                                  <td className="p-2">
+                                    <div>{new Date(buyGroup.startTime).toLocaleString('vi-VN')}</div>
+                                    {buyGroup.trades.length > 1 && (
+                                      <div className="text-xs text-muted-foreground">
+                                        ({buyGroup.trades.length} lệnh)
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2">
+                                    <div>{new Date(sellGroup.startTime).toLocaleString('vi-VN')}</div>
+                                    {sellGroup.trades.length > 1 && (
+                                      <div className="text-xs text-muted-foreground">
+                                        ({sellGroup.trades.length} lệnh)
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    <div>{buyGroup.avgPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>
+                                    <div className="text-xs text-muted-foreground">(TB)</div>
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    <div>{sellGroup.avgPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>
+                                    <div className="text-xs text-muted-foreground">(TB)</div>
+                                  </td>
+                                  <td className="p-2 text-center text-xs">
+                                    {buyGroup.signals.length > 1 ? `${buyGroup.signals.length} signals` : buyGroup.signals[0]}
+                                  </td>
+                                  <td className="p-2 text-center text-xs">
+                                    {sellGroup.signals.length > 1 ? `${sellGroup.signals.length} signals` : sellGroup.signals[0]}
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    <span className={pnl >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                      {pnl.toFixed(2)} USDT
+                                    </span>
+                                    <div className="text-xs text-muted-foreground">
+                                      ({profitRatio.toFixed(2)}%)
+                                    </div>
+                                  </td>
+                                  <td className="p-2 text-center">
+                                    <Badge variant="default" className="text-xs">
+                                      Hoàn thành
+                                    </Badge>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr className="border-b bg-muted/30">
+                                    <td colSpan={9} className="p-4">
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {/* Chi tiết giao dịch mua */}
+                                        <div className="space-y-3">
+                                          <h4 className="font-semibold text-green-600 flex items-center gap-2">
+                                            <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                                            Chi tiết giao dịch MUA ({buyGroup.trades.length} lệnh)
+                                          </h4>
+                                          <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Thời gian bắt đầu:</span>
+                                              <span>{new Date(buyGroup.startTime).toLocaleString('vi-VN')}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Thời gian kết thúc:</span>
+                                              <span>{new Date(buyGroup.endTime).toLocaleString('vi-VN')}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Giá trung bình:</span>
+                                              <span className="font-mono">{buyGroup.avgPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Tổng khối lượng:</span>
+                                              <span className="font-mono">{buyGroup.totalQuantity.toFixed(8)} BTC</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Tổng giá trị:</span>
+                                              <span className="font-mono">{buyGroup.totalValue.toFixed(2)} USDT</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Signals:</span>
+                                              <span className="text-xs">{buyGroup.signals.join(', ')}</span>
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Chi tiết từng lệnh mua */}
+                                          {buyGroup.trades.length > 1 && (
+                                            <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded">
+                                              <div className="text-xs font-medium text-green-800 mb-2">Chi tiết từng lệnh:</div>
+                                              {buyGroup.trades.map((trade: any, tradeIdx: number) => (
+                                                <div key={tradeIdx} className="text-xs text-green-700 mb-1">
+                                                  {new Date(trade.open_time || trade.created_at).toLocaleString('vi-VN')} - 
+                                                  {Number(trade.quantity).toFixed(8)} BTC @ {Number(trade.entry_price).toFixed(2)} USDT
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                        
+                                        {/* Chi tiết giao dịch bán */}
+                                        <div className="space-y-3">
+                                          <h4 className="font-semibold text-red-600 flex items-center gap-2">
+                                            <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+                                            Chi tiết giao dịch BÁN ({sellGroup.trades.length} lệnh)
+                                          </h4>
+                                          <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Thời gian bắt đầu:</span>
+                                              <span>{new Date(sellGroup.startTime).toLocaleString('vi-VN')}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Thời gian kết thúc:</span>
+                                              <span>{new Date(sellGroup.endTime).toLocaleString('vi-VN')}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Giá trung bình:</span>
+                                              <span className="font-mono">{sellGroup.avgPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Tổng khối lượng:</span>
+                                              <span className="font-mono">{sellGroup.totalQuantity.toFixed(8)} BTC</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Tổng giá trị:</span>
+                                              <span className="font-mono">{sellGroup.totalValue.toFixed(2)} USDT</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Signals:</span>
+                                              <span className="text-xs">{sellGroup.signals.join(', ')}</span>
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Chi tiết từng lệnh bán */}
+                                          {sellGroup.trades.length > 1 && (
+                                            <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded">
+                                              <div className="text-xs font-medium text-red-800 mb-2">Chi tiết từng lệnh:</div>
+                                              {sellGroup.trades.map((trade: any, tradeIdx: number) => (
+                                                <div key={tradeIdx} className="text-xs text-red-700 mb-1">
+                                                  {new Date(trade.open_time || trade.created_at).toLocaleString('vi-VN')} - 
+                                                  {Number(trade.quantity).toFixed(8)} BTC @ {Number(trade.entry_price).toFixed(2)} USDT
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Tóm tắt lợi nhuận */}
+                                      <div className="mt-4 p-3 bg-background border rounded-lg">
+                                        <h5 className="font-semibold mb-2">Tóm tắt lợi nhuận</h5>
+                                        <div className="grid grid-cols-3 gap-4 text-sm">
+                                          <div className="text-center">
+                                            <div className="text-muted-foreground">Lợi nhuận tuyệt đối</div>
+                                            <div className={`font-semibold ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                              {pnl.toFixed(2)} USDT
+                                            </div>
+                                          </div>
+                                          <div className="text-center">
+                                            <div className="text-muted-foreground">Tỷ lệ lợi nhuận</div>
+                                            <div className={`font-semibold ${profitRatio >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                              {profitRatio.toFixed(2)}%
+                                            </div>
+                                          </div>
+                                          <div className="text-center">
+                                            <div className="text-muted-foreground">Thời gian nắm giữ</div>
+                                            <div className="font-semibold">
+                                              {Math.round((new Date(sellGroup.startTime).getTime() - new Date(buyGroup.startTime).getTime()) / (1000 * 60 * 60))} giờ
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })
                         ) : (
                           <tr>
-                            <td colSpan={8} className="p-4 text-center text-muted-foreground">Chưa có giao dịch nào</td>
+                            <td colSpan={9} className="p-4 text-center text-muted-foreground">Chưa có giao dịch hoàn thành nào</td>
                           </tr>
                         )}
                       </tbody>
@@ -515,7 +845,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                           </div>
                         )}
                         <div className="p-2 border border-blue-200 bg-blue-50 rounded-md mt-2">
-                          <p className="text-xs text-blue-800">💡 <strong>Smart Balance:</strong> Bot sử dụng thuật toán thông minh để tối đa hóa balance (99.9%) với safety buffer động cho fees, precision và network latency.</p>
+                          <p className="text-xs text-blue-800">💡 <strong>Smart Balance:</strong> Bot sử dụng thuật toán thông minh để tối đa hóa balance (100%) với safety buffer động cho fees, precision và network latency.</p>
                         </div>
                         <div className="p-2 border border-yellow-200 bg-yellow-50 rounded-md mt-2">
                           <p className="text-xs text-yellow-800">⚠️ <strong>Lưu ý:</strong> Binance yêu cầu giá trị giao dịch tối thiểu 10 USDT. Với Position Size nhỏ và balance thấp, bot có thể bỏ qua signal để tránh lỗi NOTIONAL.</p>
@@ -584,5 +914,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
 }
 
 export default TradingBotDetailModal;
+
 
 
