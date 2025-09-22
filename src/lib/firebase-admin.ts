@@ -5,7 +5,11 @@ import admin from 'firebase-admin';
 // Check if the service account JSON is provided
 const serviceAccount = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
 
-if (!admin.apps.length) {
+const initializeFirebaseAdmin = () => {
+  if (admin.apps.length > 0) {
+    return;
+  }
+
   if (serviceAccount) {
     try {
       admin.initializeApp({
@@ -19,10 +23,12 @@ if (!admin.apps.length) {
   } else {
     console.warn('FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON is not set. Firebase Admin SDK not initialized.');
   }
-}
+};
+
 
 // Safely export admin services
 const getAdminDb = () => {
+  initializeFirebaseAdmin();
   if (!admin.apps.length) {
     throw new Error('Firebase Admin has not been initialized.');
   }
@@ -30,6 +36,7 @@ const getAdminDb = () => {
 };
 
 const getAdminStorage = () => {
+  initializeFirebaseAdmin();
   if (!admin.apps.length) {
     throw new Error('Firebase Admin has not been initialized.');
   }
