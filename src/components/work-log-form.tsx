@@ -34,6 +34,7 @@ import { Progress } from '@/components/ui/progress';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
+// Client-side validation schema
 const formSchema = z.object({
   title: z.string().min(1, 'Tên công việc không được để trống.'),
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
@@ -66,67 +67,71 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     startTransition(() => {
-        setUploadProgress(0);
-        const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${values.file.name}`);
-        const uploadTask = uploadBytesResumable(storageRef, values.file);
+      setUploadProgress(0);
+      const file = values.file;
+      const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
 
-        uploadTask.on('state_changed',
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                setUploadProgress(progress);
-            },
-            (error) => {
-                console.error("Upload failed", error);
-                toast({
-                    variant: 'destructive',
-                    title: 'Tải tệp lên thất bại',
-                    description: 'Không thể tải tệp lên. Vui lòng kiểm tra lại quy tắc bảo mật Storage.',
-                });
-                setUploadProgress(null);
-            },
-            async () => {
-                try {
-                    const fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
-                    const uploadedFileName = values.file.name;
-                    
-                    const result = await createWorkLogEntry({
-                        userId,
-                        title: values.title,
-                        description: values.description,
-                        startTime: values.startTime,
-                        endTime: values.endTime,
-                        fileName: uploadedFileName,
-                        fileUrl: fileUrl,
-                    });
+      uploadTask.on('state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        },
+        (error) => {
+          console.error("Upload failed", error);
+          toast({
+            variant: 'destructive',
+            title: 'Tải tệp lên thất bại',
+            description: 'Không thể tải tệp lên. Vui lòng kiểm tra lại quy tắc bảo mật Storage.',
+          });
+          setUploadProgress(null);
+        },
+        async () => {
+          // Upload completed successfully, now get the download URL
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            // Now call the server action with all the data
+            const result = await createWorkLogEntry({
+              userId,
+              title: values.title,
+              description: values.description,
+              startTime: values.startTime,
+              endTime: values.endTime,
+              fileName: file.name,
+              fileUrl: downloadURL,
+            });
 
-                    if (result.success && result.newEntry) {
-                        onAddEntry(result.newEntry);
-                        toast({
-                            title: 'Thành công!',
-                            description: 'Đã ghi nhận công việc của bạn.',
-                        });
-                        form.reset();
-                        setFileName('');
-                        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-                        if (fileInput) fileInput.value = '';
-                    } else {
-                        toast({
-                            variant: 'destructive',
-                            title: 'Có lỗi xảy ra',
-                            description: result.error || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
-                        });
-                    }
-                } catch (e) {
-                     toast({
-                        variant: 'destructive',
-                        title: 'Lỗi ghi dữ liệu',
-                        description: 'Không thể lưu vào Firestore. Vui lòng kiểm tra quy tắc bảo mật.',
-                    });
-                } finally {
-                    setUploadProgress(null);
-                }
+            if (result.success && result.newEntry) {
+              onAddEntry(result.newEntry);
+              toast({
+                title: 'Thành công!',
+                description: 'Đã ghi nhận công việc của bạn.',
+              });
+              form.reset();
+              setFileName('');
+              // Reset the file input visually
+              const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+              if (fileInput) fileInput.value = '';
+            } else {
+              toast({
+                variant: 'destructive',
+                title: 'Có lỗi xảy ra',
+                description: result.error || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
+              });
             }
-        );
+          } catch (e) {
+             console.error("Error creating worklog:", e)
+             toast({
+                variant: 'destructive',
+                title: 'Lỗi ghi dữ liệu',
+                description: 'Không thể lưu vào Firestore. Vui lòng kiểm tra lại quy tắc bảo mật.',
+            });
+          } finally {
+            setUploadProgress(null);
+          }
+        }
+      );
     });
   }
   

@@ -7,14 +7,15 @@ import type { WorkLogEntry } from '@/lib/types';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
+// This schema now expects all data to be ready for insertion.
 const ActionInputSchema = z.object({
   userId: z.string(),
   title: z.string().min(1, 'Tên công việc là bắt buộc.'),
   description: z.string().min(1, 'Chi tiết công việc là bắt buộc.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
-  fileName: z.string().optional(),
-  fileUrl: z.string().url().optional(),
+  fileName: z.string().min(1, 'Tên tệp là bắt buộc.'),
+  fileUrl: z.string().url('URL tệp không hợp lệ.'),
 });
 
 export async function createWorkLogEntry(
@@ -64,6 +65,6 @@ export async function createWorkLogEntry(
     return { success: true, newEntry };
   } catch (e) {
     console.error("Error adding document: ", e);
-    return { success: false, error: 'Đã có lỗi xảy ra khi lưu trữ. Vui lòng thử lại.' };
+    return { success: false, error: 'Đã có lỗi xảy ra khi lưu trữ. Vui lòng kiểm tra lại quy tắc bảo mật Firestore.' };
   }
 }
