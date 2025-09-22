@@ -39,7 +39,9 @@ const formSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
-  file: z.instanceof(File).optional(),
+  file: z.any().refine((files) => files instanceof File, {
+    message: 'Tệp đính kèm là bắt buộc.',
+  }),
 });
 
 type WorkLogFormProps = {
@@ -51,7 +53,6 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const [fileName, setFileName] = useState('');
-  const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -61,7 +62,6 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       description: '',
       startTime: '',
       endTime: '',
-      file: undefined,
     },
   });
 
@@ -70,7 +70,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       let fileUrl: string | undefined = undefined;
       let uploadedFileName: string | undefined = undefined;
       
-      if (file) {
+      if (values.file) {
         setUploadProgress(0);
         try {
           // Simulate progress for small files
@@ -80,10 +80,10 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
              setUploadProgress(progress);
           }, 200);
 
-          const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
-          const snapshot = await uploadBytes(storageRef, file);
+          const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${values.file.name}`);
+          const snapshot = await uploadBytes(storageRef, values.file);
           fileUrl = await getDownloadURL(snapshot.ref);
-          uploadedFileName = file.name;
+          uploadedFileName = values.file.name;
           
           clearInterval(interval);
           setUploadProgress(100);
@@ -120,7 +120,6 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
         });
         form.reset();
         setFileName('');
-        setFile(null);
         setUploadProgress(null);
         const fileInput = document.getElementById('file-upload') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
@@ -135,18 +134,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       }
     });
   }
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setFileName(selectedFile.name);
-    } else {
-      setFile(null);
-      setFileName('');
-    }
-  };
-
+  
   return (
     <Card>
       <CardHeader>
@@ -166,7 +154,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tên công việc</FormLabel>
+                  <FormLabel>Tên công việc *</FormLabel>
                   <FormControl>
                     <Input placeholder="Ví dụ: Thiết kế giao diện trang chủ" {...field} />
                   </FormControl>
@@ -180,7 +168,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                 name="startTime"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel>Giờ bắt đầu</FormLabel>
+                    <FormLabel>Giờ bắt đầu *</FormLabel>
                     <FormControl>
                       <Input type="time" {...field} />
                     </FormControl>
@@ -193,7 +181,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                 name="endTime"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel>Giờ kết thúc</FormLabel>
+                    <FormLabel>Giờ kết thúc *</FormLabel>
                     <FormControl>
                       <Input type="time" {...field} />
                     </FormControl>
@@ -207,7 +195,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Chi tiết công việc</FormLabel>
+                  <FormLabel>Chi tiết công việc *</FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="Mô tả các bước đã thực hiện, kết quả đạt được..."
@@ -222,9 +210,9 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
             <FormField
               control={form.control}
               name="file"
-              render={() => (
+              render={({ field: { onChange, ...field } }) => (
                 <FormItem>
-                  <FormLabel>Tệp đính kèm (nếu có)</FormLabel>
+                  <FormLabel>Tệp đính kèm *</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Button type="button" variant="outline" asChild>
@@ -237,10 +225,17 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                         </label>
                       </Button>
                       <Input
+                        {...field}
                         id="file-upload"
                         type="file"
                         className="sr-only"
-                        onChange={handleFileChange}
+                        onChange={(event) => {
+                           const file = event.target.files?.[0];
+                           if(file) {
+                             onChange(file);
+                             setFileName(file.name);
+                           }
+                        }}
                         accept="*/*"
                         disabled={isPending}
                       />

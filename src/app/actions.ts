@@ -13,6 +13,8 @@ const FormSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc là bắt buộc.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
+  fileName: z.string().min(1, "Tên tệp là bắt buộc."),
+  fileUrl: z.string().url("URL tệp không hợp lệ."),
 });
 
 export async function createWorkLogEntry(
@@ -35,7 +37,7 @@ export async function createWorkLogEntry(
     };
   }
   
-  const { title, description, startTime, endTime } = validatedFields.data;
+  const { title, description, startTime, endTime, fileName, fileUrl } = validatedFields.data;
   
   try {
     const classification = await classifyWorkLogEntry({ title, description });
@@ -47,8 +49,8 @@ export async function createWorkLogEntry(
       description,
       startTime,
       endTime,
-      fileName: data.fileName,
-      fileUrl: data.fileUrl,
+      fileName: fileName,
+      fileUrl: fileUrl,
       category: classification.category,
       timestamp: timestamp,
     });
@@ -60,8 +62,8 @@ export async function createWorkLogEntry(
       description,
       startTime,
       endTime,
-      fileName: data.fileName,
-      fileUrl: data.fileUrl,
+      fileName: fileName,
+      fileUrl: fileUrl,
       category: classification.category,
       timestamp: timestamp,
     };
