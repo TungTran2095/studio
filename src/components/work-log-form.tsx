@@ -62,6 +62,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       description: '',
       startTime: '',
       endTime: '',
+      file: undefined,
     },
   });
 
@@ -210,7 +211,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
             <FormField
               control={form.control}
               name="file"
-              render={({ field: { onChange, ...field } }) => (
+              render={({ field: { onChange, value, ...field } }) => (
                 <FormItem>
                   <FormLabel>Tệp đính kèm *</FormLabel>
                   <FormControl>
