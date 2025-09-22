@@ -1,12 +1,12 @@
 import admin from 'firebase-admin';
 import serviceAccount from '@/../serviceAccountKey.json';
+import { firebaseConfig } from '@/lib/firebase';
 
 const initializeFirebaseAdmin = () => {
   if (admin.apps.length > 0) {
     return;
   }
 
-  // Check if the service account has been populated
   if (serviceAccount.project_id === 'your-project-id') {
     console.warn(
       'Firebase Admin SDK not initialized. Please populate serviceAccountKey.json'
@@ -17,7 +17,7 @@ const initializeFirebaseAdmin = () => {
   try {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      storageBucket: 'studio-3896827022-acbf1.appspot.com',
+      storageBucket: firebaseConfig.storageBucket,
     });
   } catch (error: any) {
     console.error('Firebase Admin SDK initialization error:', error.message);

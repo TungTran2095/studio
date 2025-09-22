@@ -82,6 +82,12 @@ export async function createWorkLogEntry(input: ActionInput): Promise<{
 
   } catch (error: any) {
     console.error('Server Action Error:', error);
-    return { error: error.message || 'An unknown server error occurred.' };
+    // Return a more structured or specific error message
+    const errorMessage = error.message || 'An unknown server error occurred.';
+    // Check for specific Firebase Storage error messages
+    if (errorMessage.includes('storage/object-not-found') || errorMessage.includes('does not exist')) {
+        return { error: `Firebase Storage error: The bucket does not seem to exist or is not accessible. Details: ${errorMessage}` };
+    }
+    return { error: errorMessage };
   }
 }
