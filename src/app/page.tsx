@@ -44,7 +44,7 @@ export default function Home() {
           Ghi nhận và theo dõi tiến độ công việc của bạn một cách hiệu quả
         </p>
       </div>
-      <div className="grid md:grid-cols-5 gap-8 items-start">
+      <div className="grid md:grid-cols-5 gap-8">
         <div className="md:col-span-2">
           <WorkLogForm onAddEntry={handleAddEntry} />
         </div>

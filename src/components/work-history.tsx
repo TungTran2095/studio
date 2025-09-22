@@ -53,7 +53,7 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
   }, [entries, searchTerm, dateRange]);
 
   return (
-    <Card>
+    <Card className="flex flex-col h-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <History className="h-6 w-6 text-primary" />
@@ -63,7 +63,7 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
           Xem lại và tìm kiếm các công việc đã được ghi nhận.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-grow flex flex-col">
         <div className="flex flex-col sm:flex-row gap-2 mb-4">
           <div className="relative flex-grow">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -111,7 +111,7 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
             </PopoverContent>
           </Popover>
         </div>
-        <ScrollArea className="h-[520px] pr-4">
+        <ScrollArea className="flex-grow pr-4">
           {filteredEntries.length > 0 ? (
             <div className="space-y-4">
               {filteredEntries.map((entry) => (
@@ -145,7 +145,7 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted h-[400px] text-center text-muted-foreground p-8">
+            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted h-full text-center text-muted-foreground p-8">
               <Inbox className="h-12 w-12 mb-4" />
               <h3 className="font-semibold text-lg">Không có công việc nào</h3>
               <p className="text-sm">
