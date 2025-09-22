@@ -5,4 +5,6 @@ export type WorkLogEntry = {
   fileName?: string;
   category: string;
   timestamp: Date;
+  startTime: string;
+  endTime: string;
 };

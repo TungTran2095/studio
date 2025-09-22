@@ -28,9 +28,13 @@ import { useToast } from '@/hooks/use-toast';
 import { ClipboardPenLine, Loader2, Upload } from 'lucide-react';
 import type { WorkLogEntry } from '@/lib/types';
 
+const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 const formSchema = z.object({
   title: z.string().min(1, 'Tên công việc không được để trống.'),
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
+  startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
+  endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   file: z.any().optional(),
 });
 
@@ -48,6 +52,8 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
     defaultValues: {
       title: '',
       description: '',
+      startTime: '',
+      endTime: '',
       file: undefined,
     },
   });
@@ -57,6 +63,8 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
       const data = {
         title: values.title,
         description: values.description,
+        startTime: values.startTime,
+        endTime: values.endTime,
         fileName: fileName,
       };
       const result = await createWorkLogEntry(data);
@@ -91,10 +99,10 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
   };
 
   return (
-    <Card className="shadow-lg">
+    <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 font-headline">
-          <ClipboardPenLine className="h-6 w-6 text-accent" />
+        <CardTitle className="flex items-center gap-2">
+          <ClipboardPenLine className="h-6 w-6 text-primary" />
           Báo cáo công việc
         </CardTitle>
         <CardDescription>
@@ -103,7 +111,7 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
               name="title"
@@ -117,6 +125,34 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
                 </FormItem>
               )}
             />
+             <div className="flex flex-col sm:flex-row gap-4">
+              <FormField
+                control={form.control}
+                name="startTime"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>Giờ bắt đầu</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="endTime"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>Giờ kết thúc</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="description"
@@ -145,7 +181,7 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
                       <Button type="button" variant="outline" asChild>
                         <label
                           htmlFor="file-upload"
-                          className="cursor-pointer flex items-center gap-2"
+                          className="cursor-pointer flex items-center gap-2 w-full justify-center"
                         >
                           <Upload className="h-4 w-4" />
                           Tải tệp lên
@@ -169,7 +205,7 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={isPending} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Button type="submit" disabled={isPending} className="w-full">
               {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
