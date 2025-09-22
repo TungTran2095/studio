@@ -8,7 +8,7 @@ import type { WorkLogEntry } from '@/lib/types';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-// This schema is for data coming from the form, which doesn't include the URL yet
+// This schema is now strictly for data being passed to the server action
 const ActionInputSchema = z.object({
   userId: z.string(),
   title: z.string().min(1, 'Tên công việc là bắt buộc.'),
@@ -20,15 +20,7 @@ const ActionInputSchema = z.object({
 });
 
 export async function createWorkLogEntry(
-  data: { 
-    title: string; 
-    description: string; 
-    startTime: string; 
-    endTime: string; 
-    fileName?: string;
-    fileUrl?: string;
-    userId: string;
-  }
+  data: z.infer<typeof ActionInputSchema>
 ): Promise<{ success: boolean; newEntry?: WorkLogEntry; error?: string }> {
   // Validate the final data object that includes the fileUrl from storage
   const validatedFields = ActionInputSchema.safeParse(data);

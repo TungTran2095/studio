@@ -39,9 +39,7 @@ const formSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
-  file: z.any().refine((files) => files instanceof File, {
-    message: 'Tệp đính kèm là bắt buộc.',
-  }),
+  file: z.instanceof(File, { message: 'Tệp đính kèm là bắt buộc.' }),
 });
 
 type WorkLogFormProps = {
@@ -68,40 +66,39 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     startTransition(async () => {
-      let fileUrl: string | undefined = undefined;
-      let uploadedFileName: string | undefined = undefined;
-      
-      if (values.file) {
-        setUploadProgress(0);
-        try {
-          // Simulate progress for small files
-          let progress = 10;
-          const interval = setInterval(() => {
-             progress = Math.min(progress + 15, 90);
-             setUploadProgress(progress);
-          }, 200);
+      setUploadProgress(0);
+      let fileUrl: string;
+      let uploadedFileName: string;
 
-          const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${values.file.name}`);
-          const snapshot = await uploadBytes(storageRef, values.file);
-          fileUrl = await getDownloadURL(snapshot.ref);
-          uploadedFileName = values.file.name;
-          
-          clearInterval(interval);
-          setUploadProgress(100);
+      try {
+        // Simulate progress for small files
+        let progress = 10;
+        const interval = setInterval(() => {
+           progress = Math.min(progress + 15, 90);
+           setUploadProgress(progress);
+        }, 200);
 
-        } catch (error) {
-          console.error("Upload failed", error);
-          toast({
-            variant: 'destructive',
-            title: 'Tải tệp lên thất bại',
-            description: 'Không thể tải tệp lên. Vui lòng thử lại.',
-          });
-          setUploadProgress(null);
-          return;
-        }
+        const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${values.file.name}`);
+        const snapshot = await uploadBytes(storageRef, values.file);
+        fileUrl = await getDownloadURL(snapshot.ref);
+        uploadedFileName = values.file.name;
+        
+        clearInterval(interval);
+        setUploadProgress(100);
+
+      } catch (error) {
+        console.error("Upload failed", error);
+        toast({
+          variant: 'destructive',
+          title: 'Tải tệp lên thất bại',
+          description: 'Không thể tải tệp lên. Vui lòng thử lại.',
+        });
+        setUploadProgress(null);
+        return; // Stop execution if upload fails
       }
 
-      const data = {
+      // Ensure we only proceed if file upload was successful
+      const result = await createWorkLogEntry({
         userId,
         title: values.title,
         description: values.description,
@@ -109,9 +106,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
         endTime: values.endTime,
         fileName: uploadedFileName,
         fileUrl: fileUrl,
-      };
-
-      const result = await createWorkLogEntry(data);
+      });
 
       if (result.success && result.newEntry) {
         onAddEntry(result.newEntry);
