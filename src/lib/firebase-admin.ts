@@ -1,28 +1,31 @@
 'use server';
 
 import admin from 'firebase-admin';
+import serviceAccount from '@/../serviceAccountKey.json';
 
 const initializeFirebaseAdmin = () => {
   if (admin.apps.length > 0) {
     return;
   }
 
-  const serviceAccount = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
+  // Check if the service account has been populated
+  if (serviceAccount.project_id === 'your-project-id') {
+    console.warn(
+      'Firebase Admin SDK not initialized. Please populate serviceAccountKey.json'
+    );
+    return;
+  }
 
-  if (serviceAccount) {
-    try {
-      admin.initializeApp({
-        credential: admin.credential.cert(JSON.parse(serviceAccount)),
-        storageBucket: 'studio-3896827022-acbf1.appspot.com',
-      });
-    } catch (error: any) {
-      console.error('Firebase Admin SDK initialization error:', error.message);
-    }
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      storageBucket: 'studio-3896827022-acbf1.appspot.com',
+    });
+  } catch (error: any) {
+    console.error('Firebase Admin SDK initialization error:', error.message);
   }
 };
 
-
-// Safely export admin services
 const getAdminDb = () => {
   initializeFirebaseAdmin();
   if (!admin.apps.length) {
