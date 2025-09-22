@@ -34,17 +34,22 @@ export default function LoginPage() {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       error = signInError;
     } else {
-      const { error: signUpError } = await supabase.auth.signUp({ 
+      const { data, error: signUpError } = await supabase.auth.signUp({ 
         email, 
         password,
-        options: {
-          // You might want to add more data here
-          data: {
-            full_name: 'Demo User',
-          }
-        }
       });
       error = signUpError;
+
+      // Handle successful signup
+      if (data.user && !error) {
+        toast({
+         title: 'Đăng ký thành công!',
+         description: 'Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.',
+       });
+       // We don't redirect here, user needs to confirm email first.
+       setLoading(false);
+       return;
+      }
     }
 
     if (error) {
@@ -54,16 +59,9 @@ export default function LoginPage() {
         description: error.message,
       });
     } else {
-       // On successful signup, Supabase sends a confirmation email.
-       // For login, or if email confirmation is disabled, we redirect.
-       if (authType === 'signup') {
-         toast({
-          title: 'Đăng ký thành công!',
-          description: 'Vui lòng kiểm tra email để xác thực tài khoản.',
-        });
-       }
-       // The auth state change listener on the main page will handle the redirect.
+       // On successful login, the auth state change listener will handle the redirect.
        router.push('/');
+       router.refresh();
     }
     
     setLoading(false);
