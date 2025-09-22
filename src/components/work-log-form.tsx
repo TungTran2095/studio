@@ -70,7 +70,8 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
         let uploadedFileName = '';
 
         if (file) {
-          const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
+          // Đơn giản hóa đường dẫn, không bao gồm userId
+          const storageRef = ref(storage, `uploads/${Date.now()}_${file.name}`);
           const uploadResult = await uploadBytes(storageRef, file);
           fileUrl = await getDownloadURL(uploadResult.ref);
           uploadedFileName = file.name;
@@ -119,8 +120,10 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
         let errorMessage = 'Không thể ghi nhận công việc. Vui lòng thử lại.';
         if (error.code === 'storage/unauthorized') {
             errorMessage = 'Lỗi phân quyền: Bạn không có quyền tải tệp lên. Vui lòng kiểm tra lại quy tắc bảo mật của Storage.';
-        } else if (error.code === 'storage/object-not-found') {
-             errorMessage = 'Lỗi: Không tìm thấy bucket lưu trữ. Vui lòng kiểm tra lại cấu hình Firebase.';
+        } else if (error.code === 'storage/object-not-found' || error.code === 'storage/bucket-not-found') {
+             errorMessage = 'Lỗi: Không tìm thấy bucket lưu trữ hoặc không có quyền truy cập. Vui lòng kiểm tra lại cấu hình Firebase và quyền của Cloud Storage.';
+        } else if (error.code === 'storage/unknown') {
+            errorMessage = 'Đã xảy ra lỗi không xác định với Cloud Storage. Vui lòng kiểm tra CORS rules của bucket.'
         } else if (error.message) {
             errorMessage = error.message;
         }
