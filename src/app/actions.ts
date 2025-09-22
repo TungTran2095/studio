@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { WorkLogEntry } from '@/lib/types';
-import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -34,9 +33,7 @@ export async function createWorkLogEntry(
   const { title, description, startTime, endTime, fileName, fileUrl, userId } = validatedFields.data;
   
   try {
-    const timestamp = new Date();
-
-    // AI classification is currently disabled for stability.
+    const timestamp = new Date(); // Use a normal Date for the return object
     const category = "Other"; 
 
     const docRef = await addDoc(collection(db, 'worklogs'), {
@@ -48,7 +45,7 @@ export async function createWorkLogEntry(
       fileName: fileName || '',
       fileUrl: fileUrl || '',
       category,
-      timestamp: serverTimestamp(),
+      timestamp: serverTimestamp(), // Use serverTimestamp() for writing to Firestore
     });
     
     const newEntry: WorkLogEntry = {
@@ -61,7 +58,7 @@ export async function createWorkLogEntry(
       fileName,
       fileUrl,
       category,
-      timestamp,
+      timestamp, // Return the client-side generated timestamp
     };
     
     return { success: true, newEntry };
