@@ -17,29 +17,20 @@ export default function Home() {
   const [loadingEntries, setLoadingEntries] = useState(true);
 
   useEffect(() => {
-    // Check initial auth state
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        await fetchEntries(session.user.id);
-      } else {
-        router.push('/login');
-      }
-      setAuthLoading(false);
-    };
-
-    checkUser();
-
-    // Listen for auth state changes
+    // Check initial auth state and listen for changes.
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
+        
         if (currentUser) {
-          fetchEntries(currentUser.id);
+          await fetchEntries(currentUser.id);
         } else {
           router.push('/login');
+        }
+        
+        if (authLoading) {
+           setAuthLoading(false);
         }
       }
     );
@@ -47,7 +38,7 @@ export default function Home() {
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, authLoading]);
 
   async function fetchEntries(userId: string) {
     setLoadingEntries(true);
