@@ -4,15 +4,11 @@ import serviceAccount from '@/../serviceAccountKey.json';
 
 const initializeFirebaseAdmin = () => {
   if (admin.apps.length === 0) {
-      try {
-        const serviceAccountKey = serviceAccount as admin.ServiceAccount;
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccountKey),
-          storageBucket: firebaseConfig.storageBucket,
-        });
-      } catch (error: any) {
-        console.error('Firebase Admin initialization error:', error.message);
-      }
+      const serviceAccountKey = serviceAccount as admin.ServiceAccount;
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccountKey),
+        storageBucket: firebaseConfig.storageBucket,
+      });
   }
   return admin;
 };
