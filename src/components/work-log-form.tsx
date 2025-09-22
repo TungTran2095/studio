@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
-import { createWorkLogEntry } from '@/app/actions';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { storage, db } from '@/lib/firebase';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -34,7 +34,6 @@ import { Progress } from '@/components/ui/progress';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-// Client-side validation schema
 const formSchema = z.object({
   title: z.string().min(1, 'Tên công việc không được để trống.'),
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
@@ -49,7 +48,7 @@ type WorkLogFormProps = {
 };
 
 export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
-  const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const [fileName, setFileName] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -64,86 +63,95 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       file: undefined,
     },
   });
-  
-  const handleServerAction = async (data: {
-    userId: string;
-    title: string;
-    description: string;
-    startTime: string;
-    endTime: string;
-    fileName?: string;
-    fileUrl?: string;
-  }) => {
-     try {
-        const result = await createWorkLogEntry(data);
-        if (result.success && result.newEntry) {
-          onAddEntry(result.newEntry);
-          toast({
-            title: 'Thành công!',
-            description: 'Đã ghi nhận công việc của bạn.',
-          });
-          form.reset();
-          setFileName('');
-          const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-          if (fileInput) fileInput.value = '';
-        } else {
-          throw new Error(result.error || 'Không thể ghi nhận công việc.');
-        }
-     } catch(e: any) {
-        toast({
-            variant: 'destructive',
-            title: 'Có lỗi xảy ra',
-            description: e.message || 'Không thể kết nối đến server.',
-        });
-     } finally {
-        setUploadProgress(null);
-     }
-  }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    startTransition(() => {
-        const file = values.file;
-        const commonData = {
-            userId,
-            title: values.title,
-            description: values.description,
-            startTime: values.startTime,
-            endTime: values.endTime,
-        };
+    setIsSubmitting(true);
+    setUploadProgress(null);
 
-        if (file) {
-            setUploadProgress(0);
-            const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
-            const uploadTask = uploadBytesResumable(storageRef, file);
+    const { title, description, startTime, endTime, file } = values;
 
-            uploadTask.on('state_changed',
-                (snapshot) => {
-                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                    setUploadProgress(progress);
-                },
-                (error) => {
-                    console.error("Upload failed", error);
-                    toast({
-                        variant: 'destructive',
-                        title: 'Tải tệp lên thất bại',
-                        description: error.message,
-                    });
-                    setUploadProgress(null);
-                },
-                async () => {
-                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                    await handleServerAction({
-                        ...commonData,
-                        fileName: file.name,
-                        fileUrl: downloadURL,
-                    });
-                }
-            );
-        } else {
-            // No file attached, just submit the rest of the data
-            handleServerAction(commonData);
+    try {
+      let fileUrl = '';
+      let uploadedFileName = '';
+
+      // Step 1: Upload file to Storage if it exists
+      if (file) {
+        setUploadProgress(0);
+        uploadedFileName = file.name;
+        const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        fileUrl = await new Promise((resolve, reject) => {
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
+            },
+            (error) => {
+              console.error("Upload failed", error);
+              reject(error);
+            },
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve(downloadURL);
+            }
+          );
+        });
+      }
+      
+      // Step 2: Add document to Firestore
+      const docData = {
+        userId,
+        title,
+        description,
+        startTime,
+        endTime,
+        fileName: uploadedFileName,
+        fileUrl,
+        category: 'Other', // Default category
+        timestamp: serverTimestamp(),
+      };
+
+      const docRef = await addDoc(collection(db, 'worklogs'), docData);
+      
+      const newEntry: WorkLogEntry = {
+        id: docRef.id,
+        userId,
+        title,
+        description,
+        startTime,
+        endTime,
+        fileName: uploadedFileName,
+        fileUrl,
+        category: 'Other',
+        timestamp: new Date(), // Use client-side date for immediate UI update
+      };
+
+      onAddEntry(newEntry);
+      toast({
+        title: 'Thành công!',
+        description: 'Đã ghi nhận công việc của bạn.',
+      });
+      form.reset();
+      setFileName('');
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error: any) {
+      console.error("Error submitting work log:", error);
+       let description = 'Đã có lỗi xảy ra. Vui lòng thử lại.';
+        if (error.code === 'storage/unauthorized' || error.code === 'permission-denied') {
+            description = 'Lỗi quyền truy cập. Vui lòng kiểm tra lại quy tắc bảo mật của Storage hoặc Firestore.';
         }
-    });
+      toast({
+        variant: 'destructive',
+        title: 'Ghi nhận thất bại',
+        description,
+      });
+    } finally {
+      setIsSubmitting(false);
+      setUploadProgress(null);
+    }
   }
   
   return (
@@ -167,7 +175,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                 <FormItem>
                   <FormLabel>Tên công việc *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ví dụ: Thiết kế giao diện trang chủ" {...field} />
+                    <Input placeholder="Ví dụ: Thiết kế giao diện trang chủ" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -181,7 +189,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                   <FormItem className="flex-1">
                     <FormLabel>Giờ bắt đầu *</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} />
+                      <Input type="time" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -194,7 +202,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                   <FormItem className="flex-1">
                     <FormLabel>Giờ kết thúc *</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} />
+                      <Input type="time" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -212,6 +220,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                       placeholder="Mô tả các bước đã thực hiện, kết quả đạt được..."
                       className="min-h-[120px]"
                       {...field}
+                      disabled={isSubmitting}
                     />
                   </FormControl>
                   <FormMessage />
@@ -246,11 +255,11 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                            setFileName(file?.name || '');
                         }}
                         accept="*/*"
-                        disabled={isPending}
+                        disabled={isSubmitting}
                       />
                     </div>
                   </FormControl>
-                  {fileName && !isPending && (
+                  {fileName && !isSubmitting && (
                     <p className="text-sm text-muted-foreground mt-2">
                       Tệp đã chọn: {fileName}
                     </p>
@@ -265,8 +274,8 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={isPending} className="w-full">
-              {isPending ? (
+            <Button type="submit" disabled={isSubmitting} className="w-full">
+              {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Đang xử lý...
