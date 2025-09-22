@@ -1,40 +1,48 @@
 import admin from 'firebase-admin';
-import { firebaseConfig } from '@/lib/firebase';
+import type { ServiceAccount } from 'firebase-admin';
 
+// This function initializes Firebase Admin SDK.
+// It will only be initialized once.
 const initializeFirebaseAdmin = () => {
-  if (admin.apps.length === 0) {
-    // This approach is more robust. It attempts to use environment variables first
-    // (ideal for production environments like Vercel), and falls back to a
-    // local service account file (ideal for local development).
-    
-    // Check if environment variables are configured
-    if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+  if (admin.apps.length > 0) {
+    return admin;
+  }
+
+  // First, try to use the full service account JSON from an environment variable.
+  // This is the recommended approach for Vercel, Cloud Run, etc.
+  if (process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON) {
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON) as ServiceAccount;
       admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          // Replace escaped newlines for Vercel/similar environments
-          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        }),
-        storageBucket: firebaseConfig.storageBucket,
+        credential: admin.credential.cert(serviceAccount),
+        storageBucket: serviceAccount.project_id + '.appspot.com',
       });
-    } else {
-      // Fallback to serviceAccountKey.json for local development
-      try {
-        const serviceAccount = require('@/../serviceAccountKey.json');
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          storageBucket: firebaseConfig.storageBucket,
-        });
-      } catch (error: any) {
-        console.error('Firebase Admin Initialization Error:', error);
-        throw new Error('Failed to initialize Firebase Admin. Ensure you have configured environment variables or a serviceAccountKey.json file.');
-      }
+      console.log('Firebase Admin Initialized via FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON');
+      return admin;
+    } catch (error) {
+       console.error('Error parsing FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON:', error);
+       throw new Error('Failed to initialize Firebase Admin from environment variable. Check the JSON format.');
     }
   }
-  return admin;
+  
+  // Fallback for local development: try to use the serviceAccountKey.json file.
+  try {
+    const serviceAccountKey = require('@/../serviceAccountKey.json');
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccountKey),
+      storageBucket: serviceAccountKey.project_id + '.appspot.com',
+    });
+    console.log('Firebase Admin Initialized via serviceAccountKey.json');
+    return admin;
+  } catch (error: any) {
+     if (error.code === 'MODULE_NOT_FOUND') {
+        console.error('Firebase Admin Initialization Error: `serviceAccountKey.json` not found.');
+        throw new Error('Failed to initialize Firebase Admin. Set up FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON environment variable or create a serviceAccountKey.json file.');
+     }
+     console.error('Firebase Admin Initialization Error:', error);
+     throw new Error('Failed to initialize Firebase Admin from serviceAccountKey.json.');
+  }
 };
-
 
 export const getAdminDb = () => {
     const adminInstance = initializeFirebaseAdmin();
