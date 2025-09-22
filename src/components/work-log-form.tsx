@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
 import { createWorkLogEntry } from '@/app/actions';
 
 import { Button } from '@/components/ui/button';
@@ -27,6 +29,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { ClipboardPenLine, Loader2, Upload } from 'lucide-react';
 import type { WorkLogEntry } from '@/lib/types';
+import { Progress } from '@/components/ui/progress';
+
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -35,17 +39,20 @@ const formSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
-  file: z.any().optional(),
+  file: z.instanceof(File).optional(),
 });
 
 type WorkLogFormProps = {
   onAddEntry: (entry: WorkLogEntry) => void;
+  userId: string;
 };
 
-export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
+export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const [fileName, setFileName] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -58,15 +65,51 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     startTransition(async () => {
+      let fileUrl: string | undefined = undefined;
+      let uploadedFileName: string | undefined = undefined;
+      
+      if (file) {
+        setUploadProgress(0);
+        try {
+          // Simulate progress for small files
+          let progress = 10;
+          const interval = setInterval(() => {
+             progress = Math.min(progress + 15, 90);
+             setUploadProgress(progress);
+          }, 200);
+
+          const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
+          const snapshot = await uploadBytes(storageRef, file);
+          fileUrl = await getDownloadURL(snapshot.ref);
+          uploadedFileName = file.name;
+          
+          clearInterval(interval);
+          setUploadProgress(100);
+
+        } catch (error) {
+          console.error("Upload failed", error);
+          toast({
+            variant: 'destructive',
+            title: 'Tải tệp lên thất bại',
+            description: 'Không thể tải tệp lên. Vui lòng thử lại.',
+          });
+          setUploadProgress(null);
+          return;
+        }
+      }
+
       const data = {
+        userId,
         title: values.title,
         description: values.description,
         startTime: values.startTime,
         endTime: values.endTime,
-        fileName: fileName,
+        fileName: uploadedFileName,
+        fileUrl: fileUrl,
       };
+
       const result = await createWorkLogEntry(data);
 
       if (result.success && result.newEntry) {
@@ -77,6 +120,8 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
         });
         form.reset();
         setFileName('');
+        setFile(null);
+        setUploadProgress(null);
         const fileInput = document.getElementById('file-upload') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
 
@@ -86,14 +131,18 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
           title: 'Có lỗi xảy ra',
           description: result.error || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
         });
+        setUploadProgress(null);
       }
     });
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setFileName(event.target.files[0].name);
+    const selectedFile = event.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setFileName(selectedFile.name);
     } else {
+      setFile(null);
       setFileName('');
     }
   };
@@ -193,13 +242,20 @@ export function WorkLogForm({ onAddEntry }: WorkLogFormProps) {
                         className="sr-only"
                         onChange={handleFileChange}
                         accept="*/*"
+                        disabled={isPending}
                       />
                     </div>
                   </FormControl>
-                  {fileName && (
+                  {fileName && !isPending && (
                     <p className="text-sm text-muted-foreground mt-2">
                       Tệp đã chọn: {fileName}
                     </p>
+                  )}
+                   {uploadProgress !== null && (
+                    <div className="space-y-2 mt-2">
+                        <Progress value={uploadProgress} className="w-full" />
+                        <p className="text-sm text-muted-foreground">{`Đang tải lên: ${fileName}`}</p>
+                    </div>
                   )}
                   <FormMessage />
                 </FormItem>

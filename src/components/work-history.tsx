@@ -23,16 +23,19 @@ import {
   Inbox,
   Calendar as CalendarIcon,
   Search,
-  Clock
+  Clock,
+  Download
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
+import { Skeleton } from './ui/skeleton';
 
 type WorkHistoryProps = {
   entries: WorkLogEntry[];
+  loading: boolean;
 };
 
-export function WorkHistory({ entries }: WorkHistoryProps) {
+export function WorkHistory({ entries, loading }: WorkHistoryProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
@@ -41,16 +44,39 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
       const isTitleMatch = entry.title
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
-
+      
       const entryDate = new Date(entry.timestamp);
+      // Reset time part of dates for accurate comparison
+      const fromDate = dateRange?.from ? new Date(dateRange.from.setHours(0, 0, 0, 0)) : null;
+      const toDate = dateRange?.to ? new Date(dateRange.to.setHours(23, 59, 59, 999)) : null;
+      
       const isDateMatch =
         !dateRange ||
-        ((!dateRange.from || entryDate >= dateRange.from) &&
-          (!dateRange.to || entryDate <= dateRange.to));
+        !dateRange.from ||
+        (entryDate >= fromDate! && (!toDate || entryDate <= toDate));
 
       return isTitleMatch && isDateMatch;
     });
   }, [entries, searchTerm, dateRange]);
+  
+  const HistorySkeleton = () => (
+    <div className="space-y-4">
+      {[...Array(3)].map((_, i) => (
+        <div key={i} className="flex flex-col gap-3 p-4 border rounded-lg">
+          <div className="flex justify-between items-start">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+          <div className="flex items-center gap-4">
+             <Skeleton className="h-5 w-24" />
+             <Skeleton className="h-5 w-28" />
+          </div>
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <Card className="flex flex-col h-full">
@@ -88,11 +114,11 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
                 {dateRange?.from ? (
                   dateRange.to ? (
                     <>
-                      {format(dateRange.from, 'LLL dd, y')} -{' '}
-                      {format(dateRange.to, 'LLL dd, y')}
+                      {format(dateRange.from, 'dd/MM/yyyy', { locale: vi })} -{' '}
+                      {format(dateRange.to, 'dd/MM/yyyy', { locale: vi })}
                     </>
                   ) : (
-                    format(dateRange.from, 'LLL dd, y')
+                    format(dateRange.from, 'dd/MM/yyyy', { locale: vi })
                   )
                 ) : (
                   <span>Chọn khoảng thời gian</span>
@@ -107,12 +133,14 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
                 selected={dateRange}
                 onSelect={setDateRange}
                 numberOfMonths={2}
+                locale={vi}
               />
             </PopoverContent>
           </Popover>
         </div>
         <ScrollArea className="flex-grow pr-4">
-          {filteredEntries.length > 0 ? (
+           {loading ? <HistorySkeleton /> :
+            filteredEntries.length > 0 ? (
             <div className="space-y-4">
               {filteredEntries.map((entry) => (
                 <div key={entry.id} className="flex flex-col gap-3 p-4 border rounded-lg bg-card-background/50">
@@ -135,11 +163,13 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
                      )}
                    </div>
                   <p className="text-muted-foreground text-sm">{entry.description}</p>
-                  {entry.fileName && (
-                    <div className="flex items-center gap-2 text-sm text-primary mt-1">
-                      <FileText className="h-4 w-4" />
-                      <span className="font-medium">{entry.fileName}</span>
-                    </div>
+                  {entry.fileName && entry.fileUrl && (
+                    <Button variant="outline" size="sm" asChild className="w-fit">
+                       <a href={entry.fileUrl} target="_blank" rel="noopener noreferrer">
+                         <Download className="mr-2 h-4 w-4" />
+                         {entry.fileName}
+                       </a>
+                    </Button>
                   )}
                 </div>
               ))}
@@ -149,7 +179,7 @@ export function WorkHistory({ entries }: WorkHistoryProps) {
               <Inbox className="h-12 w-12 mb-4" />
               <h3 className="font-semibold text-lg">Không có công việc nào</h3>
               <p className="text-sm">
-                Không tìm thấy công việc nào khớp với tiêu chí tìm kiếm.
+                Bạn chưa ghi nhận công việc nào hoặc không tìm thấy kết quả phù hợp.
               </p>
             </div>
           )}

@@ -1,6 +1,8 @@
 'use server';
 
 import { z } from 'zod';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
 import type { WorkLogEntry } from '@/lib/types';
 
@@ -19,7 +21,9 @@ export async function createWorkLogEntry(
     description: string; 
     startTime: string; 
     endTime: string; 
-    fileName?: string 
+    fileName?: string;
+    fileUrl?: string;
+    userId: string;
   }
 ): Promise<{ success: boolean; newEntry?: WorkLogEntry; error?: string }> {
   const validatedFields = FormSchema.safeParse(data);
@@ -35,23 +39,36 @@ export async function createWorkLogEntry(
   
   try {
     const classification = await classifyWorkLogEntry({ title, description });
+    const timestamp = new Date();
 
-    const newEntry: WorkLogEntry = {
-      id: crypto.randomUUID(),
+    const docRef = await addDoc(collection(db, 'worklogs'), {
+      userId: data.userId,
       title,
       description,
       startTime,
       endTime,
       fileName: data.fileName,
+      fileUrl: data.fileUrl,
       category: classification.category,
-      timestamp: new Date(),
-    };
+      timestamp: timestamp,
+    });
     
-    // In a real app, you would save this to a database.
+    const newEntry: WorkLogEntry = {
+      id: docRef.id,
+      userId: data.userId,
+      title,
+      description,
+      startTime,
+      endTime,
+      fileName: data.fileName,
+      fileUrl: data.fileUrl,
+      category: classification.category,
+      timestamp: timestamp,
+    };
     
     return { success: true, newEntry };
   } catch (e) {
-    console.error(e);
-    return { success: false, error: 'Đã có lỗi xảy ra từ AI. Vui lòng thử lại.' };
+    console.error("Error adding document: ", e);
+    return { success: false, error: 'Đã có lỗi xảy ra khi lưu trữ. Vui lòng thử lại.' };
   }
 }
