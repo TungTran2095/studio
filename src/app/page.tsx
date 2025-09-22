@@ -14,36 +14,43 @@ export default function Home() {
   const [entries, setEntries] = useState<WorkLogEntry[]>([]);
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        // Fetch entries after user is confirmed
+        setAuthLoading(false); // User is authenticated, stop auth loading
+        
+        // Fetch entries in the background
         setLoadingEntries(true);
-        const q = query(
-          collection(db, 'worklogs'),
-          where('userId', '==', currentUser.uid),
-          orderBy('timestamp', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        const fetchedEntries: WorkLogEntry[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          fetchedEntries.push({
-            id: doc.id,
-            ...data,
-            timestamp: data.timestamp.toDate(),
-          } as WorkLogEntry);
-        });
-        setEntries(fetchedEntries);
-        setLoadingEntries(false);
+        try {
+          const q = query(
+            collection(db, 'worklogs'),
+            where('userId', '==', currentUser.uid),
+            orderBy('timestamp', 'desc')
+          );
+          const querySnapshot = await getDocs(q);
+          const fetchedEntries: WorkLogEntry[] = [];
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            fetchedEntries.push({
+              id: doc.id,
+              ...data,
+              timestamp: data.timestamp.toDate(),
+            } as WorkLogEntry);
+          });
+          setEntries(fetchedEntries);
+        } catch (error) {
+          console.error("Error fetching work logs:", error);
+          // Optionally handle the error in the UI
+        } finally {
+          setLoadingEntries(false);
+        }
       } else {
         router.push('/login');
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -53,7 +60,8 @@ export default function Home() {
     setEntries((prevEntries) => [newEntry, ...prevEntries]);
   };
 
-  if (loading) {
+  // Show a global loader only while checking auth state
+  if (authLoading) {
     return (
       <main className="container mx-auto p-4 md:p-8">
         <div className="text-center mb-12">
@@ -72,26 +80,25 @@ export default function Home() {
     );
   }
 
-  if (!user) {
-    return null;
-  }
-
+  // If user is determined, render the main content
   return (
-    <main className="container mx-auto p-4 md:p-8">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tighter">WorkLog</h1>
-        <p className="text-muted-foreground mt-2 text-lg">
-          Ghi nhận và theo dõi tiến độ công việc của bạn một cách hiệu quả
-        </p>
-      </div>
-      <div className="grid md:grid-cols-5 gap-8">
-        <div className="md:col-span-2">
-          <WorkLogForm onAddEntry={handleAddEntry} userId={user.uid} />
+    user && (
+      <main className="container mx-auto p-4 md:p-8">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tighter">WorkLog</h1>
+          <p className="text-muted-foreground mt-2 text-lg">
+            Ghi nhận và theo dõi tiến độ công việc của bạn một cách hiệu quả
+          </p>
         </div>
-        <div className="md:col-span-3">
-          <WorkHistory entries={entries} loading={loadingEntries} />
+        <div className="grid md:grid-cols-5 gap-8">
+          <div className="md:col-span-2">
+            <WorkLogForm onAddEntry={handleAddEntry} userId={user.uid} />
+          </div>
+          <div className="md:col-span-3">
+            <WorkHistory entries={entries} loading={loadingEntries} />
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    )
   );
 }
