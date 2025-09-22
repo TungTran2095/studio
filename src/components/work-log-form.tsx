@@ -28,6 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ClipboardPenLine, Loader2 } from 'lucide-react';
 import type { WorkLogEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
+import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -62,13 +63,15 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
     
     startTransition(async () => {
       try {
+        const { category } = await classifyWorkLogEntry({ title, description });
+
         const docData = {
           userId,
           title,
           description,
           startTime,
           endTime,
-          category: 'Other', // You can modify this later
+          category: category || 'Other',
           timestamp: serverTimestamp(),
         };
 
@@ -81,8 +84,8 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
           description,
           startTime,
           endTime,
-          category: 'Other',
-          timestamp: new Date(), // Use client-side date for immediate UI update
+          category: category || 'Other',
+          timestamp: new Date(),
         };
         
         onAddEntry(newEntry);
@@ -114,7 +117,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
           Báo cáo công việc
         </CardTitle>
         <CardDescription>
-          Điền thông tin chi tiết về công việc bạn đã hoàn thành.
+          Điền thông tin chi tiết về công việc bạn đã hoàn thành. AI sẽ tự động phân loại giúp bạn.
         </CardDescription>
       </CardHeader>
       <CardContent>
