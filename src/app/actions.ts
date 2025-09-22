@@ -15,7 +15,7 @@ const ActionInputSchema = z.object({
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ.'),
   fileName: z.string().optional(),
-  fileUrl: z.string().url('URL tệp không hợp lệ.').optional(),
+  fileUrl: z.string().url('URL tệp không hợp lệ.').or(z.literal('')).optional(),
 });
 
 export async function createWorkLogEntry(
@@ -36,9 +36,8 @@ export async function createWorkLogEntry(
   try {
     const timestamp = new Date();
 
-    // Call AI classification - this can be re-enabled later
-    // const classification = await classifyWorkLogEntry({ title, description });
-    const category = "Other"; // Default category
+    // AI classification is currently disabled for stability.
+    const category = "Other"; 
 
     const docRef = await addDoc(collection(db, 'worklogs'), {
       userId,
@@ -68,7 +67,6 @@ export async function createWorkLogEntry(
     return { success: true, newEntry };
   } catch (e: any) {
     console.error("Error adding document: ", e);
-    // More specific error for security rules
     if (e.code === 'permission-denied') {
        return { success: false, error: 'Lỗi quyền truy cập. Vui lòng kiểm tra lại quy tắc bảo mật của Firestore.' };
     }
