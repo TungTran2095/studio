@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -26,20 +28,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { ClipboardPenLine, Loader2, Upload } from 'lucide-react';
 import type { WorkLogEntry } from '@/lib/types';
-import { createWorkLogEntry } from '@/app/actions';
-import { Progress } from './ui/progress';
+import { db, storage } from '@/lib/firebase';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-// Helper to convert file to base64
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-  });
-};
 
 const formSchema = z.object({
   title: z.string().min(1, 'Tên công việc không được để trống.'),
@@ -71,49 +62,73 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    const { file, ...otherValues } = values;
+    const { file, title, description, startTime, endTime } = values;
     
     startTransition(async () => {
       try {
-        let fileData: { content: string; name: string; type: string } | undefined;
+        let fileUrl = '';
+        let uploadedFileName = '';
 
         if (file) {
-          const base64String = await fileToBase64(file);
-          fileData = {
-            content: base64String,
-            name: file.name,
-            type: file.type,
-          };
+          const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
+          const uploadResult = await uploadBytes(storageRef, file);
+          fileUrl = await getDownloadURL(uploadResult.ref);
+          uploadedFileName = file.name;
         }
 
-        const result = await createWorkLogEntry({
-          ...otherValues,
+        const docData = {
           userId,
-          fileData,
-        });
+          title,
+          description,
+          startTime,
+          endTime,
+          fileName: uploadedFileName,
+          fileUrl,
+          category: 'Other', // You can modify this later
+          timestamp: serverTimestamp(),
+        };
 
-        if (result.error) {
-          throw new Error(result.error);
-        }
+        const docRef = await addDoc(collection(db, 'worklogs'), docData);
+
+        const newEntry: WorkLogEntry = {
+          id: docRef.id,
+          userId,
+          title,
+          description,
+          startTime,
+          endTime,
+          fileName: uploadedFileName,
+          fileUrl,
+          category: 'Other',
+          timestamp: new Date(), // Use client-side date for immediate UI update
+        };
         
-        if (result.newEntry) {
-          onAddEntry(result.newEntry);
-          toast({
-            title: 'Thành công!',
-            description: 'Đã ghi nhận công việc của bạn.',
-          });
-          form.reset();
-          setFileName('');
-          const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-          if (fileInput) fileInput.value = '';
-        }
+        onAddEntry(newEntry);
+        toast({
+          title: 'Thành công!',
+          description: 'Đã ghi nhận công việc của bạn.',
+        });
+        form.reset();
+        setFileName('');
+        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
 
       } catch (error: any) {
         console.error("Error submitting work log:", error);
+        
+        let errorMessage = 'Không thể ghi nhận công việc. Vui lòng thử lại.';
+        if (error.code === 'storage/unauthorized') {
+            errorMessage = 'Lỗi phân quyền: Bạn không có quyền tải tệp lên. Vui lòng kiểm tra lại quy tắc bảo mật của Storage.';
+        } else if (error.code === 'storage/object-not-found') {
+             errorMessage = 'Lỗi: Không tìm thấy bucket lưu trữ. Vui lòng kiểm tra lại cấu hình Firebase.';
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+
         toast({
           variant: 'destructive',
           title: 'Đã có lỗi xảy ra',
-          description: error.message || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
+          description: errorMessage,
         });
       }
     });
