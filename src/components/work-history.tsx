@@ -160,7 +160,7 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                          <span>{entry.startTime} - {entry.endTime}</span>
                        </div>
                      )}
-                     {entry.fileUrl && (
+                     {entry.fileUrl && entry.fileName && (
                         <a 
                           href={entry.fileUrl} 
                           target="_blank" 

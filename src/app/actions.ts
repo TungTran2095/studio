@@ -2,6 +2,7 @@
 import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
 import type { WorkLogEntry } from '@/lib/types';
 import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
+import { Timestamp } from 'firebase-admin/firestore';
 
 export async function submitWorkLog(formData: FormData) {
   const adminDb = getAdminDb();
@@ -53,14 +54,14 @@ export async function submitWorkLog(formData: FormData) {
     const category = classificationResult.category || 'Other';
 
 
-    const docData: Omit<WorkLogEntry, 'id' | 'timestamp'> & { timestamp: any } = {
+    const docData = {
       userId,
       title,
       description,
       startTime,
       endTime,
       category,
-      timestamp: new Date(),
+      timestamp: Timestamp.now(),
       ...(fileUrl && { fileUrl }),
       ...(fileName && { fileName }),
     };
@@ -70,7 +71,7 @@ export async function submitWorkLog(formData: FormData) {
     const newEntry: WorkLogEntry = {
       id: docRef.id,
       ...docData,
-      timestamp: docData.timestamp,
+      timestamp: docData.timestamp.toDate(), // Convert Firestore Timestamp to JS Date
     };
     
     return { newEntry };
@@ -78,9 +79,7 @@ export async function submitWorkLog(formData: FormData) {
   } catch (error: any) {
     console.error('Server Action Error:', error);
     // Return a more specific error message if available
-    const errorMessage = error.message?.includes('The specified bucket does not exist')
-      ? 'Firebase Storage error: The bucket does not seem to exist or is not accessible. Details: ' + error.message
-      : error.message || 'Lỗi không xác định từ server.';
+    const errorMessage = error.message || 'Lỗi không xác định từ server.';
     return { error: errorMessage };
   }
 }

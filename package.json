@@ -41,6 +41,7 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "firebase": "^11.9.1",
+    "firebase-admin": "^12.3.0",
     "genkit": "^1.14.1",
     "lucide-react": "^0.475.0",
     "next": "15.3.3",
@@ -60,7 +61,6 @@
     "@types/react-dom": "^18",
     "dotenv": "^16.4.5",
     "genkit-cli": "^1.14.1",
-
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
