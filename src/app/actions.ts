@@ -23,6 +23,7 @@ export async function createWorkLogEntry(
   const validatedFields = ActionInputSchema.safeParse(data);
 
   if (!validatedFields.success) {
+    // Log lỗi xác thực chi tiết ở phía server
     console.error("Validation failed:", validatedFields.error.flatten().fieldErrors);
     return {
       success: false,
@@ -33,10 +34,10 @@ export async function createWorkLogEntry(
   const { title, description, startTime, endTime, fileName, fileUrl, userId } = validatedFields.data;
   
   try {
-    const timestamp = new Date(); // Use a normal Date for the return object
-    const category = "Other"; 
+    const category = "Other"; // Tạm thời gán mặc định
 
-    const docRef = await addDoc(collection(db, 'worklogs'), {
+    // Dữ liệu để ghi vào Firestore
+    const docData = {
       userId,
       title,
       description,
@@ -45,9 +46,12 @@ export async function createWorkLogEntry(
       fileName: fileName || '',
       fileUrl: fileUrl || '',
       category,
-      timestamp: serverTimestamp(), // Use serverTimestamp() for writing to Firestore
-    });
+      timestamp: serverTimestamp(), // Sử dụng serverTimestamp để ghi vào DB
+    };
     
+    const docRef = await addDoc(collection(db, 'worklogs'), docData);
+    
+    // Dữ liệu để trả về client (sử dụng new Date() thay vì serverTimestamp)
     const newEntry: WorkLogEntry = {
       id: docRef.id,
       userId,
@@ -55,18 +59,21 @@ export async function createWorkLogEntry(
       description,
       startTime,
       endTime,
-      fileName,
-      fileUrl,
+      fileName: fileName || '',
+      fileUrl: fileUrl || '',
       category,
-      timestamp, // Return the client-side generated timestamp
+      timestamp: new Date(), // Sử dụng timestamp client-side/server-side cho đối tượng trả về
     };
     
     return { success: true, newEntry };
   } catch (e: any) {
-    console.error("Error adding document: ", e);
+    // **LOG LỖI CHI TIẾT TRÊN SERVER**
+    console.error("Error adding document to Firestore: ", e);
+    
+    // Trả về thông báo lỗi cụ thể hơn
     if (e.code === 'permission-denied') {
        return { success: false, error: 'Lỗi quyền truy cập. Vui lòng kiểm tra lại quy tắc bảo mật của Firestore.' };
     }
-    return { success: false, error: 'Đã có lỗi xảy ra phía server.' };
+    return { success: false, error: `Đã có lỗi xảy ra phía server: ${e.message}` };
   }
 }
