@@ -57,8 +57,6 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
     },
   });
 
-  const fileRef = form.register('attachment');
-
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const formData = new FormData();
     formData.append('userId', userId);
@@ -180,7 +178,11 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                 <FormItem>
                   <FormLabel>Tệp đính kèm</FormLabel>
                   <FormControl>
-                    <Input type="file" {...fileRef} disabled={isPending} />
+                    <Input 
+                      type="file" 
+                      disabled={isPending}
+                      onChange={(e) => field.onChange(e.target.files ? e.target.files[0] : null)}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
