@@ -25,7 +25,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ClipboardPenLine, Loader2 } from 'lucide-react';
 import type { WorkLogEntry } from '@/lib/types';
-import { submitWorkLog } from '@/app/actions';
+import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
+import { db, storage } from '@/lib/firebase';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -58,34 +61,79 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    const formData = new FormData();
-    formData.append('userId', userId);
-    formData.append('title', values.title);
-    formData.append('description', values.description);
-    formData.append('startTime', values.startTime);
-    formData.append('endTime', values.endTime);
-    if (values.attachment && values.attachment.size > 0) {
-      formData.append('attachment', values.attachment);
-    }
-
     startTransition(async () => {
       try {
-        const result = await submitWorkLog(formData);
+        const { title, description, startTime, endTime, attachment } = values;
 
-        if (result.error) {
-          throw new Error(result.error);
+        // Call AI to classify the entry in parallel
+        const classificationPromise = classifyWorkLogEntry({ title, description });
+
+        let fileUrl: string | undefined;
+        let fileName: string | undefined;
+
+        // Handle file upload if an attachment is provided
+        if (attachment && attachment.size > 0) {
+          const storageRef = ref(storage, `attachments/${userId}/${Date.now()}_${attachment.name}`);
+          const uploadTask = uploadBytesResumable(storageRef, attachment);
+
+          await new Promise<void>((resolve, reject) => {
+            uploadTask.on(
+              'state_changed',
+              (snapshot) => {
+                // Optional: handle progress
+              },
+              (error) => {
+                console.error("Upload failed:", error);
+                reject(new Error('Không thể tải tệp lên. Vui lòng kiểm tra lại cấu hình CORS của Firebase Storage.'));
+              },
+              async () => {
+                try {
+                  const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                  fileUrl = downloadURL;
+                  fileName = attachment.name;
+                  resolve();
+                } catch (error) {
+                   reject(new Error('Không thể lấy URL của tệp đã tải lên.'));
+                }
+              }
+            );
+          });
         }
         
-        if (result.newEntry) {
-          onAddEntry(result.newEntry);
-          toast({
-            title: 'Thành công!',
-            description: 'Đã ghi nhận công việc của bạn.',
-          });
-          form.reset();
-        } else {
-           throw new Error('Không nhận được thông tin công việc đã tạo.');
-        }
+        // Wait for AI classification result
+        const classificationResult = await classificationPromise;
+        const category = classificationResult.category || 'Other';
+
+
+        const docData = {
+          userId,
+          title,
+          description,
+          startTime,
+          endTime,
+          category,
+          timestamp: serverTimestamp(),
+          ...(fileUrl && { fileUrl }),
+          ...(fileName && { fileName }),
+        };
+
+        const docRef = await addDoc(collection(db, 'worklogs'), docData);
+
+        const newEntry: WorkLogEntry = {
+          id: docRef.id,
+          ...values,
+          category: category,
+          timestamp: new Date(), // Use client-side date for immediate UI update
+          fileUrl,
+          fileName,
+        };
+        
+        onAddEntry(newEntry);
+        toast({
+          title: 'Thành công!',
+          description: 'Đã ghi nhận công việc của bạn.',
+        });
+        form.reset();
 
       } catch (error: any) {
         console.error("Error submitting work log:", error);
@@ -174,14 +222,18 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
              <FormField
               control={form.control}
               name="attachment"
-              render={({ field }) => (
+              render={({ field: { onChange, value, ...rest } }) => (
                 <FormItem>
                   <FormLabel>Tệp đính kèm</FormLabel>
                   <FormControl>
                     <Input 
                       type="file" 
                       disabled={isPending}
-                      onChange={(e) => field.onChange(e.target.files ? e.target.files[0] : null)}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        onChange(file);
+                      }}
+                      {...rest}
                     />
                   </FormControl>
                   <FormMessage />
