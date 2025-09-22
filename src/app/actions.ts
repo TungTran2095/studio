@@ -2,7 +2,6 @@
 import 'dotenv/config';
 
 import { z } from 'zod';
-import { v4 as uuidv4 } from 'uuid';
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import type { WorkLogEntry } from '@/lib/types';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -43,18 +42,19 @@ export async function createWorkLogEntry(input: ActionInput): Promise<{
       const filePath = `uploads/${userId}/${Date.now()}_${name}`;
       const file = adminStorage.bucket().file(filePath);
 
-      const token = uuidv4();
-
       await file.save(fileBuffer, {
         metadata: {
           contentType: type,
-           metadata: {
-             firebaseStorageDownloadTokens: token
-           }
         },
       });
+
+      // Use getSignedUrl for a robust public URL
+      const [url] = await file.getSignedUrl({
+        action: 'read',
+        expires: '01-01-2500', // A very distant future date
+      });
       
-      fileUrl = `https://firebasestorage.googleapis.com/v0/b/${adminStorage.bucket().name}/o/${encodeURIComponent(filePath)}?alt=media&token=${token}`;
+      fileUrl = url;
       uploadedFileName = name;
     }
 
@@ -82,10 +82,8 @@ export async function createWorkLogEntry(input: ActionInput): Promise<{
 
   } catch (error: any) {
     console.error('Server Action Error:', error);
-    // Return a more structured or specific error message
     const errorMessage = error.message || 'An unknown server error occurred.';
-    // Check for specific Firebase Storage error messages
-    if (errorMessage.includes('storage/object-not-found') || errorMessage.includes('does not exist')) {
+    if (errorMessage.includes('storage/object-not-found') || errorMessage.includes('does not exist') || errorMessage.includes('404')) {
         return { error: `Firebase Storage error: The bucket does not seem to exist or is not accessible. Details: ${errorMessage}` };
     }
     return { error: errorMessage };
