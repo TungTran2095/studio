@@ -40,7 +40,7 @@ const formSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
-  file: z.instanceof(File, { message: 'Tệp đính kèm là bắt buộc.' }),
+  file: z.instanceof(File).optional(),
 });
 
 type WorkLogFormProps = {
@@ -64,74 +64,85 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
       file: undefined,
     },
   });
+  
+  const handleServerAction = async (data: {
+    userId: string;
+    title: string;
+    description: string;
+    startTime: string;
+    endTime: string;
+    fileName?: string;
+    fileUrl?: string;
+  }) => {
+     try {
+        const result = await createWorkLogEntry(data);
+        if (result.success && result.newEntry) {
+          onAddEntry(result.newEntry);
+          toast({
+            title: 'Thành công!',
+            description: 'Đã ghi nhận công việc của bạn.',
+          });
+          form.reset();
+          setFileName('');
+          const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+          if (fileInput) fileInput.value = '';
+        } else {
+          throw new Error(result.error || 'Không thể ghi nhận công việc.');
+        }
+     } catch(e: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Có lỗi xảy ra',
+            description: e.message || 'Không thể kết nối đến server.',
+        });
+     } finally {
+        setUploadProgress(null);
+     }
+  }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     startTransition(() => {
-      setUploadProgress(0);
-      const file = values.file;
-      const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+        const file = values.file;
+        const commonData = {
+            userId,
+            title: values.title,
+            description: values.description,
+            startTime: values.startTime,
+            endTime: values.endTime,
+        };
 
-      uploadTask.on('state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-        },
-        (error) => {
-          console.error("Upload failed", error);
-          toast({
-            variant: 'destructive',
-            title: 'Tải tệp lên thất bại',
-            description: 'Không thể tải tệp lên. Vui lòng kiểm tra lại quy tắc bảo mật Storage.',
-          });
-          setUploadProgress(null);
-        },
-        async () => {
-          // Upload completed successfully, now get the download URL
-          try {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            
-            // Now call the server action with all the data
-            const result = await createWorkLogEntry({
-              userId,
-              title: values.title,
-              description: values.description,
-              startTime: values.startTime,
-              endTime: values.endTime,
-              fileName: file.name,
-              fileUrl: downloadURL,
-            });
+        if (file) {
+            setUploadProgress(0);
+            const storageRef = ref(storage, `uploads/${userId}/${Date.now()}_${file.name}`);
+            const uploadTask = uploadBytesResumable(storageRef, file);
 
-            if (result.success && result.newEntry) {
-              onAddEntry(result.newEntry);
-              toast({
-                title: 'Thành công!',
-                description: 'Đã ghi nhận công việc của bạn.',
-              });
-              form.reset();
-              setFileName('');
-              // Reset the file input visually
-              const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-              if (fileInput) fileInput.value = '';
-            } else {
-              toast({
-                variant: 'destructive',
-                title: 'Có lỗi xảy ra',
-                description: result.error || 'Không thể ghi nhận công việc. Vui lòng thử lại.',
-              });
-            }
-          } catch (e) {
-             console.error("Error creating worklog:", e)
-             toast({
-                variant: 'destructive',
-                title: 'Lỗi ghi dữ liệu',
-                description: 'Không thể lưu vào Firestore. Vui lòng kiểm tra lại quy tắc bảo mật.',
-            });
-          } finally {
-            setUploadProgress(null);
-          }
+            uploadTask.on('state_changed',
+                (snapshot) => {
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    setUploadProgress(progress);
+                },
+                (error) => {
+                    console.error("Upload failed", error);
+                    toast({
+                        variant: 'destructive',
+                        title: 'Tải tệp lên thất bại',
+                        description: error.message,
+                    });
+                    setUploadProgress(null);
+                },
+                async () => {
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    await handleServerAction({
+                        ...commonData,
+                        fileName: file.name,
+                        fileUrl: downloadURL,
+                    });
+                }
+            );
+        } else {
+            // No file attached, just submit the rest of the data
+            handleServerAction(commonData);
         }
-      );
     });
   }
   
@@ -212,7 +223,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
               name="file"
               render={({ field: { onChange, value, ...field } }) => (
                 <FormItem>
-                  <FormLabel>Tệp đính kèm *</FormLabel>
+                  <FormLabel>Tệp đính kèm</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Button type="button" variant="outline" asChild>
@@ -231,10 +242,8 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                         className="sr-only"
                         onChange={(event) => {
                            const file = event.target.files?.[0];
-                           if(file) {
-                             onChange(file);
-                             setFileName(file.name);
-                           }
+                           onChange(file);
+                           setFileName(file?.name || '');
                         }}
                         accept="*/*"
                         disabled={isPending}
