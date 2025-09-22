@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
+// import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
 import type { WorkLogEntry } from '@/lib/types';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -36,7 +36,8 @@ export async function createWorkLogEntry(
   const { title, description, startTime, endTime, fileName, fileUrl, userId } = validatedFields.data;
   
   try {
-    const classification = await classifyWorkLogEntry({ title, description });
+    // const classification = await classifyWorkLogEntry({ title, description });
+    const category = "Other"; // Default category
     const timestamp = new Date();
 
     const docRef = await addDoc(collection(db, 'worklogs'), {
@@ -47,7 +48,7 @@ export async function createWorkLogEntry(
       endTime,
       fileName: fileName,
       fileUrl: fileUrl,
-      category: classification.category,
+      category: category,
       timestamp: timestamp,
     });
     
@@ -60,7 +61,7 @@ export async function createWorkLogEntry(
       endTime,
       fileName: fileName,
       fileUrl: fileUrl,
-      category: classification.category,
+      category: category,
       timestamp: timestamp,
     };
     
