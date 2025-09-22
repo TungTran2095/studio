@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -29,24 +28,45 @@ export default function LoginPage() {
   const handleAuth = async (e: React.FormEvent, authType: 'login' | 'signup') => {
     e.preventDefault();
     setLoading(true);
-    try {
-      if (authType === 'login') {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-      }
-      // The auth state change will be handled by the listener in the Home page,
-      // which will then redirect.
-       router.push('/');
-    } catch (error: any) {
-      toast({
+    
+    let error;
+    if (authType === 'login') {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      error = signInError;
+    } else {
+      const { error: signUpError } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          // You might want to add more data here
+          data: {
+            full_name: 'Demo User',
+          }
+        }
+      });
+      error = signUpError;
+    }
+
+    if (error) {
+       toast({
         variant: 'destructive',
         title: 'Lỗi xác thực',
         description: error.message,
       });
-    } finally {
-      setLoading(false);
+    } else {
+       // On successful signup, Supabase sends a confirmation email.
+       // For login, or if email confirmation is disabled, we redirect.
+       if (authType === 'signup') {
+         toast({
+          title: 'Đăng ký thành công!',
+          description: 'Vui lòng kiểm tra email để xác thực tài khoản.',
+        });
+       }
+       // The auth state change listener on the main page will handle the redirect.
+       router.push('/');
     }
+    
+    setLoading(false);
   };
 
   return (

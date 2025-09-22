@@ -79,7 +79,6 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
           description: result.error,
         });
       } else if (result.newEntry) {
-         // Re-create the timestamp from the server's data if needed
         const entryWithDate: WorkLogEntry = {
           ...result.newEntry,
           timestamp: new Date(result.newEntry.timestamp),
@@ -170,14 +169,18 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
              <FormField
               control={form.control}
               name="attachment"
-              render={({ field }) => (
+              render={({ field: { onChange, value, ...rest } }) => (
                 <FormItem>
                   <FormLabel>Tệp đính kèm</FormLabel>
                   <FormControl>
                     <Input 
                       type="file" 
                       disabled={isPending}
-                      onChange={(e) => field.onChange(e.target.files ? e.target.files[0] : undefined)}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        onChange(file);
+                      }}
+                      {...rest}
                     />
                   </FormControl>
                   <FormMessage />

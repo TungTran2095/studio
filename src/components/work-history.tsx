@@ -45,7 +45,6 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
         .includes(searchTerm.toLowerCase());
       
       const entryDate = new Date(entry.timestamp);
-      // Reset time part of dates for accurate comparison
       const fromDate = dateRange?.from ? new Date(dateRange.from.setHours(0, 0, 0, 0)) : null;
       const toDate = dateRange?.to ? new Date(dateRange.to.setHours(23, 59, 59, 999)) : null;
       
@@ -146,7 +145,7 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                   <div className="flex justify-between items-start gap-4">
                     <h3 className="font-semibold text-base">{entry.title}</h3>
                     <span className="text-xs text-muted-foreground whitespace-nowrap pt-1">
-                      {formatDistanceToNow(entry.timestamp, {
+                      {formatDistanceToNow(new Date(entry.timestamp), {
                         addSuffix: true,
                         locale: vi,
                       })}
@@ -154,21 +153,21 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                   </div>
                    <div className="flex items-center flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
                     <Badge variant="secondary">{entry.category}</Badge>
-                     {entry.startTime && entry.endTime && (
+                     {entry.start_time && entry.end_time && (
                        <div className="flex items-center gap-1">
                          <Clock className="h-3 w-3" />
-                         <span>{entry.startTime} - {entry.endTime}</span>
+                         <span>{entry.start_time} - {entry.end_time}</span>
                        </div>
                      )}
-                     {entry.fileUrl && entry.fileName && (
+                     {entry.file_url && entry.file_name && (
                         <a 
-                          href={entry.fileUrl} 
+                          href={entry.file_url} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-primary hover:underline"
                         >
                           <Paperclip className="h-3 w-3" />
-                          <span>{entry.fileName}</span>
+                          <span>{entry.file_name}</span>
                         </a>
                      )}
                    </div>

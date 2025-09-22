@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import type { WorkLogEntry } from '@/lib/types';
 import { WorkLogForm } from '@/components/work-log-form';
 import { WorkHistory } from '@/components/work-history';
@@ -18,49 +17,67 @@ export default function Home() {
   const [loadingEntries, setLoadingEntries] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        setAuthLoading(false); // User is authenticated, stop auth loading
-        
-        // Fetch entries in the background
-        setLoadingEntries(true);
-        try {
-          const q = query(
-            collection(db, 'worklogs'),
-            where('userId', '==', currentUser.uid),
-            orderBy('timestamp', 'desc')
-          );
-          const querySnapshot = await getDocs(q);
-          const fetchedEntries: WorkLogEntry[] = [];
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            fetchedEntries.push({
-              id: doc.id,
-              ...data,
-              timestamp: data.timestamp.toDate(),
-            } as WorkLogEntry);
-          });
-          setEntries(fetchedEntries);
-        } catch (error) {
-          console.error("Error fetching work logs:", error);
-          // Optionally handle the error in the UI
-        } finally {
-          setLoadingEntries(false);
-        }
+    // Check initial auth state
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser(session.user);
+        await fetchEntries(session.user.id);
       } else {
         router.push('/login');
       }
-    });
+      setAuthLoading(false);
+    };
 
-    return () => unsubscribe();
+    checkUser();
+
+    // Listen for auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (currentUser) {
+          fetchEntries(currentUser.id);
+        } else {
+          router.push('/login');
+        }
+      }
+    );
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [router]);
+
+  async function fetchEntries(userId: string) {
+    setLoadingEntries(true);
+    try {
+      const { data: worklogs, error } = await supabase
+        .from('worklogs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+      
+      const fetchedEntries: WorkLogEntry[] = worklogs.map(log => ({
+        ...log,
+        timestamp: new Date(log.timestamp),
+      })) as WorkLogEntry[];
+      
+      setEntries(fetchedEntries);
+    } catch (error) {
+      console.error("Error fetching work logs:", error);
+    } finally {
+      setLoadingEntries(false);
+    }
+  }
+
 
   const handleAddEntry = (newEntry: WorkLogEntry) => {
     setEntries((prevEntries) => [newEntry, ...prevEntries]);
   };
 
-  // Show a global loader only while checking auth state
   if (authLoading) {
     return (
       <main className="container mx-auto p-4 md:p-8">
@@ -80,7 +97,6 @@ export default function Home() {
     );
   }
 
-  // If user is determined, render the main content
   return (
     user && (
       <main className="container mx-auto p-4 md:p-8">
@@ -92,7 +108,7 @@ export default function Home() {
         </div>
         <div className="grid md:grid-cols-5 gap-8">
           <div className="md:col-span-2">
-            <WorkLogForm onAddEntry={handleAddEntry} userId={user.uid} />
+            <WorkLogForm onAddEntry={handleAddEntry} userId={user.id} />
           </div>
           <div className="md:col-span-3">
             <WorkHistory entries={entries} loading={loadingEntries} />

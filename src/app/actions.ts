@@ -1,13 +1,17 @@
 'use server';
-import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
+
+import { createClient } from '@supabase/supabase-js';
 import type { WorkLogEntry } from '@/lib/types';
 import { classifyWorkLogEntry } from '@/ai/flows/classify-work-log-entry';
-import { Timestamp } from 'firebase-admin/firestore';
+
+// IMPORTANT: Use environment variables for Supabase credentials in a real app
+// These should be the SERVICE_ROLE_KEY and URL for server-side operations
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 export async function submitWorkLog(formData: FormData) {
-  const adminDb = getAdminDb();
-  const adminStorage = getAdminStorage();
-
   try {
     const title = formData.get('title') as string;
     const description = formData.get('description') as string;
@@ -19,7 +23,7 @@ export async function submitWorkLog(formData: FormData) {
     if (!title || !description || !userId || !startTime || !endTime) {
       throw new Error('Thông tin không đầy đủ.');
     }
-    
+
     // Call AI to classify the entry in parallel
     const classificationPromise = classifyWorkLogEntry({ title, description });
 
@@ -27,59 +31,58 @@ export async function submitWorkLog(formData: FormData) {
     let fileName: string | undefined;
 
     if (attachment && attachment.size > 0) {
-      const bucket = adminStorage.bucket();
-      const filePath = `attachments/${userId}/${Date.now()}_${attachment.name}`;
-      const fileBuffer = Buffer.from(await attachment.arrayBuffer());
-
-      const file = bucket.file(filePath);
+      const filePath = `public/${userId}/${Date.now()}_${attachment.name}`;
       
-      await file.save(fileBuffer, {
-        metadata: {
-          contentType: attachment.type,
-        },
-      });
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+        .from('attachments') // Make sure you have a bucket named 'attachments'
+        .upload(filePath, attachment);
 
-      // Use getSignedUrl to generate a long-lived public URL
-      const [url] = await file.getSignedUrl({
-        action: 'read',
-        expires: '03-09-2491', // A very long-lived URL
-      });
+      if (uploadError) {
+        throw new Error(`Lỗi tải tệp lên: ${uploadError.message}`);
+      }
       
-      fileUrl = url;
+      const { data: urlData } = supabaseAdmin.storage
+        .from('attachments')
+        .getPublicUrl(filePath);
+
+      fileUrl = urlData.publicUrl;
       fileName = attachment.name;
     }
-    
+
     // Wait for AI classification result
     const classificationResult = await classificationPromise;
     const category = classificationResult.category || 'Other';
 
-
     const docData = {
-      userId,
+      user_id: userId,
       title,
       description,
-      startTime,
-      endTime,
+      start_time: startTime,
+      end_time: endTime,
       category,
-      timestamp: Timestamp.now(),
-      ...(fileUrl && { fileUrl }),
-      ...(fileName && { fileName }),
-    };
-
-    const docRef = await adminDb.collection('worklogs').add(docData);
-
-    const newEntry: WorkLogEntry = {
-      id: docRef.id,
-      ...docData,
-      timestamp: docData.timestamp.toDate(), // Convert Firestore Timestamp to JS Date
+      ...(fileUrl && { file_url: fileUrl }),
+      ...(fileName && { file_name: fileName }),
     };
     
+    const { data: newEntryData, error: insertError } = await supabaseAdmin
+      .from('worklogs') // Make sure you have a table named 'worklogs'
+      .insert(docData)
+      .select()
+      .single();
+
+    if (insertError) {
+      throw new Error(`Lỗi ghi vào CSDL: ${insertError.message}`);
+    }
+
+    const newEntry: WorkLogEntry = {
+      ...newEntryData,
+      timestamp: new Date(newEntryData.timestamp), // Convert string to Date
+    } as WorkLogEntry;
+
     return { newEntry };
 
   } catch (error: any) {
     console.error('Server Action Error:', error);
-    // Return a more specific error message if available
-    const errorMessage = error.message || 'Lỗi không xác định từ server.';
-    return { error: errorMessage };
+    return { error: error.message || 'Lỗi không xác định từ server.' };
   }
 }
