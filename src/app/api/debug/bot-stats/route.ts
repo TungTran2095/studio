@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       summary: {
         totalBots: bots?.length || 0,
         totalTrades: trades?.length || 0,
-        botsWithTrades: trades ? new Set(trades.map(t => t.bot_id)).size : 0
+        botsWithTrades: trades ? new Set(trades.map((t: { bot_id: string }) => t.bot_id)).size : 0
       }
     });
 
