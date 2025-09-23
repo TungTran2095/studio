@@ -34,10 +34,12 @@ export async function submitWorkLog(formData: FormData) {
       const filePath = `public/${userId}/${Date.now()}_${attachment.name}`;
       
       const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-        .from('attachments') // Make sure you have a bucket named 'attachments'
+        .from('attachments')
         .upload(filePath, attachment);
 
       if (uploadError) {
+        // Log the detailed error on the server
+        console.error('Supabase upload error:', uploadError);
         throw new Error(`Lỗi tải tệp lên: ${uploadError.message}`);
       }
       
@@ -65,12 +67,14 @@ export async function submitWorkLog(formData: FormData) {
     };
     
     const { data: newEntryData, error: insertError } = await supabaseAdmin
-      .from('worklogs') // Make sure you have a table named 'worklogs'
+      .from('worklogs')
       .insert(docData)
       .select()
       .single();
 
     if (insertError) {
+      // Log the detailed error on the server
+      console.error('Supabase insert error:', insertError);
       throw new Error(`Lỗi ghi vào CSDL: ${insertError.message}`);
     }
 
