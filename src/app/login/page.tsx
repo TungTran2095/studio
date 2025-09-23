@@ -31,7 +31,7 @@ import {
 
 const formSchema = z.object({
   email: z.string().email('Email không hợp lệ.'),
-  password: z.string().min(1, 'Mật khẩu không được để trống.'),
+  password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự.'),
 });
 
 export default function LoginPage() {
@@ -43,18 +43,19 @@ export default function LoginPage() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: 'demo@example.com',
-      password: 'password',
+      email: '',
+      password: '',
     },
   });
 
   const handleAuth = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
+    const { email, password } = values;
 
     if (activeTab === 'signup') {
       const { data, error } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
+        email,
+        password,
       });
 
       if (error) {
@@ -64,18 +65,25 @@ export default function LoginPage() {
           description: error.message,
         });
       } else if (data.user) {
-        toast({
-          title: 'Đăng ký thành công!',
-          description:
-            'Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.',
-        });
-        // Stay on the page, prompt user to check email
+         if (data.user.identities && data.user.identities.length === 0) {
+            toast({
+              variant: 'destructive',
+              title: 'Lỗi đăng ký',
+              description: 'Người dùng này đã tồn tại.',
+            });
+         } else {
+            toast({
+              title: 'Đăng ký thành công!',
+              description:
+                'Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.',
+            });
+         }
       }
     } else {
       // Login
       const { error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
+        email,
+        password,
       });
 
       if (error) {
@@ -86,7 +94,7 @@ export default function LoginPage() {
         });
       } else {
         router.push('/');
-        router.refresh(); // Ensure the layout re-renders with the new auth state
+        router.refresh(); 
       }
     }
 
