@@ -14,8 +14,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { LogIn, Loader2 } from 'lucide-react';
+import { LogIn, Loader2, AlertCircle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 export default function LoginPage() {
@@ -88,6 +89,13 @@ export default function LoginPage() {
           </CardHeader>
           <TabsContent value="login">
             <CardContent>
+               <Alert variant="destructive" className="mb-4 bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle className="font-semibold">Lưu ý quan trọng</AlertTitle>
+                <AlertDescription>
+                  Nếu bạn là người dùng mới, vui lòng xác thực tài khoản qua email đã đăng ký trước khi đăng nhập.
+                </AlertDescription>
+              </Alert>
               <form onSubmit={(e) => handleAuth(e, 'login')} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email-login">Email</Label>
