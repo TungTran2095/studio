@@ -118,7 +118,7 @@ export default function LoginPage() {
           </CardHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleAuth)} className="space-y-4">
-              <TabsContent value="login" forceMount>
+              <TabsContent value="login">
                 <CardContent className="space-y-4">
                    <Alert variant="destructive" className="bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400">
                     <AlertCircle className="h-4 w-4" />
@@ -162,7 +162,7 @@ export default function LoginPage() {
                   />
                 </CardContent>
               </TabsContent>
-              <TabsContent value="signup" forceMount>
+              <TabsContent value="signup">
                 <CardContent className="space-y-4">
                    <FormField
                     control={form.control}
