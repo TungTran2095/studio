@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,66 +20,92 @@ import { useToast } from '@/hooks/use-toast';
 import { LogIn, Loader2, AlertCircle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 
+const formSchema = z.object({
+  email: z.string().email('Email không hợp lệ.'),
+  password: z.string().min(1, 'Mật khẩu không được để trống.'),
+});
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [email, setEmail] = useState('demo@example.com');
-  const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
 
-  const handleAuth = async (e: React.FormEvent, authType: 'login' | 'signup') => {
-    e.preventDefault();
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: 'demo@example.com',
+      password: 'password',
+    },
+  });
+
+  const handleAuth = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
-    
-    let error;
-    if (authType === 'login') {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      error = signInError;
-    } else {
-      const { data, error: signUpError } = await supabase.auth.signUp({ 
-        email, 
-        password,
-      });
-      error = signUpError;
 
-      // Handle successful signup
-      if (data.user && !error) {
+    if (activeTab === 'signup') {
+      const { data, error } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+      });
+
+      if (error) {
         toast({
-         title: 'Đăng ký thành công!',
-         description: 'Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.',
-       });
-       // We don't redirect here, user needs to confirm email first.
-       setLoading(false);
-       return;
+          variant: 'destructive',
+          title: 'Lỗi đăng ký',
+          description: error.message,
+        });
+      } else if (data.user) {
+        toast({
+          title: 'Đăng ký thành công!',
+          description:
+            'Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.',
+        });
+        // Stay on the page, prompt user to check email
+      }
+    } else {
+      // Login
+      const { error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
+
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Lỗi đăng nhập',
+          description: error.message,
+        });
+      } else {
+        router.push('/');
+        router.refresh(); // Ensure the layout re-renders with the new auth state
       }
     }
 
-    if (error) {
-       toast({
-        variant: 'destructive',
-        title: 'Lỗi xác thực',
-        description: error.message,
-      });
-    } else {
-       // On successful login, the auth state change listener will handle the redirect.
-       router.push('/');
-       router.refresh();
-    }
-    
     setLoading(false);
   };
 
   return (
     <main className="flex items-center justify-center min-h-screen bg-background">
-      <Tabs defaultValue="login" className="w-full max-w-sm">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as 'login' | 'signup')}
+        className="w-full max-w-sm"
+      >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="login">Đăng nhập</TabsTrigger>
           <TabsTrigger value="signup">Đăng ký</TabsTrigger>
         </TabsList>
         <Card>
-           <CardHeader className="text-center">
+          <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
               <div className="bg-primary text-primary-foreground rounded-full p-3">
                 <LogIn className="h-8 w-8" />
@@ -87,75 +116,97 @@ export default function LoginPage() {
               Nhập thông tin để truy cập vào WorkLog
             </CardDescription>
           </CardHeader>
-          <TabsContent value="login">
-            <CardContent>
-               <Alert variant="destructive" className="mb-4 bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle className="font-semibold">Lưu ý quan trọng</AlertTitle>
-                <AlertDescription>
-                  Nếu bạn là người dùng mới, vui lòng xác thực tài khoản qua email đã đăng ký trước khi đăng nhập.
-                </AlertDescription>
-              </Alert>
-              <form onSubmit={(e) => handleAuth(e, 'login')} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email-login">Email</Label>
-                  <Input
-                    id="email-login"
-                    type="email"
-                    placeholder="email@example.com"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleAuth)} className="space-y-4">
+              <TabsContent value="login" forceMount>
+                <CardContent className="space-y-4">
+                   <Alert variant="destructive" className="bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle className="font-semibold">Lưu ý quan trọng</AlertTitle>
+                    <AlertDescription>
+                      Nếu bạn vừa đăng ký, vui lòng xác thực tài khoản qua email trước khi đăng nhập.
+                    </AlertDescription>
+                  </Alert>
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="email@example.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password-login">Mật khẩu</Label>
-                  <Input 
-                    id="password-login" 
-                    type="password" 
-                    required 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Mật khẩu</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Đăng nhập
-                </Button>
-              </form>
-            </CardContent>
-          </TabsContent>
-          <TabsContent value="signup">
-            <CardContent>
-              <form onSubmit={(e) => handleAuth(e, 'signup')} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email-signup">Email</Label>
-                  <Input
-                    id="email-signup"
-                    type="email"
-                    placeholder="email@example.com"
-                    required
-                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                </CardContent>
+              </TabsContent>
+              <TabsContent value="signup" forceMount>
+                <CardContent className="space-y-4">
+                   <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="email@example.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password-signup">Mật khẩu</Label>
-                  <Input 
-                    id="password-signup" 
-                    type="password" 
-                    required 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Mật khẩu</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Đăng ký
-                </Button>
-              </form>
-            </CardContent>
-          </TabsContent>
+                </CardContent>
+              </TabsContent>
+              <div className="p-6 pt-0">
+                 <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {activeTab === 'login' ? 'Đăng nhập' : 'Đăng ký'}
+                  </Button>
+              </div>
+            </form>
+          </Form>
         </Card>
       </Tabs>
     </main>
