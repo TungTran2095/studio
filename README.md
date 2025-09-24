@@ -1,100 +1,223 @@
-# WorkLog App with Next.js and Supabase
+# WorkLog Application
 
-This is a Next.js application for logging work entries, integrated with Supabase for authentication, database, and storage. It also uses Google's Gemini AI for automatic categorization of work logs.
+Ứng dụng quản lý báo cáo công việc với hệ thống RAG (Retrieval-Augmented Generation) và Bot Telegram cho Tổng giám đốc.
 
-## Getting Started
+## 🚀 Tính năng chính
 
-Follow these steps to set up and run the project locally.
+### 📝 Quản lý báo cáo công việc
+- Form báo cáo công việc với tệp đính kèm bắt buộc
+- Lịch sử công việc với tìm kiếm và lọc
+- Lịch làm việc kiểu iPhone với điểm đánh dấu
+- Modal chi tiết với preview tài liệu
 
-### 1. Install Dependencies
+### 🔐 Xác thực và bảo mật
+- Đăng nhập/đăng ký với Supabase Auth
+- Đổi mật khẩu và quên mật khẩu
+- Lưu trữ thông tin nhân viên (Họ tên, Mã NV)
 
-First, install the project dependencies using npm:
+### 🤖 Bot Telegram cho CEO
+- Thống kê công việc realtime
+- Tìm kiếm tài liệu thông minh bằng AI
+- Xem công việc của từng nhân viên
+- Tóm tắt và báo cáo tự động
 
+### 🧠 Hệ thống RAG
+- Tự động xử lý tài liệu (PDF, DOCX)
+- Vector database với pgvector
+- Tìm kiếm semantic thông minh
+- Tích hợp OpenAI Embeddings
+
+## 🛠️ Công nghệ sử dụng
+
+- **Frontend**: Next.js 15, React, TypeScript
+- **UI**: Radix UI, Tailwind CSS
+- **Backend**: Supabase (Auth, Database, Storage)
+- **AI**: OpenAI GPT, Google Gemini
+- **Automation**: n8n workflows
+- **Vector DB**: pgvector (Supabase)
+- **Bot**: Telegram Bot API
+
+## 📋 Yêu cầu hệ thống
+
+- Node.js 18+
+- npm hoặc yarn
+- Tài khoản Supabase
+- Tài khoản OpenAI
+- Tài khoản n8n (cloud hoặc self-hosted)
+
+## 🚀 Cài đặt
+
+### 1. Clone repository
+```bash
+git clone <repository-url>
+cd worklog
+```
+
+### 2. Cài đặt dependencies
 ```bash
 npm install
 ```
 
-### 2. Set Up Your Supabase Project
-
-If you don't have a Supabase project, create one first.
-
-1.  Go to [supabase.com](https://supabase.com) and create a new project.
-2.  Wait for the project to be initialized.
-
-### 3. Set Up the Database
-
-You need to create a table to store the work logs.
-
-1.  In your Supabase project, navigate to the **SQL Editor**.
-2.  Click **New query** and run the following SQL script to create the `worklogs` table:
-
-    ```sql
-    CREATE TABLE worklogs (
-        id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        user_id UUID NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        category TEXT,
-        start_time TIME,
-        end_time TIME,
-        file_name TEXT,
-        file_url TEXT,
-        timestamp TIMESTAMPTZ DEFAULT NOW() NOT NULL
-    );
-    ```
-
-    **Important**: This schema intentionally omits the foreign key constraint to `auth.users(id)` to prevent a common Supabase issue ("Database error saving new user") that can occur if there are conflicting triggers on user creation. The application logic ensures `user_id` is correctly populated.
-
-### 4. Set Up Supabase Storage
-
-You need to create a storage bucket for file attachments.
-
-1.  In your Supabase project, navigate to **Storage**.
-2.  Click **Create a new bucket**.
-3.  Set the bucket name to `attachments`.
-4.  Make the bucket **public**. This is necessary for the file URLs to be accessible.
-5.  After creating the bucket, go to its settings by clicking the three dots and selecting **Policies**.
-6.  Create a new policy that allows `INSERT` operations for `anon` and `authenticated` roles. This allows the server-side code to upload files.
-    *   **Policy Name:** `Allow server uploads`
-    *   **Allowed operations:** Check `INSERT`.
-    *   **Target roles:** Select `anon` and `authenticated`.
-    *   **WITH CHECK expression:** `true`
-
-### 5. Configure Environment Variables
-
-Create a file named `.env` in the root of your project and add the following variables.
-
-1.  Go to **Project Settings** > **API** in your Supabase dashboard.
-2.  Find your **Project URL** and **API Keys**.
-3.  Go to [Google AI Studio](https://makersuite.google.com/) to get your **Gemini API Key**.
-
-Now, populate the `.env` file:
-
+### 3. Cấu hình environment variables
+Tạo file `.env.local`:
 ```env
-# Supabase variables (from Project Settings > API)
-NEXT_PUBLIC_SUPABASE_URL=YOUR_PROJECT_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
-SUPABASE_SERVICE_KEY=YOUR_SERVICE_ROLE_SECRET_KEY
-
-# Google Gemini API Key (for AI features)
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_key
+OPENAI_API_KEY=your_openai_api_key
 ```
 
-**Security Note:** `SUPABASE_SERVICE_KEY` is a secret and should never be exposed on the client side. This template uses it safely within Next.js Server Actions.
+### 4. Setup Supabase
+```bash
+# Chạy SQL scripts trong docs/
+# 1. Tạo bảng worklogs
+# 2. Tạo bảng documents (cho RAG)
+# 3. Cấu hình RLS policies
+# 4. Tạo storage bucket
+```
 
-### 6. Run the Development Server
-
-Now you can run the development server:
-
+### 5. Chạy ứng dụng
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:9002](http://localhost:9002) (or the specified port) with your browser to see the result.
+## 📚 Documentation
 
-### 7. Important Supabase Auth Setting
+- [Hướng dẫn setup chi tiết](SETUP_INSTRUCTIONS.md)
+- [Cài đặt Bot Telegram](docs/telegram-bot-setup.md)
+- [Lệnh Bot Telegram](docs/ceo-bot-commands.md)
+- [Workflow n8n](docs/n8n-telegram-bot-workflow.json)
 
-By default, Supabase requires users to confirm their email address after signing up.
+## 🏗️ Cấu trúc dự án
 
-- **To test the app quickly**, you can disable this feature. Go to **Authentication** > **Providers** in your Supabase dashboard and turn off **Confirm email**.
-- **For production**, it's highly recommended to keep email confirmation enabled. Make sure your users know they need to check their email to activate their account before logging in.
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── actions.ts         # Server actions
+│   ├── page.tsx          # Trang chính
+│   ├── login/            # Trang đăng nhập
+│   └── reset-password/   # Trang đặt lại mật khẩu
+├── components/           # React components
+│   ├── ui/              # UI components (Radix)
+│   ├── work-log-form.tsx
+│   ├── work-history.tsx
+│   ├── work-calendar.tsx
+│   └── work-entry-detail-dialog.tsx
+├── lib/                 # Utilities
+│   ├── supabase.ts     # Supabase client
+│   ├── types.ts        # TypeScript types
+│   └── utils.ts        # Helper functions
+└── ai/                 # AI integration
+    ├── genkit.ts       # Google Gemini setup
+    └── flows/          # AI workflows
+```
+
+## 🔧 Cấu hình n8n
+
+### Import workflow
+1. Mở n8n
+2. Import file `docs/n8n-telegram-bot-workflow.json`
+3. Cấu hình credentials:
+   - Supabase API
+   - OpenAI API
+   - Telegram Bot API
+
+### Tạo Bot Telegram
+1. Tìm @BotFather trên Telegram
+2. Tạo bot mới với `/newbot`
+3. Lưu Bot Token
+4. Cấu hình trong n8n
+
+## 📊 Database Schema
+
+### Bảng `worklogs`
+```sql
+CREATE TABLE worklogs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  category TEXT,
+  file_url TEXT,
+  file_name TEXT,
+  processed_for_rag BOOLEAN DEFAULT NULL,
+  timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Bảng `documents` (RAG)
+```sql
+CREATE TABLE documents (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  worklog_id BIGINT,
+  file_url TEXT,
+  file_name TEXT,
+  mime_type TEXT,
+  content TEXT,
+  chunk TEXT,
+  embedding VECTOR(1536),
+  tokens INT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+## 🤖 Bot Commands
+
+- `/start` - Menu chính
+- `/stats` - Thống kê công việc
+- `/search [từ khóa]` - Tìm kiếm tài liệu
+- `/user [email]` - Xem công việc nhân viên
+- `/summary` - Tóm tắt AI
+
+## 🔒 Bảo mật
+
+- Row Level Security (RLS) trên tất cả bảng
+- JWT authentication với Supabase
+- File upload validation
+- Input sanitization
+
+## 🚀 Deployment
+
+### Vercel (Khuyến nghị)
+```bash
+npm run build
+vercel --prod
+```
+
+### Docker
+```bash
+docker build -t worklog-app .
+docker run -p 3000:3000 worklog-app
+```
+
+## 📈 Monitoring
+
+- Supabase Dashboard cho database
+- n8n logs cho automation
+- Telegram Bot analytics
+- Application logs
+
+## 🤝 Contributing
+
+1. Fork repository
+2. Tạo feature branch
+3. Commit changes
+4. Push to branch
+5. Tạo Pull Request
+
+## 📄 License
+
+MIT License - xem file [LICENSE](LICENSE) để biết thêm chi tiết.
+
+## 🆘 Support
+
+Nếu gặp vấn đề, hãy tạo issue trên GitHub hoặc liên hệ qua email.
+
+---
+
+**Phát triển bởi**: [Tên của bạn]  
+**Phiên bản**: 1.0.0  
+**Cập nhật lần cuối**: 2024-01-20
