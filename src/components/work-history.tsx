@@ -28,6 +28,8 @@ import {
 import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
 import { Skeleton } from './ui/skeleton';
+import { Eye } from 'lucide-react';
+import { WorkEntryDetailDialog } from '@/components/work-entry-detail-dialog';
 
 type WorkHistoryProps = {
   entries: WorkLogEntry[];
@@ -37,6 +39,8 @@ type WorkHistoryProps = {
 export function WorkHistory({ entries, loading }: WorkHistoryProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<WorkLogEntry | null>(null);
 
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
@@ -87,7 +91,7 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
           Xem lại và tìm kiếm các công việc đã được ghi nhận.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col">
+      <CardContent className="flex-grow flex flex-col overflow-hidden">
         <div className="flex flex-col sm:flex-row gap-2 mb-4">
           <div className="relative flex-grow">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -136,7 +140,7 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
             </PopoverContent>
           </Popover>
         </div>
-        <ScrollArea className="flex-grow pr-4">
+        <ScrollArea className="flex-grow h-full pr-2">
            {loading ? <HistorySkeleton /> :
             filteredEntries.length > 0 ? (
             <div className="space-y-4">
@@ -144,12 +148,21 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                 <div key={entry.id} className="flex flex-col gap-3 p-4 border rounded-lg bg-card-background/50">
                   <div className="flex justify-between items-start gap-4">
                     <h3 className="font-semibold text-base">{entry.title}</h3>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap pt-1">
-                      {formatDistanceToNow(new Date(entry.timestamp), {
-                        addSuffix: true,
-                        locale: vi,
-                      })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        aria-label="Xem chi tiết"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => { setSelected(entry); setOpen(true); }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap pt-1">
+                        {formatDistanceToNow(new Date(entry.timestamp), {
+                          addSuffix: true,
+                          locale: vi,
+                        })}
+                      </span>
+                    </div>
                   </div>
                    <div className="flex items-center flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
                     <Badge variant="secondary">{entry.category}</Badge>
@@ -185,6 +198,7 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
             </div>
           )}
         </ScrollArea>
+      <WorkEntryDetailDialog open={open} onOpenChange={setOpen} entry={selected} />
       </CardContent>
     </Card>
   );

@@ -13,6 +13,7 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
+  components: userComponents,
   ...props
 }: CalendarProps) {
   return (
@@ -60,6 +61,7 @@ function Calendar({
         IconRight: ({ className, ...props }) => (
           <ChevronRight className={cn("h-4 w-4", className)} {...props} />
         ),
+        ...(userComponents ?? {}),
       }}
       {...props}
     />

@@ -1,0 +1,744 @@
+{
+  "name": "WorkLog RAG Bot for CEO",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "table": "worklogs",
+        "filterType": "manual",
+        "conditions": {
+          "conditions": [
+            {
+              "keyName": "file_url",
+              "operator": "isNotNull"
+            },
+            {
+              "keyName": "processed_for_rag",
+              "operator": "isNull"
+            }
+          ]
+        },
+        "options": {
+          "limit": 10
+        }
+      },
+      "id": "get-unprocessed-worklogs",
+      "name": "Get Unprocessed Worklogs",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-if-worklogs-exist",
+      "name": "Check if Worklogs Exist",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-file",
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.mimeType }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-if-pdf",
+      "name": "Check if PDF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract text from PDF using PDF.js (simplified)\n// In production, use a proper PDF extraction service\nconst pdf = require('pdf-parse');\n\n// This is a simplified version - in real n8n, you'd use a PDF extraction node\n// For now, we'll simulate text extraction\nconst mockText = `Document content extracted from PDF:\\n\\n` +\n  `Title: ${$json.fileName || 'Unknown'}\\n` +\n  `Worklog ID: ${$json.worklog_id}\\n` +\n  `User ID: ${$json.user_id}\\n` +\n  `Description: This is a sample extracted text from the PDF document. ` +\n  `In a real implementation, you would use a proper PDF extraction service ` +\n  `like pdf-parse, pdf2pic, or a cloud service like Google Document AI.`;\n\nreturn {\n  json: {\n    extractedText: mockText,\n    fileName: $json.fileName,\n    worklog_id: $json.worklog_id,\n    user_id: $json.user_id,\n    file_url: $json.file_url\n  }\n};"
+      },
+      "id": "extract-pdf-text",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract text from DOCX\n// In production, use a proper DOCX extraction service\nconst mockText = `Document content extracted from DOCX:\\n\\n` +\n  `Title: ${$json.fileName || 'Unknown'}\\n` +\n  `Worklog ID: ${$json.worklog_id}\\n` +\n  `User ID: ${$json.user_id}\\n` +\n  `Description: This is a sample extracted text from the DOCX document. ` +\n  `In a real implementation, you would use a proper DOCX extraction service ` +\n  `like mammoth.js or a cloud service.`;\n\nreturn {\n  json: {\n    extractedText: mockText,\n    fileName: $json.fileName,\n    worklog_id: $json.worklog_id,\n    user_id: $json.user_id,\n    file_url: $json.file_url\n  }\n};"
+      },
+      "id": "extract-docx-text",
+      "name": "Extract DOCX Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Chunk text into smaller pieces for embedding\nconst text = $json.extractedText || '';\nconst CHUNK_SIZE = 1000;\nconst OVERLAP = 200;\n\nfunction chunkText(text, chunkSize, overlap) {\n  const chunks = [];\n  let i = 0;\n  \n  while (i < text.length) {\n    const end = Math.min(i + chunkSize, text.length);\n    const chunk = text.slice(i, end);\n    \n    if (chunk.trim().length > 0) {\n      chunks.push({\n        chunk: chunk.trim(),\n        chunkIndex: chunks.length,\n        fileName: $json.fileName,\n        worklog_id: $json.worklog_id,\n        user_id: $json.user_id,\n        file_url: $json.file_url\n      });\n    }\n    \n    i = end - overlap;\n    if (i < 0) i = 0;\n  }\n  \n  return chunks;\n}\n\nconst chunks = chunkText(text, CHUNK_SIZE, OVERLAP);\n\n// Return each chunk as a separate item\nreturn chunks.map(chunk => ({ json: chunk }));"
+      },
+      "id": "chunk-text",
+      "name": "Chunk Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "embed",
+        "model": "text-embedding-3-small",
+        "input": "={{ $json.chunk }}"
+      },
+      "id": "create-embeddings",
+      "name": "Create Embeddings",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1780, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "documents",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $json.user_id }}",
+            "worklog_id": "={{ $json.worklog_id }}",
+            "file_url": "={{ $json.file_url }}",
+            "file_name": "={{ $json.fileName }}",
+            "mime_type": "application/pdf",
+            "content": "={{ $json.chunk }}",
+            "chunk": "={{ $json.chunk }}",
+            "embedding": "={{ JSON.stringify($json.embedding) }}",
+            "tokens": "={{ $json.embedding ? $json.embedding.length : 0 }}"
+          }
+        }
+      },
+      "id": "save-to-vector-db",
+      "name": "Save to Vector DB",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2000, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "worklogs",
+        "updateKey": "id",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.worklog_id }}",
+            "processed_for_rag": "true"
+          }
+        }
+      },
+      "id": "mark-worklog-processed",
+      "name": "Mark Worklog Processed",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2220, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          {
+            "updateType": "message",
+            "message": "={{ $json.message }}"
+          }
+        ]
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/start",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-start-command",
+      "name": "Check Start Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "updates": [
+          {
+            "updateType": "message",
+            "message": "🤖 Chào mừng Tổng giám đốc!\\n\\nTôi có thể giúp bạn:\\n\\n📊 /stats - Xem thống kê công việc\\n👥 /user [tên] - Xem công việc của nhân viên\\n🔍 /search [từ khóa] - Tìm kiếm tài liệu\\n📈 /summary - Tóm tắt công việc tuần này\\n\\nHãy chọn một lệnh để bắt đầu!"
+          }
+        ]
+      },
+      "id": "send-welcome-message",
+      "name": "Send Welcome Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [680, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/stats",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-stats-command",
+      "name": "Check Stats Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(*) as total_worklogs,\n  COUNT(DISTINCT user_id) as active_users,\n  COUNT(CASE WHEN file_url IS NOT NULL THEN 1 END) as documents_uploaded,\n  DATE_TRUNC('day', timestamp) as date,\n  COUNT(*) as daily_count\nFROM worklogs \nWHERE timestamp >= NOW() - INTERVAL '7 days'\nGROUP BY DATE_TRUNC('day', timestamp)\nORDER BY date DESC;"
+      },
+      "id": "get-worklog-stats",
+      "name": "Get Worklog Stats",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 500],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format statistics for Telegram message\nconst stats = $json.data || [];\nconst totalWorklogs = stats.reduce((sum, day) => sum + parseInt(day.daily_count), 0);\nconst activeUsers = new Set(stats.map(day => day.active_users)).size;\nconst documentsUploaded = stats.reduce((sum, day) => sum + parseInt(day.documents_uploaded || 0), 0);\n\nlet message = `📊 **THỐNG KÊ CÔNG VIỆC 7 NGÀY QUA**\\n\\n`;\nmessage += `📝 Tổng số báo cáo: ${totalWorklogs}\\n`;\nmessage += `👥 Số nhân viên hoạt động: ${activeUsers}\\n`;\nmessage += `📄 Tài liệu đã tải lên: ${documentsUploaded}\\n\\n`;\nmessage += `📅 **Chi tiết theo ngày:**\\n`;\n\nstats.forEach(day => {\n  const date = new Date(day.date).toLocaleDateString('vi-VN');\n  message += `• ${date}: ${day.daily_count} báo cáo\\n`;\n});\n\nreturn {\n  json: {\n    message: message,\n    chatId: $json.chatId\n  }\n};"
+      },
+      "id": "format-stats",
+      "name": "Format Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 500]
+    },
+    {
+      "parameters": {
+        "updates": [
+          {
+            "updateType": "message",
+            "message": "={{ $json.message }}"
+          }
+        ]
+      },
+      "id": "send-stats-message",
+      "name": "Send Stats Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1560, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/search",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-search-command",
+      "name": "Check Search Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract search query from /search command\nconst text = $json.message.text || '';\nconst query = text.replace('/search', '').trim();\n\nif (!query) {\n  return {\n    json: {\n      error: 'Vui lòng nhập từ khóa tìm kiếm. Ví dụ: /search báo cáo tài chính',\n      chatId: $json.message.chat.id\n    }\n  };\n}\n\nreturn {\n  json: {\n    query: query,\n    chatId: $json.message.chat.id\n  }\n};"
+      },
+      "id": "extract-search-query",
+      "name": "Extract Search Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 700]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "embed",
+        "model": "text-embedding-3-small",
+        "input": "={{ $json.query }}"
+      },
+      "id": "embed-search-query",
+      "name": "Embed Search Query",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1340, 700],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  d.id,\n  d.worklog_id,\n  d.file_name,\n  d.chunk,\n  d.file_url,\n  w.title,\n  w.description,\n  w.timestamp,\n  u.email,\n  1 - (d.embedding <=> $1::vector) as similarity_score\nFROM documents d\nJOIN worklogs w ON d.worklog_id = w.id\nJOIN auth.users u ON d.user_id = u.id\nORDER BY d.embedding <=> $1::vector\nLIMIT 5;",
+        "queryParams": "={{ JSON.stringify($json.embedding) }}"
+      },
+      "id": "search-vector-db",
+      "name": "Search Vector DB",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 700],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format search results for Telegram\nconst results = $json.data || [];\n\nif (results.length === 0) {\n  return {\n    json: {\n      message: '🔍 Không tìm thấy tài liệu nào phù hợp với từ khóa của bạn.',\n      chatId: $json.chatId\n    }\n  };\n}\n\nlet message = `🔍 **KẾT QUẢ TÌM KIẾM**\\n\\n`;\n\nresults.forEach((result, index) => {\n  const date = new Date(result.timestamp).toLocaleDateString('vi-VN');\n  const score = Math.round(result.similarity_score * 100);\n  \n  message += `${index + 1}. **${result.title}**\\n`;\n  message += `👤 Người thực hiện: ${result.email}\\n`;\n  message += `📅 Ngày: ${date}\\n`;\n  message += `📄 Tài liệu: ${result.file_name}\\n`;\n  message += `🎯 Độ phù hợp: ${score}%\\n`;\n  message += `📝 Nội dung: ${result.chunk.substring(0, 200)}...\\n\\n`;\n});\n\nreturn {\n  json: {\n    message: message,\n    chatId: $json.chatId\n  }\n};"
+      },
+      "id": "format-search-results",
+      "name": "Format Search Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 700]
+    },
+    {
+      "parameters": {
+        "updates": [
+          {
+            "updateType": "message",
+            "message": "={{ $json.message }}"
+          }
+        ]
+      },
+      "id": "send-search-results",
+      "name": "Send Search Results",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2000, 700],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram Bot API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Unprocessed Worklogs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Unprocessed Worklogs": {
+      "main": [
+        [
+          {
+            "node": "Check if Worklogs Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Worklogs Exist": {
+      "main": [
+        [
+          {
+            "node": "Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Check if PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if PDF": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract DOCX Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Chunk Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract DOCX Text": {
+      "main": [
+        [
+          {
+            "node": "Chunk Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk Text": {
+      "main": [
+        [
+          {
+            "node": "Create Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Save to Vector DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Vector DB": {
+      "main": [
+        [
+          {
+            "node": "Mark Worklog Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Start Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Start Command": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Stats Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Stats Command": {
+      "main": [
+        [
+          {
+            "node": "Get Worklog Stats",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Search Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Worklog Stats": {
+      "main": [
+        [
+          {
+            "node": "Format Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Stats": {
+      "main": [
+        [
+          {
+            "node": "Send Stats Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Search Command": {
+      "main": [
+        [
+          {
+            "node": "Extract Search Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Search Query": {
+      "main": [
+        [
+          {
+            "node": "Embed Search Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Search Query": {
+      "main": [
+        [
+          {
+            "node": "Search Vector DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Vector DB": {
+      "main": [
+        [
+          {
+            "node": "Format Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Search Results": {
+      "main": [
+        [
+          {
+            "node": "Send Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-20T10:00:00.000Z",
+  "versionId": "1"
+}
+

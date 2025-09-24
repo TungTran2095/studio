@@ -31,6 +31,8 @@ import {
 const formSchema = z.object({
   email: z.string().email('Email không hợp lệ.'),
   password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự.'),
+  fullName: z.string().optional(),
+  employeeId: z.string().optional(),
 });
 
 export default function LoginPage() {
@@ -39,12 +41,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [showConfirmationMessage, setShowConfirmationMessage] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: '',
       password: '',
+      fullName: '',
+      employeeId: '',
     },
   });
 
@@ -54,9 +59,25 @@ export default function LoginPage() {
     const { email, password } = values;
 
     if (activeTab === 'signup') {
+      if (!values.fullName || !values.employeeId) {
+        toast({
+          variant: 'destructive',
+          title: 'Thiếu thông tin',
+          description: 'Vui lòng nhập Họ và tên và Mã nhân viên.',
+        });
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: values.fullName,
+            employee_id: values.employeeId,
+          },
+        },
       });
 
       if (error) {
@@ -101,6 +122,29 @@ export default function LoginPage() {
       }
     }
     setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    const email = form.getValues('email');
+    if (!email) {
+      toast({
+        variant: 'destructive',
+        title: 'Thiếu email',
+        description: 'Vui lòng nhập email để nhận liên kết đặt lại mật khẩu.',
+      });
+      return;
+    }
+    try {
+      setResetSending(true);
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+      toast({ title: 'Đã gửi email', description: 'Vui lòng kiểm tra hộp thư để đặt lại mật khẩu.' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Không thể gửi email', description: err.message });
+    } finally {
+      setResetSending(false);
+    }
   };
 
   return (
@@ -176,9 +220,53 @@ export default function LoginPage() {
                     )}
                   />
                 </CardContent>
+                <div className="px-6 pb-2 text-right">
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline disabled:opacity-50"
+                    onClick={handleForgotPassword}
+                    disabled={resetSending || loading}
+                  >
+                    {resetSending ? 'Đang gửi...' : 'Quên mật khẩu?'}
+                  </button>
+                </div>
               </TabsContent>
               <TabsContent value="signup">
                 <CardContent className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="fullName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Họ và tên</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="text"
+                            placeholder="Nguyễn Văn A"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="employeeId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Mã nhân viên</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="text"
+                            placeholder="VD: EMP00123"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                    <FormField
                     control={form.control}
                     name="email"

@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import {
   Form,
   FormControl,
@@ -34,15 +35,19 @@ const formSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
-  attachment: z.instanceof(File).optional(),
+  attachment: z
+    .custom<File>((val) => val instanceof File && val.size > 0, {
+      message: 'Vui lòng chọn tệp đính kèm.',
+    }),
 });
 
 type WorkLogFormProps = {
   onAddEntry: (entry: WorkLogEntry) => void;
   userId: string;
+  className?: string;
 };
 
-export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
+export function WorkLogForm({ onAddEntry, userId, className }: WorkLogFormProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
 
@@ -94,7 +99,7 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
   }
 
   return (
-    <Card>
+    <Card className={cn('h-full', className)}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ClipboardPenLine className="h-6 w-6 text-primary" />
@@ -166,12 +171,12 @@ export function WorkLogForm({ onAddEntry, userId }: WorkLogFormProps) {
                 </FormItem>
               )}
             />
-             <FormField
+            <FormField
               control={form.control}
               name="attachment"
               render={({ field: { onChange, value, ...rest } }) => (
                 <FormItem>
-                  <FormLabel>Tệp đính kèm</FormLabel>
+                  <FormLabel>Tệp đính kèm *</FormLabel>
                   <FormControl>
                     <Input 
                       type="file" 

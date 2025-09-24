@@ -11,6 +11,28 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
+function sanitizeFileName(originalName: string): string {
+  const [namePart, ...extParts] = originalName.split('.');
+  const extension = extParts.length > 0 ? `.${extParts.pop()}` : '';
+  const base = extParts.length > 0 ? `${namePart}.${extParts.join('.')}` : namePart;
+  const noDiacritics = base
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const safeBase = noDiacritics
+    .replace(/[^a-zA-Z0-9-_\.\s]/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .toLowerCase();
+  const safeExt = extension
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9.]/g, '')
+    .toLowerCase();
+  const result = `${safeBase || 'file'}${safeExt}`;
+  return result.length > 180 ? result.slice(0, 180) : result;
+}
+
 export async function submitWorkLog(formData: FormData) {
   try {
     const title = formData.get('title') as string;
@@ -31,11 +53,16 @@ export async function submitWorkLog(formData: FormData) {
     let fileName: string | undefined;
 
     if (attachment && attachment.size > 0) {
-      const filePath = `public/${userId}/${Date.now()}_${attachment.name}`;
+      const safeName = sanitizeFileName(attachment.name);
+      const filePath = `public/${userId}/${Date.now()}_${safeName}`;
       
       const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from('attachments')
-        .upload(filePath, attachment);
+        .upload(filePath, attachment, {
+          cacheControl: '3600',
+          contentType: attachment.type || undefined,
+          upsert: false,
+        });
 
       if (uploadError) {
         // Log the detailed error on the server
