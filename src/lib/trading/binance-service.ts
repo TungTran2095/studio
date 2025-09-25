@@ -1,4 +1,5 @@
 import Binance from 'binance-api-node';
+import { TimeSync } from '@/lib/time-sync';
 
 export interface BinanceAccountInfo {
   makerCommission: number;
@@ -60,18 +61,114 @@ export interface BinanceOrder {
 
 export class BinanceService {
   private client: any;
+  private apiKey: string;
+  private apiSecret: string;
+  private testnet: boolean;
 
   constructor(apiKey: string, apiSecret: string, testnet: boolean = false) {
+    // Lưu credentials để có thể tạo lại client
+    this.apiKey = apiKey;
+    this.apiSecret = apiSecret;
+    this.testnet = testnet;
+    
+    // Không đồng bộ timestamp ở đây vì có thể gây delay
+    // Sẽ đồng bộ trong retry logic khi cần
+    
     this.client = Binance({
       apiKey,
       apiSecret,
-      httpBase: testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com'
+      httpBase: testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
+      // Tăng recvWindow để tránh lỗi timestamp
+      recvWindow: 120000, // Tăng lên 120 giây để an toàn hơn
+      // Thêm các options khác để tăng độ ổn định
+      timeout: 30000,
+      family: 4,
+      // Sử dụng custom getTime function để đảm bảo timestamp chính xác
+      getTime: () => {
+        const now = Date.now();
+        const safeTime = now - 1000; // Trừ 1 giây để đảm bảo an toàn
+        console.log(`[BinanceService] Generating timestamp: ${safeTime} (${new Date(safeTime).toISOString()})`);
+        return safeTime;
+      }
     });
+    
+    console.log(`[BinanceService] Đã khởi tạo với getTime function và recvWindow=120000ms (${testnet ? 'testnet' : 'realnet'})`);
+  }
+
+  /**
+   * Retry logic với timestamp sync cho các API calls
+   */
+  private async retryWithTimestampSync<T>(fn: () => Promise<T>, maxRetries: number = 3): Promise<T> {
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        
+        // Kiểm tra nếu là lỗi timestamp hoặc recvWindow
+        const isTimestampError = error.message && (
+          error.message.includes('Timestamp for this request') ||
+          error.message.includes('timestamp') ||
+          error.message.includes('time') ||
+          error.message.includes('recvWindow') ||
+          error.message.includes('outside of the recvWindow') ||
+          error.code === -1021 // Binance error code cho timestamp issues
+        );
+        
+        if (isTimestampError && attempt < maxRetries) {
+          console.log(`[BinanceService] Lỗi timestamp (attempt ${attempt}/${maxRetries}), đang sync lại...`);
+          console.log(`[BinanceService] Error details:`, error);
+          console.log(`[BinanceService] Bot type: ${this.testnet ? 'testnet' : 'realnet'}`);
+          
+          // Force sync timestamp
+          try {
+            await TimeSync.syncWithServer();
+            
+            // Đợi một chút để đảm bảo sync hoàn tất
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Tạo lại client với cấu hình mới
+            this.client = Binance({
+              apiKey: this.apiKey,
+              apiSecret: this.apiSecret,
+              httpBase: this.testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
+              recvWindow: 120000,
+              timeout: 30000,
+              family: 4,
+              // Sử dụng custom getTime function để đảm bảo timestamp chính xác
+              getTime: () => {
+                const now = Date.now();
+                const safeTime = now - 1000; // Trừ 1 giây để đảm bảo an toàn
+                console.log(`[BinanceService] Regenerating timestamp: ${safeTime} (${new Date(safeTime).toISOString()})`);
+                return safeTime;
+              }
+            });
+            
+            console.log(`[BinanceService] Đã tạo lại client với timestamp sync (${this.testnet ? 'testnet' : 'realnet'})`);
+            
+            // Đợi thêm một chút trước khi thử lại
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          } catch (syncError) {
+            console.error('[BinanceService] Không thể sync timestamp:', syncError);
+          }
+        }
+        
+        // Nếu không phải lỗi timestamp hoặc đã hết retry, throw error
+        if (attempt === maxRetries || !isTimestampError) {
+          throw error;
+        }
+      }
+    }
+    
+    throw lastError;
   }
 
   async getAccountInfo(): Promise<BinanceAccountInfo> {
     try {
-      return await this.client.accountInfo();
+      return await this.retryWithTimestampSync(() => this.client.accountInfo());
     } catch (error) {
       console.error('Error getting account info:', error);
       throw error;
@@ -80,7 +177,7 @@ export class BinanceService {
 
   async getCandles(symbol: string, interval: string, limit: number = 100): Promise<BinanceCandle[]> {
     try {
-      const candles = await this.client.candles({ symbol, interval, limit });
+      const candles = await this.retryWithTimestampSync(() => this.client.candles({ symbol, interval, limit }));
       return candles.map((candle: any[]) => ({
         openTime: candle[0],
         open: candle[1],
@@ -102,7 +199,7 @@ export class BinanceService {
 
   async getPrice(symbol: string): Promise<BinancePrice> {
     try {
-      return await this.client.price({ symbol });
+      return await this.retryWithTimestampSync(() => this.client.price({ symbol }));
     } catch (error) {
       console.error('Error getting price:', error);
       throw error;
@@ -117,13 +214,13 @@ export class BinanceService {
     price?: string;
   }): Promise<BinanceOrder> {
     try {
-      const order = await this.client.order({
+      const order = await this.retryWithTimestampSync(() => this.client.order({
         symbol: orderParams.symbol,
         side: orderParams.side,
         type: orderParams.type,
         quantity: orderParams.quantity,
         ...(orderParams.price && { price: orderParams.price })
-      });
+      }));
       return order;
     } catch (error) {
       console.error('Error placing order:', error);
@@ -133,7 +230,7 @@ export class BinanceService {
 
   async getBalance(asset?: string): Promise<any> {
     try {
-      const accountInfo = await this.client.accountInfo();
+      const accountInfo = await this.retryWithTimestampSync(() => this.client.accountInfo());
       if (asset) {
         return accountInfo.balances.find((balance: any) => balance.asset === asset);
       }
