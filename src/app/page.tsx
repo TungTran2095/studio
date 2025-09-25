@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/sidebar';
 import { ClipboardPenLine, CalendarDays } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FloatingChat } from '@/components/floating-chat';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -165,6 +166,7 @@ export default function Home() {
                     <span>Lịch làm việc</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                
               </SidebarMenu>
             </SidebarGroup>
           </SidebarContent>
@@ -216,6 +218,7 @@ export default function Home() {
               <WorkCalendar entries={entries} />
             )}
           </div>
+          <FloatingChat />
         </SidebarInset>
         <ChangePasswordDialog open={openChangePassword} onOpenChange={setOpenChangePassword} />
       </SidebarProvider>
