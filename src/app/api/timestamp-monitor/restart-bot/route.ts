@@ -66,8 +66,8 @@ export async function POST(request: NextRequest) {
       if (bots.length > 1) {
         return NextResponse.json({
           success: false,
-          error: `Tìm thấy ${bots.length} bots với tên tương tự: ${bots.map(b => b.name).join(', ')}`,
-          suggestions: bots.map(b => ({ id: b.id, name: b.name }))
+          error: `Tìm thấy ${bots.length} bots với tên tương tự: ${bots.map((b: any) => b.name).join(', ')}`,
+          suggestions: bots.map((b: any) => ({ id: b.id, name: b.name }))
         }, { status: 400 });
       }
       

@@ -78,11 +78,6 @@ export class BinanceService {
       apiKey,
       apiSecret,
       httpBase: testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
-      // Tăng recvWindow để tránh lỗi timestamp
-      recvWindow: 120000, // Tăng lên 120 giây để an toàn hơn
-      // Thêm các options khác để tăng độ ổn định
-      timeout: 30000,
-      family: 4,
       // Sử dụng custom getTime function để đảm bảo timestamp chính xác
       getTime: () => {
         const now = Date.now();
@@ -92,7 +87,7 @@ export class BinanceService {
       }
     });
     
-    console.log(`[BinanceService] Đã khởi tạo với getTime function và recvWindow=120000ms (${testnet ? 'testnet' : 'realnet'})`);
+    console.log(`[BinanceService] Đã khởi tạo với getTime function (${testnet ? 'testnet' : 'realnet'})`);
   }
 
   /**
@@ -134,9 +129,6 @@ export class BinanceService {
               apiKey: this.apiKey,
               apiSecret: this.apiSecret,
               httpBase: this.testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
-              recvWindow: 120000,
-              timeout: 30000,
-              family: 4,
               // Sử dụng custom getTime function để đảm bảo timestamp chính xác
               getTime: () => {
                 const now = Date.now();
@@ -177,7 +169,7 @@ export class BinanceService {
 
   async getCandles(symbol: string, interval: string, limit: number = 100): Promise<BinanceCandle[]> {
     try {
-      const candles = await this.retryWithTimestampSync(() => this.client.candles({ symbol, interval, limit }));
+      const candles = await this.retryWithTimestampSync(() => this.client.candles({ symbol, interval, limit })) as any[];
       return candles.map((candle: any[]) => ({
         openTime: candle[0],
         open: candle[1],
@@ -220,7 +212,7 @@ export class BinanceService {
         type: orderParams.type,
         quantity: orderParams.quantity,
         ...(orderParams.price && { price: orderParams.price })
-      }));
+      })) as BinanceOrder;
       return order;
     } catch (error) {
       console.error('Error placing order:', error);
@@ -230,7 +222,7 @@ export class BinanceService {
 
   async getBalance(asset?: string): Promise<any> {
     try {
-      const accountInfo = await this.retryWithTimestampSync(() => this.client.accountInfo());
+      const accountInfo = await this.retryWithTimestampSync(() => this.client.accountInfo()) as any;
       if (asset) {
         return accountInfo.balances.find((balance: any) => balance.asset === asset);
       }

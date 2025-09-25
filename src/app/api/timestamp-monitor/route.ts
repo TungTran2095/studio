@@ -153,14 +153,14 @@ export async function POST(request: Request) {
         
         const oldOffset = TimeSync.getOffset();
         TimeSync.adjustOffset(adjustment);
-        const newOffset = TimeSync.getOffset();
+        const adjustedOffset = TimeSync.getOffset();
         
         return NextResponse.json({
           success: true,
           action: 'adjust',
-          message: `Đã điều chỉnh offset từ ${oldOffset}ms thành ${newOffset}ms`,
+          message: `Đã điều chỉnh offset từ ${oldOffset}ms thành ${adjustedOffset}ms`,
           oldOffset,
-          newOffset,
+          newOffset: adjustedOffset,
           adjustment
         });
         

@@ -21,8 +21,6 @@ export async function PATCH(req: NextRequest) {
       apiKey,
       apiSecret,
       httpBase: useTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
-      recvWindow: 120000, // Tăng lên 120 giây
-      timeout: 30000,
       // Sử dụng custom getTime function để đảm bảo timestamp chính xác
       getTime: () => {
         const now = Date.now();
@@ -57,8 +55,6 @@ export async function PATCH(req: NextRequest) {
             apiKey,
             apiSecret,
             httpBase: useTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
-            recvWindow: 120000,
-            timeout: 30000,
             // Sử dụng custom getTime function để đảm bảo timestamp chính xác
             getTime: () => {
               const now = Date.now();
