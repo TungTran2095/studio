@@ -1758,27 +1758,23 @@ export class BotExecutor {
         asset: asset
       });
 
-      // 1. Tính toán fees ước tính
-      const estimatedFee = await this.calculateEstimatedFees(asset, price, balance);
-      
-      // 2. Tính toán minimum buffer dựa trên precision
+      // 1. Tính toán minimum buffer dựa trên precision
       const precisionBuffer = this.calculatePrecisionBuffer(asset, balance);
       
-      // 3. Tính toán network latency buffer
+      // 2. Tính toán network latency buffer
       const networkBuffer = this.calculateNetworkBuffer(asset, balance);
       
-      // 4. Tính toán total buffer
-      const totalBuffer = estimatedFee + precisionBuffer + networkBuffer;
+      // 3. Tính toán total buffer (KHÔNG trừ fee vì Binance tự khấu trừ)
+      const totalBuffer = precisionBuffer + networkBuffer;
       
-      // 5. Smart calculation: sử dụng 100% nhưng trừ đi buffer
+      // 4. Smart calculation: sử dụng 100% nhưng trừ đi buffer cần thiết
       const smartBalance = Math.max(0, balance - totalBuffer);
       
-      // 6. Đảm bảo không vượt quá 100% (fallback safety)
+      // 5. Đảm bảo không vượt quá 100% (fallback safety)
       const finalBalance = Math.min(smartBalance, balance * 1.0); // 100% max để tối đa hóa hiệu quả
       
       console.log(`[BotExecutor] 🧠 Smart balance breakdown:`, {
         originalBalance: balance,
-        estimatedFee: estimatedFee,
         precisionBuffer: precisionBuffer,
         networkBuffer: networkBuffer,
         totalBuffer: totalBuffer,
@@ -1796,23 +1792,9 @@ export class BotExecutor {
     }
   }
 
-  // Tính toán fees ước tính
+  // (Deprecated) Ước tính phí - không còn sử dụng vì Binance tự khấu trừ
   private async calculateEstimatedFees(asset: string, price: number, quantity: number): Promise<number> {
-    try {
-      // Binance fees: 0.1% cho spot trading
-      const feeRate = 0.001; // 0.1%
-      
-      if (asset === 'USDT') {
-        // BUY: fee tính bằng USDT
-        return quantity * feeRate;
-      } else {
-        // SELL: fee tính bằng asset (BTC)
-        return quantity * feeRate;
-      }
-    } catch (error) {
-      console.error(`[BotExecutor] Error calculating estimated fees:`, error);
-      return 0.001; // Fallback fee
-    }
+    return 0;
   }
 
   // Tính toán precision buffer

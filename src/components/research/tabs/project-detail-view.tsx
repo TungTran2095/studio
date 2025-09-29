@@ -5,93 +5,356 @@ import MonteCarloHistogram from '@/components/MonteCarloHistogram';
 import MonteCarloProfitSimulation from '@/components/MonteCarloProfitSimulation';
 import { useToast } from '@/hooks/use-toast';
 
+// Helper function để tìm dữ liệu chỉ số tại thời điểm cụ thể
+function findIndicatorDataAtTime(indicators: any, tradeTime: any, tradeIndex?: number): any {
+  if (!indicators || !tradeTime) return {};
+  
+  const indicatorData: any = {};
+  
+  // Xác định root chứa mảng chỉ số: có thể là indicators hoặc indicators.indicators
+  const dataRoot = indicators?.indicators && typeof indicators.indicators === 'object'
+    ? indicators.indicators
+    : indicators;
 
-// Helper functions để tạo text signal dựa trên chiến lược
-function getBuySignalText(experiment: any, trade: any): string {
+  // Chuyển đổi tradeTime thành timestamp
+  let targetTimestamp: number;
+  if (typeof tradeTime === 'number') {
+    targetTimestamp = tradeTime;
+  } else if (typeof tradeTime === 'string') {
+    targetTimestamp = new Date(tradeTime).getTime();
+  } else {
+    return {};
+  }
+  
+  // Lấy mảng timestamps (có thể nằm ở root ngoài hoặc trong nhánh indicators)
+  const timestampsArray = Array.isArray(indicators?.timestamps)
+    ? indicators.timestamps
+    : (Array.isArray(indicators?.indicators?.timestamps) ? indicators.indicators.timestamps : undefined);
+
+  // Tìm index trong timestamps array
+  let dataIndex = -1;
+  if (timestampsArray) {
+    let minDiff = Infinity;
+    for (let i = 0; i < timestampsArray.length; i++) {
+      const timestamp = timestampsArray[i];
+      if (timestamp !== null && timestamp !== undefined) {
+        const diff = Math.abs(timestamp - targetTimestamp);
+        if (diff < minDiff) {
+          minDiff = diff;
+          dataIndex = i;
+        }
+      }
+    }
+  }
+  
+  // Nếu không tìm thấy timestamp, sử dụng tradeIndex
+  if (dataIndex === -1 && tradeIndex !== undefined) {
+    dataIndex = tradeIndex;
+  }
+  
+  // Duyệt qua các loại chỉ số ở dataRoot
+  for (const [indicatorType, data] of Object.entries(dataRoot)) {
+    if (Array.isArray(data) && indicatorType !== 'timestamps' && indicatorType !== 'close_prices') {
+      if (dataIndex >= 0 && dataIndex < data.length) {
+        const value = data[dataIndex];
+        if (value !== null && value !== undefined) {
+          indicatorData[indicatorType] = { value };
+        }
+      } else {
+        for (let i = data.length - 1; i >= 0; i--) {
+          if (data[i] !== null && data[i] !== undefined) {
+            indicatorData[indicatorType] = { value: data[i] };
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  return indicatorData;
+}
+
+// Helper functions để tạo text signal dựa trên chiến lược với chi tiết chỉ số kỹ thuật
+function getBuySignalText(experiment: any, trade: any, tradeIndex?: number): string {
   if (!experiment?.config?.strategy?.type) {
     return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
   }
 
   const strategyType = experiment.config.strategy.type;
   const params = experiment.config.strategy.parameters || {};
+  const currentPrice = trade.entry_price || trade.price;
+  
+  // Lấy dữ liệu chỉ số từ cột indicators của experiment
+  const indicators = experiment.indicators || {};
+  const tradeTime = trade.entry_time || trade.entryTime || trade.open_time;
+  
+  // Tìm dữ liệu chỉ số tại thời điểm trade
+  const indicatorData = findIndicatorDataAtTime(indicators, tradeTime, tradeIndex);
+  
+  // Thêm thông tin về thời gian signal
+  const signalTime = tradeTime ? new Date(tradeTime).toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }) : '';
+  
+  // Thêm thông tin về độ mạnh signal
+  const getSignalStrength = (value: number, threshold: number, isOversold: boolean = true): string => {
+    if (isOversold) {
+      const strength = Math.abs((threshold - value) / threshold * 100);
+      if (strength > 20) return 'Mạnh';
+      if (strength > 10) return 'Trung bình';
+      return 'Yếu';
+    } else {
+      const strength = Math.abs((value - threshold) / threshold * 100);
+      if (strength > 20) return 'Mạnh';
+      if (strength > 10) return 'Trung bình';
+      return 'Yếu';
+    }
+  };
 
   switch (strategyType) {
     case 'rsi':
-      // Lấy giá trị RSI thực tế tại thời điểm mua
-      const buyRsiValue = trade.entry_rsi || trade.rsi_value || trade.indicator_value;
+      // Lấy giá trị RSI từ indicators data
+      const buyRsiValue = indicatorData.rsi?.value || indicatorData.RSI?.value;
       if (buyRsiValue !== undefined && buyRsiValue !== null) {
-        return `RSI = ${buyRsiValue.toFixed(2)} (Quá bán)`;
+        const threshold = params.oversold || 30;
+        const strength = getSignalStrength(buyRsiValue, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `RSI: ${buyRsiValue.toFixed(2)} < ${threshold} (Quá bán - ${strength})${timeInfo}`;
       }
       return `RSI < ${params.oversold || 30} (Quá bán)`;
+    
     case 'macd':
+      const macdLine = indicatorData.macd?.value || indicatorData.MACD?.value;
+      const signalLine = indicatorData.macd_signal?.value || indicatorData.signal?.value;
+      const histogram = indicatorData.macd_histogram?.value || indicatorData.histogram?.value;
+      if (macdLine !== undefined && signalLine !== undefined) {
+        const diff = macdLine - signalLine;
+        const strength = Math.abs(diff) > 0.01 ? 'Mạnh' : Math.abs(diff) > 0.005 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const histInfo = histogram !== undefined ? `, Hist: ${histogram.toFixed(4)}` : '';
+        return `MACD(${macdLine.toFixed(4)}) > Signal(${signalLine.toFixed(4)}) - ${strength}${histInfo}${timeInfo}`;
+      }
       return `MACD cắt lên Signal`;
+    
     case 'ma_crossover':
+      const fastMA = indicatorData.fast_ma?.value || indicatorData.ma_fast?.value;
+      const slowMA = indicatorData.slow_ma?.value || indicatorData.ma_slow?.value;
+      if (fastMA !== undefined && slowMA !== undefined) {
+        const diff = fastMA - slowMA;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `MA${params.fastPeriod || 10}(${fastMA.toFixed(2)}) > MA${params.slowPeriod || 20}(${slowMA.toFixed(2)}) - ${strength}${timeInfo}`;
+      }
       return `MA${params.fastPeriod || 10} cắt lên MA${params.slowPeriod || 20}`;
+    
     case 'bollinger_bands':
+      const bbUpper = indicatorData.bb_upper?.value || indicatorData.upper?.value;
+      const bbMiddle = indicatorData.bb_middle?.value || indicatorData.middle?.value;
+      const bbLower = indicatorData.bb_lower?.value || indicatorData.lower?.value;
+      if (bbLower !== undefined && currentPrice !== undefined) {
+        const deviation = ((bbLower - currentPrice) / bbLower * 100);
+        const strength = Math.abs(deviation) > 2 ? 'Mạnh' : Math.abs(deviation) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const midInfo = bbMiddle !== undefined ? `, BB Mid: ${bbMiddle.toFixed(2)}` : '';
+        return `Giá(${currentPrice.toFixed(2)}) < BB Lower(${bbLower.toFixed(2)}) - ${strength}${midInfo}${timeInfo}`;
+      }
       return `Giá chạm dải dưới BB`;
+    
     case 'moving_average':
+      const maValue = indicatorData.ma?.value || indicatorData.moving_average?.value;
+      if (maValue !== undefined && currentPrice !== undefined) {
+        const diff = currentPrice - maValue;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) > MA${params.period || 20}(${maValue.toFixed(2)}) - ${strength}${timeInfo}`;
+      }
       return `Giá > MA${params.period || 20}`;
+    
     case 'momentum':
+      const momentumValue = indicatorData.momentum?.value;
+      if (momentumValue !== undefined) {
+        const strength = Math.abs(momentumValue) > 5 ? 'Mạnh' : Math.abs(momentumValue) > 2 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Momentum: ${momentumValue.toFixed(2)}% > 2% - ${strength}${timeInfo}`;
+      }
       return `Momentum tăng > 2%`;
+    
     case 'mean_reversion':
+      const smaValue = indicatorData.sma?.value || indicatorData.simple_moving_average?.value;
+      if (smaValue !== undefined && currentPrice !== undefined) {
+        const deviation = ((currentPrice - smaValue) / smaValue * 100);
+        const strength = Math.abs(deviation) > 5 ? 'Mạnh' : Math.abs(deviation) > 3 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) < SMA${params.period || 20}(${smaValue.toFixed(2)}) - ${deviation.toFixed(1)}% (${strength})${timeInfo}`;
+      }
       return `Giá < SMA${params.period || 20} - 3%`;
+    
     case 'stochastic':
-      const buyStochK = trade.entry_stoch_k || trade.stoch_k;
-      const buyStochD = trade.entry_stoch_d || trade.stoch_d;
+      const buyStochK = indicatorData.stoch_k?.value || indicatorData.stochastic_k?.value;
+      const buyStochD = indicatorData.stoch_d?.value || indicatorData.stochastic_d?.value;
       if (buyStochK !== undefined && buyStochD !== undefined) {
-        return `Stoch K(${buyStochK.toFixed(1)}) > D(${buyStochD.toFixed(1)}) (Quá bán)`;
+        const threshold = params.oversold || 20;
+        const strength = getSignalStrength(buyStochK, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Stoch K(${buyStochK.toFixed(1)}) > D(${buyStochD.toFixed(1)}) & K < ${threshold} (${strength})${timeInfo}`;
       }
       return `Stoch < ${params.oversold || 20} (Quá bán)`;
+    
     case 'williams_r':
-      const buyWilliamsR = trade.entry_williams_r || trade.williams_r;
+      const buyWilliamsR = indicatorData.williams_r?.value || indicatorData.williams?.value;
       if (buyWilliamsR !== undefined) {
-        return `Williams %R = ${buyWilliamsR.toFixed(1)} (Quá bán)`;
+        const threshold = params.oversold || -80;
+        const strength = getSignalStrength(buyWilliamsR, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Williams %R: ${buyWilliamsR.toFixed(1)} < ${threshold} (${strength})${timeInfo}`;
       }
       return `Williams %R < ${params.oversold || -80} (Quá bán)`;
+    
     case 'adx':
-      const buyAdx = trade.entry_adx || trade.adx;
+      const buyAdx = indicatorData.adx?.value;
+      const buyDiPlus = indicatorData.di_plus?.value || indicatorData.plus_di?.value;
+      const buyDiMinus = indicatorData.di_minus?.value || indicatorData.minus_di?.value;
       if (buyAdx !== undefined) {
-        return `ADX = ${buyAdx.toFixed(1)} (Xu hướng mạnh)`;
+        const threshold = params.adxThreshold || 25;
+        const strength = buyAdx > 40 ? 'Mạnh' : buyAdx > 30 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        let result = `ADX: ${buyAdx.toFixed(1)} > ${threshold} (${strength})`;
+        if (buyDiPlus !== undefined && buyDiMinus !== undefined) {
+          result += `, +DI(${buyDiPlus.toFixed(1)}) > -DI(${buyDiMinus.toFixed(1)})`;
+        }
+        return result + timeInfo;
       }
       return `ADX > ${params.adxThreshold || 25} (Xu hướng mạnh)`;
+    
     case 'ichimoku':
-      const buyTenkan = trade.entry_ichimoku_tenkan || trade.ichimoku_tenkan;
-      const buyKijun = trade.entry_ichimoku_kijun || trade.ichimoku_kijun;
+      // Lấy dữ liệu Ichimoku từ indicators với cấu trúc array
+      const buyTenkan = indicatorData.tenkan?.value || indicatorData.tenkan_sen?.value;
+      const buyKijun = indicatorData.kijun?.value || indicatorData.kijun_sen?.value;
+      const buySenkouA = indicatorData.senkou_a?.value || indicatorData.senkou_span_a?.value;
+      const buySenkouB = indicatorData.senkou_b?.value || indicatorData.senkou_span_b?.value;
+      const buyChikou = indicatorData.chikou?.value || indicatorData.chikou_span?.value;
+      // Lấy dữ liệu trước đó để kiểm tra giao cắt
+      const prevIndicatorData = findIndicatorDataAtTime(indicators, tradeTime, (tradeIndex ?? 0) - 1);
+      const prevTenkan = prevIndicatorData.tenkan?.value || prevIndicatorData.tenkan_sen?.value;
+      const prevKijun = prevIndicatorData.kijun?.value || prevIndicatorData.kijun_sen?.value;
+      
       if (buyTenkan !== undefined && buyKijun !== undefined) {
-        return `Tenkan(${buyTenkan.toFixed(2)}) > Kijun(${buyKijun.toFixed(2)})`;
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const priceAboveCloud = (buySenkouA !== undefined && buySenkouB !== undefined && currentPrice !== undefined)
+          ? currentPrice > Math.max(buySenkouA, buySenkouB)
+          : undefined;
+        const crossUp = prevTenkan !== undefined && prevKijun !== undefined
+          ? (buyTenkan > buyKijun && prevTenkan <= prevKijun)
+          : (buyTenkan > buyKijun);
+        const chikouBull = (buyChikou !== undefined && currentPrice !== undefined)
+          ? buyChikou > currentPrice
+          : undefined;
+
+        const cloudMark = priceAboveCloud === undefined ? '?' : (priceAboveCloud ? '✓' : '✗');
+        const crossMark = crossUp ? '✓' : '✗';
+        const chikouMark = chikouBull === undefined ? '?' : (chikouBull ? '✓' : '✗');
+
+        const details: string[] = [];
+        details.push(`Tenkan ${buyTenkan.toFixed(2)} / Kijun ${buyKijun.toFixed(2)}`);
+        if (buySenkouA !== undefined && buySenkouB !== undefined) {
+          details.push(`Cloud A/B ${buySenkouA.toFixed(2)}/${buySenkouB.toFixed(2)}`);
+        }
+        if (currentPrice !== undefined) {
+          details.push(`Giá ${currentPrice.toFixed(2)}`);
+        }
+
+        return `Ichimoku: [Cloud ${cloudMark}] [TK↑ ${crossMark}] [Chikou ${chikouMark}] — ${details.join(', ')}${timeInfo}`;
       }
-      return `Tenkan cắt lên Kijun`;
+      return `Ichimoku: thiếu dữ liệu Tenkan/Kijun`;
+    
     case 'parabolic_sar':
-      const buySar = trade.entry_parabolic_sar || trade.parabolic_sar;
-      if (buySar !== undefined) {
-        return `Giá > SAR(${buySar.toFixed(2)})`;
+      const buySar = indicatorData.parabolic_sar?.value || indicatorData.sar?.value;
+      if (buySar !== undefined && currentPrice !== undefined) {
+        const diff = currentPrice - buySar;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) > SAR(${buySar.toFixed(2)}) - ${strength}${timeInfo}`;
       }
       return `Giá > Parabolic SAR`;
+    
     case 'keltner_channel':
-      const buyKcLower = trade.entry_keltner_lower || trade.keltner_lower;
-      if (buyKcLower !== undefined) {
-        return `Giá < KC Lower(${buyKcLower.toFixed(2)})`;
+      const buyKcUpper = indicatorData.keltner_upper?.value || indicatorData.kc_upper?.value;
+      const buyKcMiddle = indicatorData.keltner_middle?.value || indicatorData.kc_middle?.value;
+      const buyKcLower = indicatorData.keltner_lower?.value || indicatorData.kc_lower?.value;
+      if (buyKcLower !== undefined && currentPrice !== undefined) {
+        const deviation = ((buyKcLower - currentPrice) / buyKcLower * 100);
+        const strength = Math.abs(deviation) > 2 ? 'Mạnh' : Math.abs(deviation) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const midInfo = buyKcMiddle !== undefined ? `, KC Mid: ${buyKcMiddle.toFixed(2)}` : '';
+        return `Giá(${currentPrice.toFixed(2)}) < KC Lower(${buyKcLower.toFixed(2)}) - ${strength}${midInfo}${timeInfo}`;
       }
       return `Giá < Keltner Channel Lower`;
+    
     case 'vwap':
-      const buyVwap = trade.entry_vwap || trade.vwap;
-      if (buyVwap !== undefined) {
-        return `Giá > VWAP(${buyVwap.toFixed(2)})`;
+      const buyVwap = indicatorData.vwap?.value;
+      if (buyVwap !== undefined && currentPrice !== undefined) {
+        const diff = currentPrice - buyVwap;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) > VWAP(${buyVwap.toFixed(2)}) - ${strength}${timeInfo}`;
       }
       return `Giá > VWAP`;
+    
+    case 'cci':
+      const buyCci = indicatorData.cci?.value;
+      if (buyCci !== undefined) {
+        const threshold = params.oversold || -100;
+        const strength = getSignalStrength(buyCci, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `CCI: ${buyCci.toFixed(1)} < ${threshold} (${strength})${timeInfo}`;
+      }
+      return `CCI < ${params.oversold || -100} (Quá bán)`;
+    
+    case 'mfi':
+      const buyMfi = indicatorData.mfi?.value;
+      if (buyMfi !== undefined) {
+        const threshold = params.oversold || 20;
+        const strength = getSignalStrength(buyMfi, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `MFI: ${buyMfi.toFixed(1)} < ${threshold} (${strength})${timeInfo}`;
+      }
+      return `MFI < ${params.oversold || 20} (Quá bán)`;
+    
     default:
       return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
   }
 }
 
-function getSellSignalText(experiment: any, trade: any): string {
+function getSellSignalText(experiment: any, trade: any, tradeIndex?: number): string {
   // Ưu tiên hiển thị exit_reason từ backend nếu có
   if (trade.exit_reason) {
     switch (trade.exit_reason) {
       case 'stoploss':
-        return 'Stoploss';
+        const stopLossPrice = trade.stop_loss_price || trade.stopLossPrice;
+        const stopLossTime = trade.exit_time ? new Date(trade.exit_time).toLocaleString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit', 
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : '';
+        const timeInfo = stopLossTime ? ` [${stopLossTime}]` : '';
+        return stopLossPrice ? `Stoploss @ ${stopLossPrice.toFixed(2)}${timeInfo}` : `Stoploss${timeInfo}`;
       case 'take_profit':
-        return 'Take Profit';
+        const takeProfitPrice = trade.take_profit_price || trade.takeProfitPrice;
+        const takeProfitTime = trade.exit_time ? new Date(trade.exit_time).toLocaleString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit', 
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : '';
+        const timeInfo2 = takeProfitTime ? ` [${takeProfitTime}]` : '';
+        return takeProfitPrice ? `Take Profit @ ${takeProfitPrice.toFixed(2)}${timeInfo2}` : `Take Profit${timeInfo2}`;
       case 'signal':
         // Nếu là signal, hiển thị theo strategy type
         break;
@@ -106,71 +369,235 @@ function getSellSignalText(experiment: any, trade: any): string {
 
   const strategyType = experiment.config.strategy.type;
   const params = experiment.config.strategy.parameters || {};
+  const currentPrice = trade.exit_price || trade.price;
+  
+  // Lấy dữ liệu chỉ số từ cột indicators của experiment
+  const indicators = experiment.indicators || {};
+  const tradeTime = trade.exit_time || trade.exitTime || trade.close_time;
+  
+  // Tìm dữ liệu chỉ số tại thời điểm trade
+  const indicatorData = findIndicatorDataAtTime(indicators, tradeTime, tradeIndex);
+  
+  // Thêm thông tin về thời gian signal
+  const signalTime = tradeTime ? new Date(tradeTime).toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }) : '';
+  
+  // Thêm thông tin về độ mạnh signal cho sell
+  const getSellSignalStrength = (value: number, threshold: number, isOverbought: boolean = true): string => {
+    if (isOverbought) {
+      const strength = Math.abs((value - threshold) / threshold * 100);
+      if (strength > 20) return 'Mạnh';
+      if (strength > 10) return 'Trung bình';
+      return 'Yếu';
+    } else {
+      const strength = Math.abs((threshold - value) / threshold * 100);
+      if (strength > 20) return 'Mạnh';
+      if (strength > 10) return 'Trung bình';
+      return 'Yếu';
+    }
+  };
 
   switch (strategyType) {
     case 'rsi':
-      // Lấy giá trị RSI thực tế tại thời điểm bán
-      const sellRsiValue = trade.exit_rsi || trade.rsi_value || trade.indicator_value;
+      // Lấy giá trị RSI từ indicators data
+      const sellRsiValue = indicatorData.rsi?.value || indicatorData.RSI?.value;
       if (sellRsiValue !== undefined && sellRsiValue !== null) {
-        return `RSI = ${sellRsiValue.toFixed(2)} (Quá mua)`;
+        const threshold = params.overbought || 70;
+        const strength = getSellSignalStrength(sellRsiValue, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `RSI: ${sellRsiValue.toFixed(2)} > ${threshold} (Quá mua - ${strength})${timeInfo}`;
       }
       return `RSI > ${params.overbought || 70} (Quá mua)`;
     case 'macd':
+      const sellMacdLine = indicatorData.macd?.value || indicatorData.MACD?.value;
+      const sellSignalLine = indicatorData.macd_signal?.value || indicatorData.signal?.value;
+      const sellHistogram = indicatorData.macd_histogram?.value || indicatorData.histogram?.value;
+      if (sellMacdLine !== undefined && sellSignalLine !== undefined) {
+        const diff = sellSignalLine - sellMacdLine;
+        const strength = Math.abs(diff) > 0.01 ? 'Mạnh' : Math.abs(diff) > 0.005 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const histInfo = sellHistogram !== undefined ? `, Hist: ${sellHistogram.toFixed(4)}` : '';
+        return `MACD(${sellMacdLine.toFixed(4)}) < Signal(${sellSignalLine.toFixed(4)}) - ${strength}${histInfo}${timeInfo}`;
+      }
       return `MACD cắt xuống Signal`;
     case 'ma_crossover':
+      const sellFastMA = indicatorData.fast_ma?.value || indicatorData.ma_fast?.value;
+      const sellSlowMA = indicatorData.slow_ma?.value || indicatorData.ma_slow?.value;
+      if (sellFastMA !== undefined && sellSlowMA !== undefined) {
+        const diff = sellSlowMA - sellFastMA;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `MA${params.fastPeriod || 10}(${sellFastMA.toFixed(2)}) < MA${params.slowPeriod || 20}(${sellSlowMA.toFixed(2)}) - ${strength}${timeInfo}`;
+      }
       return `MA${params.fastPeriod || 10} cắt xuống MA${params.slowPeriod || 20}`;
     case 'bollinger_bands':
+      const sellBbUpper = indicatorData.bb_upper?.value || indicatorData.upper?.value;
+      const sellBbMiddle = indicatorData.bb_middle?.value || indicatorData.middle?.value;
+      const sellBbLower = indicatorData.bb_lower?.value || indicatorData.lower?.value;
+      if (sellBbUpper !== undefined && currentPrice !== undefined) {
+        const deviation = ((currentPrice - sellBbUpper) / sellBbUpper * 100);
+        const strength = Math.abs(deviation) > 2 ? 'Mạnh' : Math.abs(deviation) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const midInfo = sellBbMiddle !== undefined ? `, BB Mid: ${sellBbMiddle.toFixed(2)}` : '';
+        return `Giá(${currentPrice.toFixed(2)}) > BB Upper(${sellBbUpper.toFixed(2)}) - ${strength}${midInfo}${timeInfo}`;
+      }
       return `Giá chạm dải trên BB`;
     case 'moving_average':
+      const sellMaValue = indicatorData.ma?.value || indicatorData.moving_average?.value;
+      if (sellMaValue !== undefined && currentPrice !== undefined) {
+        const diff = sellMaValue - currentPrice;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) < MA${params.period || 20}(${sellMaValue.toFixed(2)}) - ${strength}${timeInfo}`;
+      }
       return `Giá < MA${params.period || 20}`;
     case 'momentum':
+      const sellMomentumValue = indicatorData.momentum?.value;
+      if (sellMomentumValue !== undefined) {
+        const strength = Math.abs(sellMomentumValue) > 5 ? 'Mạnh' : Math.abs(sellMomentumValue) > 2 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Momentum: ${sellMomentumValue.toFixed(2)}% < 1% - ${strength}${timeInfo}`;
+      }
       return `Momentum giảm > 1%`;
     case 'mean_reversion':
+      const sellSmaValue = indicatorData.sma?.value || indicatorData.simple_moving_average?.value;
+      if (sellSmaValue !== undefined && currentPrice !== undefined) {
+        const deviation = ((currentPrice - sellSmaValue) / sellSmaValue * 100);
+        const strength = Math.abs(deviation) > 5 ? 'Mạnh' : Math.abs(deviation) > 3 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) > SMA${params.period || 20}(${sellSmaValue.toFixed(2)}) + ${deviation.toFixed(1)}% (${strength})${timeInfo}`;
+      }
       return `Giá > SMA${params.period || 20}`;
     case 'stochastic':
-      const sellStochK = trade.exit_stoch_k || trade.stoch_k;
-      const sellStochD = trade.exit_stoch_d || trade.stoch_d;
+      const sellStochK = indicatorData.stoch_k?.value || indicatorData.stochastic_k?.value;
+      const sellStochD = indicatorData.stoch_d?.value || indicatorData.stochastic_d?.value;
       if (sellStochK !== undefined && sellStochD !== undefined) {
-        return `Stoch K(${sellStochK.toFixed(1)}) < D(${sellStochD.toFixed(1)}) (Quá mua)`;
+        const threshold = params.overbought || 80;
+        const strength = getSellSignalStrength(sellStochK, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Stoch K(${sellStochK.toFixed(1)}) < D(${sellStochD.toFixed(1)}) & K > ${threshold} (${strength})${timeInfo}`;
       }
       return `Stoch > ${params.overbought || 80} (Quá mua)`;
     case 'williams_r':
-      const sellWilliamsR = trade.exit_williams_r || trade.williams_r;
+      const sellWilliamsR = indicatorData.williams_r?.value || indicatorData.williams?.value;
       if (sellWilliamsR !== undefined) {
-        return `Williams %R = ${sellWilliamsR.toFixed(1)} (Quá mua)`;
+        const threshold = params.overbought || -20;
+        const strength = getSellSignalStrength(sellWilliamsR, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Williams %R: ${sellWilliamsR.toFixed(1)} > ${threshold} (${strength})${timeInfo}`;
       }
-      return `Williams %R > ${params.oversold || -20} (Quá mua)`;
+      return `Williams %R > ${params.overbought || -20} (Quá mua)`;
     case 'adx':
-      const sellAdx = trade.exit_adx || trade.adx;
+      const sellAdx = indicatorData.adx?.value;
+      const sellDiPlus = indicatorData.di_plus?.value || indicatorData.plus_di?.value;
+      const sellDiMinus = indicatorData.di_minus?.value || indicatorData.minus_di?.value;
       if (sellAdx !== undefined) {
-        return `ADX = ${sellAdx.toFixed(1)} (Xu hướng yếu)`;
+        const threshold = params.adxThreshold || 25;
+        const strength = sellAdx < 15 ? 'Mạnh' : sellAdx < 20 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        let result = `ADX: ${sellAdx.toFixed(1)} < ${threshold} (${strength})`;
+        if (sellDiPlus !== undefined && sellDiMinus !== undefined) {
+          result += `, +DI(${sellDiPlus.toFixed(1)}) < -DI(${sellDiMinus.toFixed(1)})`;
+        }
+        return result + timeInfo;
       }
       return `ADX < ${params.adxThreshold || 25} (Xu hướng yếu)`;
     case 'ichimoku':
-      const sellTenkan = trade.exit_ichimoku_tenkan || trade.ichimoku_tenkan;
-      const sellKijun = trade.exit_ichimoku_kijun || trade.ichimoku_kijun;
+      // Lấy dữ liệu Ichimoku từ indicators với cấu trúc array
+      const sellTenkan = indicatorData.tenkan?.value || indicatorData.tenkan_sen?.value;
+      const sellKijun = indicatorData.kijun?.value || indicatorData.kijun_sen?.value;
+      const sellSenkouA = indicatorData.senkou_a?.value || indicatorData.senkou_span_a?.value;
+      const sellSenkouB = indicatorData.senkou_b?.value || indicatorData.senkou_span_b?.value;
+      const sellChikou = indicatorData.chikou?.value || indicatorData.chikou_span?.value;
+      // Lấy dữ liệu trước đó để kiểm tra giao cắt
+      const prevSellIndicatorData = findIndicatorDataAtTime(indicators, tradeTime, (tradeIndex ?? 0) - 1);
+      const prevSellTenkan = prevSellIndicatorData.tenkan?.value || prevSellIndicatorData.tenkan_sen?.value;
+      const prevSellKijun = prevSellIndicatorData.kijun?.value || prevSellIndicatorData.kijun_sen?.value;
+      
       if (sellTenkan !== undefined && sellKijun !== undefined) {
-        return `Tenkan(${sellTenkan.toFixed(2)}) < Kijun(${sellKijun.toFixed(2)})`;
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const priceBelowCloud = (sellSenkouA !== undefined && sellSenkouB !== undefined && currentPrice !== undefined)
+          ? currentPrice < Math.min(sellSenkouA, sellSenkouB)
+          : undefined;
+        const crossDown = prevSellTenkan !== undefined && prevSellKijun !== undefined
+          ? (sellTenkan < sellKijun && prevSellTenkan >= prevSellKijun)
+          : (sellTenkan < sellKijun);
+        const chikouBear = (sellChikou !== undefined && currentPrice !== undefined)
+          ? sellChikou < currentPrice
+          : undefined;
+
+        const cloudMark = priceBelowCloud === undefined ? '?' : (priceBelowCloud ? '✓' : '✗');
+        const crossMark = crossDown ? '✓' : '✗';
+        const chikouMark = chikouBear === undefined ? '?' : (chikouBear ? '✓' : '✗');
+
+        const details: string[] = [];
+        details.push(`Tenkan ${sellTenkan.toFixed(2)} / Kijun ${sellKijun.toFixed(2)}`);
+        if (sellSenkouA !== undefined && sellSenkouB !== undefined) {
+          details.push(`Cloud A/B ${sellSenkouA.toFixed(2)}/${sellSenkouB.toFixed(2)}`);
+        }
+        if (currentPrice !== undefined) {
+          details.push(`Giá ${currentPrice.toFixed(2)}`);
+        }
+
+        return `Ichimoku: [Cloud ${cloudMark}] [TK↓ ${crossMark}] [Chikou ${chikouMark}] — ${details.join(', ')}${timeInfo}`;
       }
-      return `Tenkan cắt xuống Kijun`;
+      return `Ichimoku: thiếu dữ liệu Tenkan/Kijun`;
     case 'parabolic_sar':
-      const sellSar = trade.exit_parabolic_sar || trade.parabolic_sar;
-      if (sellSar !== undefined) {
-        return `Giá < SAR(${sellSar.toFixed(2)})`;
+      const sellSar = indicatorData.parabolic_sar?.value || indicatorData.sar?.value;
+      if (sellSar !== undefined && currentPrice !== undefined) {
+        const diff = sellSar - currentPrice;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) < SAR(${sellSar.toFixed(2)}) - ${strength}${timeInfo}`;
       }
       return `Giá < Parabolic SAR`;
     case 'keltner_channel':
-      const sellKcUpper = trade.exit_keltner_upper || trade.keltner_upper;
-      if (sellKcUpper !== undefined) {
-        return `Giá > KC Upper(${sellKcUpper.toFixed(2)})`;
+      const sellKcUpper = indicatorData.keltner_upper?.value || indicatorData.kc_upper?.value;
+      const sellKcMiddle = indicatorData.keltner_middle?.value || indicatorData.kc_middle?.value;
+      const sellKcLower = indicatorData.keltner_lower?.value || indicatorData.kc_lower?.value;
+      if (sellKcUpper !== undefined && currentPrice !== undefined) {
+        const deviation = ((currentPrice - sellKcUpper) / sellKcUpper * 100);
+        const strength = Math.abs(deviation) > 2 ? 'Mạnh' : Math.abs(deviation) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        const midInfo = sellKcMiddle !== undefined ? `, KC Mid: ${sellKcMiddle.toFixed(2)}` : '';
+        return `Giá(${currentPrice.toFixed(2)}) > KC Upper(${sellKcUpper.toFixed(2)}) - ${strength}${midInfo}${timeInfo}`;
       }
       return `Giá > Keltner Channel Upper`;
     case 'vwap':
-      const sellVwap = trade.exit_vwap || trade.vwap;
-      if (sellVwap !== undefined) {
-        return `Giá < VWAP(${sellVwap.toFixed(2)})`;
+      const sellVwap = indicatorData.vwap?.value;
+      if (sellVwap !== undefined && currentPrice !== undefined) {
+        const diff = sellVwap - currentPrice;
+        const strength = Math.abs(diff) > 2 ? 'Mạnh' : Math.abs(diff) > 1 ? 'Trung bình' : 'Yếu';
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `Giá(${currentPrice.toFixed(2)}) < VWAP(${sellVwap.toFixed(2)}) - ${strength}${timeInfo}`;
       }
       return `Giá < VWAP`;
+    
+    case 'cci':
+      const sellCci = indicatorData.cci?.value;
+      if (sellCci !== undefined) {
+        const threshold = params.overbought || 100;
+        const strength = getSellSignalStrength(sellCci, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `CCI: ${sellCci.toFixed(1)} > ${threshold} (${strength})${timeInfo}`;
+      }
+      return `CCI > ${params.overbought || 100} (Quá mua)`;
+    
+    case 'mfi':
+      const sellMfi = indicatorData.mfi?.value;
+      if (sellMfi !== undefined) {
+        const threshold = params.overbought || 80;
+        const strength = getSellSignalStrength(sellMfi, threshold, true);
+        const timeInfo = signalTime ? ` [${signalTime}]` : '';
+        return `MFI: ${sellMfi.toFixed(1)} > ${threshold} (${strength})${timeInfo}`;
+      }
+      return `MFI > ${params.overbought || 80} (Quá mua)`;
+    
     default:
       return trade.sell_signal || '-';
   }
@@ -205,6 +632,7 @@ function formatTradeTime(timeValue: any): string {
     return '-';
   }
 }
+
 
 // Hàm tính toán tỷ lệ lãi/lỗ net trung bình từ dữ liệu thực
 function calculateNetProfitRatios(trades: any[]) {
@@ -260,6 +688,71 @@ function calculateNetProfitRatios(trades: any[]) {
   console.log('🔍 Final results:', { avgWinNet, avgLossNet });
 
   return { avgWinNet, avgLossNet };
+}
+
+// Xuất CSV danh sách giao dịch
+function exportTradesToCSV(trades: any[], fileName: string = 'trades.csv') {
+  if (!Array.isArray(trades) || trades.length === 0) {
+    console.warn('No trades to export');
+    return;
+  }
+
+  const headers = [
+    'entry_time',
+    'exit_time',
+    'side',
+    'entry_price',
+    'exit_price',
+    'size',
+    'gross_profit',
+    'transaction_fee',
+    'net_profit',
+    'profit_ratio_percent'
+  ];
+
+  const escapeCsv = (value: any) => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  };
+
+  const rows = trades.map((t: any) => {
+    const entry = Number(t.entry_price);
+    const exit = Number(t.exit_price);
+    const size = Number(t.size);
+    const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+    const fee = (t.entry_fee || 0) + (t.exit_fee || 0);
+    const net = gross - fee;
+    const tradeValue = entry * size;
+    const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0;
+
+    return [
+      formatTradeTime(t.entry_time || t.entryTime || t.open_time),
+      formatTradeTime(t.exit_time || t.exitTime || t.close_time),
+      t.side || t.type || '-',
+      t.entry_price ?? '',
+      t.exit_price ?? '',
+      t.size ?? '',
+      gross.toFixed(2),
+      fee > 0 ? fee.toFixed(2) : '0',
+      net.toFixed(2),
+      profitRatio.toFixed(2)
+    ].map(escapeCsv).join(',');
+  });
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -5357,7 +5850,18 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                 {/* Hiển thị bảng trades nếu có */}
                                 {Array.isArray(resultObj.trades) && resultObj.trades.length > 0 ? (
                                   <div className="mb-6">
-                                    <h4 className="font-semibold mb-2">Danh sách giao dịch ({resultObj.trades.length} trades)</h4>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <h4 className="font-semibold">Danh sách giao dịch ({resultObj.trades.length} trades)</h4>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => exportTradesToCSV(resultObj.trades, `trades_${selectedExperiment?.id || 'export'}.csv`)}
+                                        className="gap-2"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                        Xuất CSV
+                                      </Button>
+                                    </div>
                                     <div className="overflow-x-auto max-h-[400px] overflow-y-auto border rounded">
                                       <table className="min-w-full text-xs">
                                         <thead className="sticky top-0 bg-muted border-b">
@@ -5366,9 +5870,25 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                             <th className="p-2 text-left">Thời gian ra</th>
                                             <th className="p-2 text-center">Loại</th>
                                             <th className="p-2 text-right">Giá vào</th>
+                                            {selectedExperiment?.config?.strategy?.type?.toString()?.toLowerCase() === 'ichimoku' ? (
+                                              <>
+                                                <th className="p-2 text-center">Mây (Buy)</th>
+                                                <th className="p-2 text-center">TK cross (Tenkan cắt Kijun) (Buy)</th>
+                                                <th className="p-2 text-center">Chikou (Buy)</th>
+                                              </>
+                                            ) : (
                                             <th className="p-2 text-center">Signal mua</th>
+                                            )}
                                             <th className="p-2 text-right">Giá ra</th>
+                                            {selectedExperiment?.config?.strategy?.type?.toString()?.toLowerCase() === 'ichimoku' ? (
+                                              <>
+                                                <th className="p-2 text-center">Mây (Sell)</th>
+                                                <th className="p-2 text-center">TK cross (Tenkan cắt Kijun) (Sell)</th>
+                                                <th className="p-2 text-center">Chikou (Sell)</th>
+                                              </>
+                                            ) : (
                                             <th className="p-2 text-center">Signal bán</th>
+                                            )}
                                             <th className="p-2 text-right">Khối lượng</th>
                                             <th className="p-2 text-right">Lợi nhuận (Gross)</th>
                                             <th className="p-2 text-right">Phí giao dịch</th>
@@ -5386,19 +5906,141 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                             const net = gross - fee;
                                             const tradeValue = entry * size; // Giá vào * Khối lượng
                                             const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0; // Tỷ lệ lợi nhuận (%)
+                                            // Tính các component Ichimoku (nếu có)
+                                            const isIchimoku = selectedExperiment?.config?.strategy?.type?.toString()?.toLowerCase() === 'ichimoku';
+                                            let buyCloud:boolean|undefined, buyCross:boolean|undefined, buyChikou:boolean|undefined;
+                                            let sellCloud:boolean|undefined, sellCross:boolean|undefined, sellChikou:boolean|undefined;
+                                            let buyCloudTitle:string|undefined, buyCrossTitle:string|undefined, buyChikouTitle:string|undefined;
+                                            let sellCloudTitle:string|undefined, sellCrossTitle:string|undefined, sellChikouTitle:string|undefined;
+                                            let buyCloudDetail:string|undefined, buyCrossDetail:string|undefined, buyChikouDetail:string|undefined;
+                                            let sellCloudDetail:string|undefined, sellCrossDetail:string|undefined, sellChikouDetail:string|undefined;
+                                            const fmt = (v: any, d: number = 2) => (v !== undefined && v !== null && isFinite(Number(v))) ? Number(v).toFixed(d) : '-';
+                                            if (isIchimoku) {
+                                              const indRoot: any = selectedExperiment.indicators || {};
+                                              const buyData = findIndicatorDataAtTime(indRoot, trade.entry_time || trade.entryTime || trade.open_time, idx);
+                                              const buyPrev = findIndicatorDataAtTime(indRoot, trade.entry_time || trade.entryTime || trade.open_time, idx - 1);
+                                              const buyTenkan = buyData.tenkan?.value ?? buyData.tenkan_sen?.value;
+                                              const buyKijun = buyData.kijun?.value ?? buyData.kijun_sen?.value;
+                                              const buyPrevTenkan = buyPrev.tenkan?.value ?? buyPrev.tenkan_sen?.value;
+                                              const buyPrevKijun = buyPrev.kijun?.value ?? buyPrev.kijun_sen?.value;
+                                              const buySenkouA = buyData.senkou_span_a?.value ?? buyData.senkou_a?.value;
+                                              const buySenkouB = buyData.senkou_span_b?.value ?? buyData.senkou_b?.value;
+                                              const buyChikouVal = buyData.chikou?.value ?? buyData.chikou_span?.value;
+                                              const buyPrice = Number(trade.entry_price);
+                                              buyCloudDetail = `P:${fmt(buyPrice)} A:${fmt(buySenkouA)} B:${fmt(buySenkouB)}`;
+                                              if (buySenkouA !== undefined && buySenkouB !== undefined && isFinite(buyPrice)) {
+                                                buyCloud = buyPrice > Math.max(buySenkouA, buySenkouB);
+                                                buyCloudTitle = `Giá: ${fmt(buyPrice)} | Senkou A: ${fmt(buySenkouA)} | Senkou B: ${fmt(buySenkouB)} | Trên mây: ${buyCloud ? 'Có' : 'Không'}`;
+                                              }
+                                              if (buyTenkan !== undefined && buyKijun !== undefined) {
+                                                if (buyPrevTenkan !== undefined && buyPrevKijun !== undefined) {
+                                                  buyCross = (buyTenkan > buyKijun) && (buyPrevTenkan <= buyPrevKijun);
+                                                  buyCrossTitle = `Tenkan: ${fmt(buyTenkan)} | Kijun: ${fmt(buyKijun)} | Trước đó Tenkan≤Kijun: ${buyPrevTenkan <= buyPrevKijun ? 'Có' : 'Không'} | Cross lên: ${buyCross ? 'Có' : 'Không'}`;
+                                                  buyCrossDetail = `T:${fmt(buyTenkan)} K:${fmt(buyKijun)} prev(T≤K):${buyPrevTenkan <= buyPrevKijun ? 'Y' : 'N'}`;
+                                                } else {
+                                                  buyCross = buyTenkan > buyKijun;
+                                                  buyCrossTitle = `Tenkan: ${fmt(buyTenkan)} | Kijun: ${fmt(buyKijun)} | Cross lên: ${buyCross ? 'Có' : 'Không'}`;
+                                                  buyCrossDetail = `T:${fmt(buyTenkan)} K:${fmt(buyKijun)}`;
+                                                }
+                                              }
+                                              buyChikouDetail = `C:${fmt(buyChikouVal)} P:${fmt(buyPrice)}`;
+                                              if (buyChikouVal !== undefined && isFinite(buyPrice)) {
+                                                buyChikou = buyChikouVal > buyPrice;
+                                                buyChikouTitle = `Chikou: ${fmt(buyChikouVal)} | Giá: ${fmt(buyPrice)} | Chikou>Giá: ${buyChikou ? 'Có' : 'Không'}`;
+                                              }
+
+                                              const sellData = findIndicatorDataAtTime(indRoot, trade.exit_time || trade.exitTime || trade.close_time, idx);
+                                              const sellPrev = findIndicatorDataAtTime(indRoot, trade.exit_time || trade.exitTime || trade.close_time, idx - 1);
+                                              const sellTenkanVal = sellData.tenkan?.value ?? sellData.tenkan_sen?.value;
+                                              const sellKijunVal = sellData.kijun?.value ?? sellData.kijun_sen?.value;
+                                              const sellPrevTenkanVal = sellPrev.tenkan?.value ?? sellPrev.tenkan_sen?.value;
+                                              const sellPrevKijunVal = sellPrev.kijun?.value ?? sellPrev.kijun_sen?.value;
+                                              const sellSenkouAVal = sellData.senkou_span_a?.value ?? sellData.senkou_a?.value;
+                                              const sellSenkouBVal = sellData.senkou_span_b?.value ?? sellData.senkou_b?.value;
+                                              const sellChikouVal = sellData.chikou?.value ?? sellData.chikou_span?.value;
+                                              const sellPrice = Number(trade.exit_price);
+                                              sellCloudDetail = `P:${fmt(sellPrice)} A:${fmt(sellSenkouAVal)} B:${fmt(sellSenkouBVal)}`;
+                                              if (sellSenkouAVal !== undefined && sellSenkouBVal !== undefined && isFinite(sellPrice)) {
+                                                sellCloud = sellPrice < Math.min(sellSenkouAVal, sellSenkouBVal);
+                                                sellCloudTitle = `Giá: ${fmt(sellPrice)} | Senkou A: ${fmt(sellSenkouAVal)} | Senkou B: ${fmt(sellSenkouBVal)} | Dưới mây: ${sellCloud ? 'Có' : 'Không'}`;
+                                              }
+                                              if (sellTenkanVal !== undefined && sellKijunVal !== undefined) {
+                                                if (sellPrevTenkanVal !== undefined && sellPrevKijunVal !== undefined) {
+                                                  sellCross = (sellTenkanVal < sellKijunVal) && (sellPrevTenkanVal >= sellPrevKijunVal);
+                                                  sellCrossTitle = `Tenkan: ${fmt(sellTenkanVal)} | Kijun: ${fmt(sellKijunVal)} | Trước đó Tenkan≥Kijun: ${sellPrevTenkanVal >= sellPrevKijunVal ? 'Có' : 'Không'} | Cross xuống: ${sellCross ? 'Có' : 'Không'}`;
+                                                  sellCrossDetail = `T:${fmt(sellTenkanVal)} K:${fmt(sellKijunVal)} prev(T≥K):${sellPrevTenkanVal >= sellPrevKijunVal ? 'Y' : 'N'}`;
+                                                } else {
+                                                  sellCross = sellTenkanVal < sellKijunVal;
+                                                  sellCrossTitle = `Tenkan: ${fmt(sellTenkanVal)} | Kijun: ${fmt(sellKijunVal)} | Cross xuống: ${sellCross ? 'Có' : 'Không'}`;
+                                                  sellCrossDetail = `T:${fmt(sellTenkanVal)} K:${fmt(sellKijunVal)}`;
+                                                }
+                                              }
+                                              sellChikouDetail = `C:${fmt(sellChikouVal)} P:${fmt(sellPrice)}`;
+                                              if (sellChikouVal !== undefined && isFinite(sellPrice)) {
+                                                sellChikou = sellChikouVal < sellPrice;
+                                                sellChikouTitle = `Chikou: ${fmt(sellChikouVal)} | Giá: ${fmt(sellPrice)} | Chikou<Giá: ${sellChikou ? 'Có' : 'Không'}`;
+                                              }
+                                            }
+
                                             return (
                                               <tr key={idx} className="border-b hover:bg-muted/30">
                                                 <td className="p-2">{formatTradeTime(trade.entry_time || trade.entryTime || trade.open_time)}</td>
                                                 <td className="p-2">{formatTradeTime(trade.exit_time || trade.exitTime || trade.close_time)}</td>
                                                 <td className="p-2 text-center">{trade.side || trade.type || '-'}</td>
                                                 <td className="p-2 text-right">{trade.entry_price !== undefined ? trade.entry_price : '-'}</td>
+                                                {isIchimoku ? (
+                                                  <>
+                                                    <td className="p-2 text-center text-xs" title={buyCloudTitle || "Giá so với mây Kumo (BUY)"}>
+                                                      <div className="leading-tight">
+                                                        {buyCloud === undefined ? '?' : (buyCloud ? '✓' : '✗')}
+                                                        {buyCloudDetail && <div className="text-[10px] text-muted-foreground mt-0.5">{buyCloudDetail}</div>}
+                                                      </div>
+                                                    </td>
+                                                    <td className="p-2 text-center text-xs" title={buyCrossTitle || "Tenkan cắt lên Kijun (BUY)"}>
+                                                      <div className="leading-tight">
+                                                        {buyCross === undefined ? '?' : (buyCross ? '✓' : '✗')}
+                                                        {buyCrossDetail && <div className="text-[10px] text-muted-foreground mt-0.5">{buyCrossDetail}</div>}
+                                                      </div>
+                                                    </td>
+                                                    <td className="p-2 text-center text-xs" title={buyChikouTitle || "Chikou xác nhận (BUY)"}>
+                                                      <div className="leading-tight">
+                                                        {buyChikou === undefined ? '?' : (buyChikou ? '✓' : '✗')}
+                                                        {buyChikouDetail && <div className="text-[10px] text-muted-foreground mt-0.5">{buyChikouDetail}</div>}
+                                                      </div>
+                                                    </td>
+                                                  </>
+                                                ) : (
                                                 <td className="p-2 text-center text-xs">
-                                                  {getBuySignalText(selectedExperiment, trade)}
+                                                  {getBuySignalText(selectedExperiment, trade, idx)}
                                                 </td>
+                                                )}
                                                 <td className="p-2 text-right">{trade.exit_price !== undefined ? trade.exit_price : '-'}</td>
+                                                {isIchimoku ? (
+                                                  <>
+                                                    <td className="p-2 text-center text-xs" title={sellCloudTitle || "Giá so với mây Kumo (SELL)"}>
+                                                      <div className="leading-tight">
+                                                        {sellCloud === undefined ? '?' : (sellCloud ? '✓' : '✗')}
+                                                        {sellCloudDetail && <div className="text-[10px] text-muted-foreground mt-0.5">{sellCloudDetail}</div>}
+                                                      </div>
+                                                    </td>
+                                                    <td className="p-2 text-center text-xs" title={sellCrossTitle || "Tenkan cắt xuống Kijun (SELL)"}>
+                                                      <div className="leading-tight">
+                                                        {sellCross === undefined ? '?' : (sellCross ? '✓' : '✗')}
+                                                        {sellCrossDetail && <div className="text-[10px] text-muted-foreground mt-0.5">{sellCrossDetail}</div>}
+                                                      </div>
+                                                    </td>
+                                                    <td className="p-2 text-center text-xs" title={sellChikouTitle || "Chikou xác nhận (SELL)"}>
+                                                      <div className="leading-tight">
+                                                        {sellChikou === undefined ? '?' : (sellChikou ? '✓' : '✗')}
+                                                        {sellChikouDetail && <div className="text-[10px] text-muted-foreground mt-0.5">{sellChikouDetail}</div>}
+                                                      </div>
+                                                    </td>
+                                                  </>
+                                                ) : (
                                                 <td className="p-2 text-center text-xs">
-                                                  {getSellSignalText(selectedExperiment, trade)}
+                                                  {getSellSignalText(selectedExperiment, trade, idx)}
                                                 </td>
+                                                )}
                                                 <td className="p-2 text-right">{trade.size !== undefined ? trade.size : '-'}</td>
                                                 <td className={`p-2 text-right font-semibold ${gross > 0 ? 'text-green-600' : gross < 0 ? 'text-red-600' : ''}`}>{gross.toFixed(2)}</td>
                                                 <td className="p-2 text-right">{fee > 0 ? fee.toFixed(2) : '-'}</td>
@@ -5410,7 +6052,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                         </tbody>
                                         <tfoot className="sticky bottom-0 bg-muted/70 border-t">
                                           <tr className="font-bold">
-                                            <td className="p-2 text-right" colSpan={8}>Tổng cộng</td>
+                                            <td className="p-2 text-right" colSpan={selectedExperiment?.config?.strategy?.type?.toString()?.toLowerCase() === 'ichimoku' ? 12 : 8}>Tổng cộng</td>
                                             <td className="p-2 text-right">
                                               {(() => {
                                                 const total = resultObj.trades.reduce((sum: number, t: any) => {
