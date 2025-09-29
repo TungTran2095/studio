@@ -156,12 +156,17 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                       >
                         <Eye className="h-4 w-4" />
                       </button>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap pt-1">
-                        {formatDistanceToNow(new Date(entry.timestamp), {
-                          addSuffix: true,
-                          locale: vi,
-                        })}
-                      </span>
+                      <div className="flex flex-col items-end text-xs text-muted-foreground">
+                        <span className="font-medium">
+                          {format(new Date(entry.timestamp), 'dd/MM/yyyy', { locale: vi })}
+                        </span>
+                        <span className="text-xs">
+                          {formatDistanceToNow(new Date(entry.timestamp), {
+                            addSuffix: true,
+                            locale: vi,
+                          })}
+                        </span>
+                      </div>
                     </div>
                   </div>
                    <div className="flex items-center flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -173,15 +178,23 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
                        </div>
                      )}
                      {entry.file_url && entry.file_name && (
-                        <a 
-                          href={entry.file_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                        >
-                          <Paperclip className="h-3 w-3" />
-                          <span>{entry.file_name}</span>
-                        </a>
+                       <div className="flex items-center gap-1 text-primary">
+                         <Paperclip className="h-3 w-3" />
+                         <div className="flex flex-wrap gap-1">
+                           {entry.file_name.split('|').map((fileName, index) => (
+                             <a 
+                               key={index}
+                               href={entry.file_url!.split('|')[index]} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="hover:underline text-xs"
+                             >
+                               {fileName}
+                               {index < entry.file_name!.split('|').length - 1 && ', '}
+                             </a>
+                           ))}
+                         </div>
+                       </div>
                      )}
                    </div>
                   <p className="text-muted-foreground text-sm">{entry.description}</p>

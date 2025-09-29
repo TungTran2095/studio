@@ -35,10 +35,10 @@ const formSchema = z.object({
   description: z.string().min(1, 'Chi tiết công việc không được để trống.'),
   startTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
   endTime: z.string().regex(timeRegex, 'Định dạng giờ không hợp lệ (HH:mm).'),
-  attachment: z
-    .custom<File>((val) => val instanceof File && val.size > 0, {
-      message: 'Vui lòng chọn tệp đính kèm.',
-    }),
+  attachments: z
+    .array(z.instanceof(File))
+    .min(1, 'Vui lòng chọn ít nhất một tệp đính kèm.')
+    .max(5, 'Tối đa 5 tệp đính kèm.'),
 });
 
 type WorkLogFormProps = {
@@ -58,7 +58,7 @@ export function WorkLogForm({ onAddEntry, userId, className }: WorkLogFormProps)
       description: '',
       startTime: '',
       endTime: '',
-      attachment: undefined,
+      attachments: [],
     },
   });
 
@@ -70,9 +70,12 @@ export function WorkLogForm({ onAddEntry, userId, className }: WorkLogFormProps)
       formData.append('startTime', values.startTime);
       formData.append('endTime', values.endTime);
       formData.append('userId', userId);
-      if (values.attachment) {
-        formData.append('attachment', values.attachment);
-      }
+      
+      // Append multiple files
+      values.attachments.forEach((file, index) => {
+        formData.append(`attachment_${index}`, file);
+      });
+      formData.append('attachmentCount', values.attachments.length.toString());
 
       const result = await submitWorkLog(formData);
 
@@ -106,7 +109,7 @@ export function WorkLogForm({ onAddEntry, userId, className }: WorkLogFormProps)
           Báo cáo công việc
         </CardTitle>
         <CardDescription>
-          Điền thông tin chi tiết công việc. AI sẽ tự động phân loại. Bạn có thể đính kèm một tệp nếu cần.
+          Điền thông tin chi tiết công việc. AI sẽ tự động phân loại. Bạn có thể đính kèm tối đa 5 tệp nếu cần.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -173,21 +176,36 @@ export function WorkLogForm({ onAddEntry, userId, className }: WorkLogFormProps)
             />
             <FormField
               control={form.control}
-              name="attachment"
+              name="attachments"
               render={({ field: { onChange, value, ...rest } }) => (
                 <FormItem>
-                  <FormLabel>Tệp đính kèm *</FormLabel>
+                  <FormLabel>Tệp đính kèm * (Tối đa 5 tệp)</FormLabel>
                   <FormControl>
                     <Input 
                       type="file" 
+                      multiple
                       disabled={isPending}
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        onChange(file);
+                        const files = Array.from(e.target.files || []);
+                        onChange(files);
                       }}
                       {...rest}
                     />
                   </FormControl>
+                  <div className="text-sm text-muted-foreground">
+                    {value && value.length > 0 && (
+                      <div className="mt-2">
+                        <p className="font-medium">Đã chọn {value.length} tệp:</p>
+                        <ul className="list-disc list-inside mt-1 space-y-1">
+                          {value.map((file, index) => (
+                            <li key={index} className="text-xs">
+                              {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}

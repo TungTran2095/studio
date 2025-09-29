@@ -9,7 +9,7 @@ import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Clock, Calendar as CalendarIcon, Eye } from 'lucide-react';
+import { Clock, Calendar as CalendarIcon, Eye, Paperclip } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -169,6 +169,12 @@ export function WorkCalendar({ entries }: WorkCalendarProps) {
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
                             <Clock className="h-3 w-3" /> {e.start_time} - {e.end_time}
+                            {e.file_url && e.file_name && (
+                              <div className="flex items-center gap-1 text-primary">
+                                <Paperclip className="h-3 w-3" />
+                                <span>{e.file_name.split('|').length} tệp</span>
+                              </div>
+                            )}
                           </div>
                           <div className="mt-2 text-sm text-muted-foreground">
                             {e.description}

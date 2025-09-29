@@ -40,7 +40,7 @@ export async function submitWorkLog(formData: FormData) {
     const userId = formData.get('userId') as string;
     const startTime = formData.get('startTime') as string;
     const endTime = formData.get('endTime') as string;
-    const attachment = formData.get('attachment') as File | null;
+    const attachmentCount = parseInt(formData.get('attachmentCount') as string) || 0;
 
     if (!title || !description || !userId || !startTime || !endTime) {
       throw new Error('Thông tin không đầy đủ.');
@@ -49,33 +49,38 @@ export async function submitWorkLog(formData: FormData) {
     // Call AI to classify the entry in parallel
     const classificationPromise = classifyWorkLogEntry({ title, description });
 
-    let fileUrl: string | undefined;
-    let fileName: string | undefined;
+    let fileUrls: string[] = [];
+    let fileNames: string[] = [];
 
-    if (attachment && attachment.size > 0) {
-      const safeName = sanitizeFileName(attachment.name);
-      const filePath = `public/${userId}/${Date.now()}_${safeName}`;
+    // Process multiple attachments
+    for (let i = 0; i < attachmentCount; i++) {
+      const attachment = formData.get(`attachment_${i}`) as File | null;
       
-      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-        .from('attachments')
-        .upload(filePath, attachment, {
-          cacheControl: '3600',
-          contentType: attachment.type || undefined,
-          upsert: false,
-        });
+      if (attachment && attachment.size > 0) {
+        const safeName = sanitizeFileName(attachment.name);
+        const filePath = `public/${userId}/${Date.now()}_${i}_${safeName}`;
+        
+        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+          .from('attachments')
+          .upload(filePath, attachment, {
+            cacheControl: '3600',
+            contentType: attachment.type || undefined,
+            upsert: false,
+          });
 
-      if (uploadError) {
-        // Log the detailed error on the server
-        console.error('Supabase upload error:', uploadError);
-        throw new Error(`Lỗi tải tệp lên: ${uploadError.message}`);
+        if (uploadError) {
+          // Log the detailed error on the server
+          console.error('Supabase upload error:', uploadError);
+          throw new Error(`Lỗi tải tệp lên: ${uploadError.message}`);
+        }
+        
+        const { data: urlData } = supabaseAdmin.storage
+          .from('attachments')
+          .getPublicUrl(filePath);
+
+        fileUrls.push(urlData.publicUrl);
+        fileNames.push(attachment.name);
       }
-      
-      const { data: urlData } = supabaseAdmin.storage
-        .from('attachments')
-        .getPublicUrl(filePath);
-
-      fileUrl = urlData.publicUrl;
-      fileName = attachment.name;
     }
 
     // Wait for AI classification result
@@ -89,8 +94,10 @@ export async function submitWorkLog(formData: FormData) {
       start_time: startTime,
       end_time: endTime,
       category,
-      ...(fileUrl && { file_url: fileUrl }),
-      ...(fileName && { file_name: fileName }),
+      ...(fileUrls.length > 0 && { 
+        file_url: fileUrls.join('|'), // Store multiple URLs separated by |
+        file_name: fileNames.join('|') // Store multiple names separated by |
+      }),
     };
     
     const { data: newEntryData, error: insertError } = await supabaseAdmin

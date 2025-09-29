@@ -14,20 +14,22 @@ type WorkEntryDetailDialogProps = {
 };
 
 export function WorkEntryDetailDialog({ open, onOpenChange, entry }: WorkEntryDetailDialogProps) {
-  const isImage = useMemo(() => {
-    if (!entry?.file_url) return false;
-    return /(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.svg)$/i.test(entry.file_url);
+  const fileUrls = useMemo(() => {
+    if (!entry?.file_url) return [];
+    return entry.file_url.split('|');
   }, [entry?.file_url]);
 
-  const isPDF = useMemo(() => {
-    if (!entry?.file_url) return false;
-    return /(\.pdf)$/i.test(entry.file_url);
-  }, [entry?.file_url]);
+  const fileNames = useMemo(() => {
+    if (!entry?.file_name) return [];
+    return entry.file_name.split('|');
+  }, [entry?.file_name]);
 
-  const isOfficeDoc = useMemo(() => {
-    if (!entry?.file_url) return false;
-    return /(\.(doc|docx|ppt|pptx|xls|xlsx))$/i.test(entry.file_url);
-  }, [entry?.file_url]);
+  const getFileType = (url: string) => {
+    if (/(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.svg)$/i.test(url)) return 'image';
+    if (/(\.pdf)$/i.test(url)) return 'pdf';
+    if (/(\.(doc|docx|ppt|pptx|xls|xlsx))$/i.test(url)) return 'office';
+    return 'other';
+  };
 
   if (!entry) return null;
 
@@ -53,36 +55,47 @@ export function WorkEntryDetailDialog({ open, onOpenChange, entry }: WorkEntryDe
             <div className="text-muted-foreground mb-1">Chi tiết công việc</div>
             <div className="whitespace-pre-wrap">{entry.description}</div>
           </div>
-          {entry.file_url && (
+          {fileUrls.length > 0 && (
             <div className="space-y-2">
-              <div className="text-muted-foreground">Tệp đính kèm</div>
-              <div className="border rounded-md p-2 space-y-2">
-                {isImage && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={entry.file_url} alt={entry.file_name || 'attachment'} className="w-full max-h-[70vh] object-contain rounded" />
-                )}
-                {!isImage && isPDF && (
-                  <iframe src={`${entry.file_url}#view=fitH`} className="w-full h-[70vh] rounded" title={entry.file_name || 'pdf'} />
-                )}
-                {!isImage && !isPDF && isOfficeDoc && (
-                  <iframe
-                    src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(entry.file_url)}`}
-                    className="w-full h-[70vh] rounded"
-                    title={entry.file_name || 'office-document'}
-                  />
-                )}
-                {!isImage && !isPDF && !isOfficeDoc && (
-                  <div className="text-sm text-muted-foreground">
-                    Không hỗ trợ preview loại tệp này. Vui lòng tải xuống để xem.
-                  </div>
-                )}
-                <div className="flex justify-end">
-                  <Button asChild variant="outline" size="sm">
-                    <a href={entry.file_url} download target="_blank" rel="noopener noreferrer">
-                      <Download className="h-4 w-4 mr-2" /> Tải tệp
-                    </a>
-                  </Button>
-                </div>
+              <div className="text-muted-foreground">Tệp đính kèm ({fileUrls.length} tệp)</div>
+              <div className="space-y-4">
+                {fileUrls.map((fileUrl, index) => {
+                  const fileName = fileNames[index] || `Tệp ${index + 1}`;
+                  const fileType = getFileType(fileUrl);
+                  
+                  return (
+                    <div key={index} className="border rounded-md p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{fileName}</span>
+                        <Button asChild variant="outline" size="sm">
+                          <a href={fileUrl} download target="_blank" rel="noopener noreferrer">
+                            <Download className="h-4 w-4 mr-2" /> Tải xuống
+                          </a>
+                        </Button>
+                      </div>
+                      
+                      {fileType === 'image' && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={fileUrl} alt={fileName} className="w-full max-h-[50vh] object-contain rounded" />
+                      )}
+                      {fileType === 'pdf' && (
+                        <iframe src={`${fileUrl}#view=fitH`} className="w-full h-[50vh] rounded" title={fileName} />
+                      )}
+                      {fileType === 'office' && (
+                        <iframe
+                          src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`}
+                          className="w-full h-[50vh] rounded"
+                          title={fileName}
+                        />
+                      )}
+                      {fileType === 'other' && (
+                        <div className="text-sm text-muted-foreground p-4 text-center">
+                          Không hỗ trợ preview loại tệp này. Vui lòng tải xuống để xem.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

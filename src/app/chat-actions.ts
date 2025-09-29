@@ -35,7 +35,7 @@ export async function sendChatMessage(args: SendChatArgs) {
       .insert({ conversation_id: convId, user_id: userId, role: 'user', content: prompt });
     if (insUserMsgErr) throw insUserMsgErr;
 
-    const aiRes = await chat({ prompt });
+    const aiRes = await chat({ prompt, userId });
     const reply = aiRes.reply;
 
     const { error: insAssistantErr } = await supabaseAdmin
