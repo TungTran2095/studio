@@ -6,9 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Play, Pause, ChevronDown, ChevronRight } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { PriceChart } from '@/components/research/price-chart';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+// Card components import
 
 type TradingBot = any; // If a proper type exists, replace any with it
 
@@ -246,6 +249,60 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
   const [experimentConfig, setExperimentConfig] = useState<any>({});
   const [experimentResults, setExperimentResults] = useState<any>({});
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [botSignals, setBotSignals] = useState<any[]>([]);
+  const [signalsLoading, setSignalsLoading] = useState(false);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [loadingChart, setLoadingChart] = useState(false);
+
+  const createChartData = (signals: any[]) => {
+    if (!signals || signals.length === 0) {
+      console.log('❌ No signals to create chart data');
+      setChartData([]);
+      return;
+    }
+
+    // Sắp xếp signals theo thời gian (cũ nhất trước)
+    const sortedSignals = [...signals].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    const chartData = sortedSignals.map((signal, index) => {
+      const details = signal.details || {};
+      const timestamp = new Date(signal.timestamp);
+      
+      return {
+        time: timestamp.toLocaleTimeString('vi-VN', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          second: '2-digit'
+        }),
+        fullTime: timestamp.toLocaleString('vi-VN'),
+        price: details.currentPrice || 0,
+        tenkan: details.tenkanSen || 0,
+        kijun: details.kijunSen || 0,
+        senkouA: details.senkouSpanA || 0,
+        senkouB: details.senkouSpanB || 0,
+        chikou: details.chikouSpan || 0,
+        cloudTop: details.cloudTop || 0,
+        cloudBottom: details.cloudBottom || 0,
+        signal: signal.action,
+        signalType: signal.action === 'BUY' ? 'Mua' : signal.action === 'SELL' ? 'Bán' : 'Không có',
+        priceAboveCloud: details.priceAboveCloud,
+        tenkanAboveKijun: details.tenkanAboveKijun,
+        chikouAbovePrice: details.chikouSpan > details.currentPrice,
+        tenkanCrossAbove: details.tenkanCrossAboveKijun,
+        tenkanCrossBelow: details.tenkanCrossBelowKijun,
+        index: index
+      };
+    });
+
+    console.log('📊 Chart data created:', {
+      totalPoints: chartData.length,
+      firstPoint: chartData[0],
+      lastPoint: chartData[chartData.length - 1],
+      validData: chartData.filter(d => d.price > 0).length
+    });
+
+    setChartData(chartData);
+  };
 
   useEffect(() => {
     if (!open || !bot) return;
@@ -267,6 +324,19 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
         }
       } catch {}
       setTradesLoading(false);
+
+      // Fetch signals
+      setSignalsLoading(true);
+      try {
+        const r3 = await fetch(`/api/trading/bot/signals?botId=${bot.id}`);
+        if (r3.ok) {
+          const d = await r3.json();
+          setBotSignals(d.signals || []);
+          // Tạo chart data từ signals
+          createChartData(d.signals || []);
+        }
+      } catch {}
+      setSignalsLoading(false);
 
       // Fetch config/results trực tiếp từ research_experiments nếu có id liên kết (experiment/backtest)
       try {
@@ -502,6 +572,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
               <TabsList className="mb-4">
                 <TabsTrigger value="performance">Performance</TabsTrigger>
                 <TabsTrigger value="info">Thông tin chung</TabsTrigger>
+                <TabsTrigger value="signals">Signal History</TabsTrigger>
               </TabsList>
               <TabsContent value="performance">
                 {/* Thống kê hiệu suất tổng quan - tất cả trong 1 hàng */}
@@ -886,6 +957,348 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                   </div>
                 </div>
               </TabsContent>
+              
+              <TabsContent value="signals">
+                <div className="space-y-4">
+                  {/* Chart Section - Simple Style */}
+                  {chartData.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Biểu đồ Giá và Chỉ số Ichimoku</CardTitle>
+                        <CardDescription>
+                          Hiển thị lịch sử giá và các chỉ số Ichimoku theo thời gian
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-96 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis 
+                                dataKey="time" 
+                                tick={{ fontSize: 12 }}
+                                angle={-45}
+                                textAnchor="end"
+                                height={60}
+                              />
+                              <YAxis 
+                                domain={['dataMin - 100', 'dataMax + 100']}
+                                tick={{ fontSize: 12 }}
+                                tickFormatter={(value) => `$${value.toLocaleString()}`}
+                              />
+                              <Tooltip 
+                                formatter={(value: any, name: string) => [
+                                  `$${Number(value).toLocaleString()}`, 
+                                  name
+                                ]}
+                                labelFormatter={(label, payload) => {
+                                  if (payload && payload[0]) {
+                                    return payload[0].payload.fullTime;
+                                  }
+                                  return label;
+                                }}
+                              />
+                              <Legend />
+                              
+                              {/* Giá hiện tại */}
+                              <Line 
+                                type="monotone" 
+                                dataKey="price" 
+                                stroke="#2563eb" 
+                                strokeWidth={3}
+                                name="Giá hiện tại"
+                                dot={{ r: 4 }}
+                              />
+                              
+                              {/* Tenkan-sen */}
+                              <Line 
+                                type="monotone" 
+                                dataKey="tenkan" 
+                                stroke="#dc2626" 
+                                strokeWidth={2}
+                                name="Tenkan-sen"
+                                dot={false}
+                              />
+                              
+                              {/* Kijun-sen */}
+                              <Line 
+                                type="monotone" 
+                                dataKey="kijun" 
+                                stroke="#059669" 
+                                strokeWidth={2}
+                                name="Kijun-sen"
+                                dot={false}
+                              />
+                              
+                              {/* Senkou Span A */}
+                              <Line 
+                                type="monotone" 
+                                dataKey="senkouA" 
+                                stroke="#7c3aed" 
+                                strokeWidth={1}
+                                strokeDasharray="5 5"
+                                name="Senkou Span A"
+                                dot={false}
+                              />
+                              
+                              {/* Senkou Span B */}
+                              <Line 
+                                type="monotone" 
+                                dataKey="senkouB" 
+                                stroke="#ea580c" 
+                                strokeWidth={1}
+                                strokeDasharray="5 5"
+                                name="Senkou Span B"
+                                dot={false}
+                              />
+                              
+                              {/* Chikou Span */}
+                              <Line 
+                                type="monotone" 
+                                dataKey="chikou" 
+                                stroke="#0891b2" 
+                                strokeWidth={1}
+                                strokeDasharray="10 5"
+                                name="Chikou Span"
+                                dot={false}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                        
+                        {/* Legend cho signals */}
+                        <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-green-500 rounded"></div>
+                            <span>BUY Signal</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-red-500 rounded"></div>
+                            <span>SELL Signal</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                            <span>NO SIGNAL</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <div className="flex justify-between items-center">
+                    <div className="font-semibold">Lịch sử Signals</div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (botSignals.length === 0) {
+                            toast({
+                              title: "Không có dữ liệu",
+                              description: "Không có signals nào để xuất CSV",
+                              variant: "destructive"
+                            });
+                            return;
+                          }
+                          
+                          // Tạo CSV content
+                          const headers = [
+                            'Thời gian',
+                            'Signal',
+                            'Giá',
+                            'Tenkan',
+                            'Kijun',
+                            'Senkou A',
+                            'Senkou B',
+                            'Chikou',
+                            'Cloud Top',
+                            'Cloud Bottom',
+                            'Trạng thái'
+                          ];
+                          
+                          const csvContent = [
+                            headers.join(','),
+                            ...botSignals.map(signal => {
+                              const details = signal.details || {};
+                              return [
+                                new Date(signal.timestamp).toLocaleString('vi-VN'),
+                                signal.action,
+                                signal.price?.toFixed(2) || 'N/A',
+                                details.tenkanSen?.toFixed(2) || 'N/A',
+                                details.kijunSen?.toFixed(2) || 'N/A',
+                                details.senkouSpanA?.toFixed(2) || 'N/A',
+                                details.senkouSpanB?.toFixed(2) || 'N/A',
+                                details.chikouSpan?.toFixed(2) || 'N/A',
+                                details.cloudTop?.toFixed(2) || 'N/A',
+                                details.cloudBottom?.toFixed(2) || 'N/A',
+                                `${details.priceAboveCloud ? 'Trên' : 'Dưới'} mây, ${details.tenkanAboveKijun ? 'T>K' : 'T<K'}, ${details.chikouSpan > details.currentPrice ? 'Chikou↑' : 'Chikou↓'}, ${details.tenkanCrossAboveKijun ? 'T↑K' : details.tenkanCrossBelowKijun ? 'T↓K' : 'No Cross'}`
+                              ].join(',');
+                            })
+                          ].join('\n');
+                          
+                          // Tạo và download file
+                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                          const link = document.createElement('a');
+                          const url = URL.createObjectURL(blob);
+                          link.setAttribute('href', url);
+                          link.setAttribute('download', `signals_${bot.name}_${new Date().toISOString().split('T')[0]}.csv`);
+                          link.style.visibility = 'hidden';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          
+                          toast({
+                            title: "Xuất CSV thành công",
+                            description: `Đã xuất ${botSignals.length} signals ra file CSV`,
+                          });
+                        }}
+                      >
+                        Xuất CSV
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          setSignalsLoading(true);
+                          try {
+                            const response = await fetch(`/api/trading/bot/signals?botId=${bot.id}`);
+                            if (response.ok) {
+                              const data = await response.json();
+                              setBotSignals(data.signals || []);
+                              // Tạo chart data từ signals
+                              createChartData(data.signals || []);
+                            }
+                          } catch (error) {
+                            console.error('Error fetching signals:', error);
+                          }
+                          setSignalsLoading(false);
+                        }}
+                        disabled={signalsLoading}
+                      >
+                        {signalsLoading ? 'Đang tải...' : 'Làm mới'}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {signalsLoading ? (
+                    <div className="text-center py-8">Đang tải signals...</div>
+                  ) : botSignals.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">Chưa có signal nào</div>
+                  ) : (
+                    <div className="border rounded-lg">
+                      <div className="max-h-96 overflow-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-muted sticky top-0">
+                            <tr>
+                              <th className="p-2 text-left">Thời gian</th>
+                              <th className="p-2 text-center">Signal</th>
+                              <th className="p-2 text-right">Giá</th>
+                              <th className="p-2 text-right">Tenkan</th>
+                              <th className="p-2 text-right">Kijun</th>
+                              <th className="p-2 text-right">Senkou A</th>
+                              <th className="p-2 text-right">Senkou B</th>
+                              <th className="p-2 text-right">Chikou</th>
+                              <th className="p-2 text-right">Cloud Top</th>
+                              <th className="p-2 text-right">Cloud Bottom</th>
+                              <th className="p-2 text-center">Trạng thái</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {botSignals.map((signal, index) => {
+                              const details = signal.details || {};
+                              return (
+                                <tr key={index} className="border-t hover:bg-muted/50">
+                                  <td className="p-2">
+                                    {new Date(signal.timestamp).toLocaleString('vi-VN')}
+                                  </td>
+                                  <td className="p-2 text-center">
+                                    <Badge 
+                                      variant={signal.signal === 'buy' ? 'default' : signal.signal === 'sell' ? 'destructive' : 'secondary'}
+                                      className={
+                                        signal.signal === 'buy' ? 'bg-green-600' : 
+                                        signal.signal === 'sell' ? 'bg-red-600' : 
+                                        'bg-gray-500'
+                                      }
+                                    >
+                                      {signal.action}
+                                    </Badge>
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${signal.price?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.tenkanSen?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.kijunSen?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.senkouSpanA?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.senkouSpanB?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.chikouSpan?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.cloudTop?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.cloudBottom?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-center">
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex gap-1">
+                                        <Badge 
+                                          variant={details.priceAboveCloud ? 'default' : 'destructive'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.priceAboveCloud ? 'bg-green-600' : 'bg-red-600'
+                                          }`}
+                                        >
+                                          {details.priceAboveCloud ? 'Trên mây' : 'Dưới mây'}
+                                        </Badge>
+                                        <Badge 
+                                          variant={details.tenkanAboveKijun ? 'default' : 'destructive'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.tenkanAboveKijun ? 'bg-green-600' : 'bg-red-600'
+                                          }`}
+                                        >
+                                          {details.tenkanAboveKijun ? 'T>K' : 'T<K'}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex gap-1">
+                                        <Badge 
+                                          variant={details.chikouSpan > details.currentPrice ? 'default' : 'destructive'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.chikouSpan > details.currentPrice ? 'bg-green-600' : 'bg-red-600'
+                                          }`}
+                                        >
+                                          {details.chikouSpan > details.currentPrice ? 'Chikou↑' : 'Chikou↓'}
+                                        </Badge>
+                                        <Badge 
+                                          variant={details.tenkanCrossAboveKijun ? 'default' : details.tenkanCrossBelowKijun ? 'destructive' : 'secondary'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.tenkanCrossAboveKijun ? 'bg-green-600' : 
+                                            details.tenkanCrossBelowKijun ? 'bg-red-600' : 'bg-gray-500'
+                                          }`}
+                                        >
+                                          {details.tenkanCrossAboveKijun ? 'T↑K' : 
+                                           details.tenkanCrossBelowKijun ? 'T↓K' : 'No Cross'}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
             </Tabs>
           </div>
           <div className="flex gap-2 mt-4">
@@ -901,6 +1314,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
           </div>
         </div>
       </DialogContent>
+      
     </Dialog>
   );
 }

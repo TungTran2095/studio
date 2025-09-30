@@ -691,11 +691,13 @@ function calculateNetProfitRatios(trades: any[]) {
 }
 
 // Xuất CSV danh sách giao dịch
-function exportTradesToCSV(trades: any[], fileName: string = 'trades.csv') {
+function exportTradesToCSV(trades: any[], experiment: any, fileName: string = 'trades.csv') {
   if (!Array.isArray(trades) || trades.length === 0) {
     console.warn('No trades to export');
     return;
   }
+
+  const isIchimoku = experiment?.config?.strategy?.type?.toString()?.toLowerCase() === 'ichimoku';
 
   const headers = [
     'entry_time',
@@ -707,7 +709,21 @@ function exportTradesToCSV(trades: any[], fileName: string = 'trades.csv') {
     'gross_profit',
     'transaction_fee',
     'net_profit',
-    'profit_ratio_percent'
+    'profit_ratio_percent',
+    // Buy/Sell signals (generic)
+    ...(isIchimoku ? [] : ['buy_signal', 'sell_signal']),
+    // Ichimoku indicators at entry (BUY)
+    ...(isIchimoku ? [
+      'buy_cloud', 'buy_cloud_detail',
+      'buy_tenkan_cross', 'buy_tenkan_cross_detail',
+      'buy_chikou', 'buy_chikou_detail',
+    ] : []),
+    // Ichimoku indicators at exit (SELL)
+    ...(isIchimoku ? [
+      'sell_cloud', 'sell_cloud_detail',
+      'sell_tenkan_cross', 'sell_tenkan_cross_detail',
+      'sell_chikou', 'sell_chikou_detail',
+    ] : []),
   ];
 
   const escapeCsv = (value: any) => {
@@ -719,7 +735,7 @@ function exportTradesToCSV(trades: any[], fileName: string = 'trades.csv') {
     return str;
   };
 
-  const rows = trades.map((t: any) => {
+  const rows = trades.map((t: any, idx: number) => {
     const entry = Number(t.entry_price);
     const exit = Number(t.exit_price);
     const size = Number(t.size);
@@ -728,6 +744,87 @@ function exportTradesToCSV(trades: any[], fileName: string = 'trades.csv') {
     const net = gross - fee;
     const tradeValue = entry * size;
     const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0;
+
+    // Compute signals/indicators
+    let buySignalText: any = undefined;
+    let sellSignalText: any = undefined;
+
+    let buyCloud: any = undefined, buyCloudDetail: any = undefined;
+    let buyCross: any = undefined, buyCrossDetail: any = undefined;
+    let buyChikou: any = undefined, buyChikouDetail: any = undefined;
+    let sellCloud: any = undefined, sellCloudDetail: any = undefined;
+    let sellCross: any = undefined, sellCrossDetail: any = undefined;
+    let sellChikou: any = undefined, sellChikouDetail: any = undefined;
+
+    try {
+      if (isIchimoku) {
+        const indRoot: any = experiment?.indicators || {};
+        const fmt = (v: any, d: number = 2) => (v !== undefined && v !== null && isFinite(Number(v))) ? Number(v).toFixed(d) : '-';
+        // BUY side (entry)
+        const buyData: any = findIndicatorDataAtTime(indRoot, t.entry_time || t.entryTime || t.open_time, idx) || {};
+        const buyPrev: any = findIndicatorDataAtTime(indRoot, t.entry_time || t.entryTime || t.open_time, idx - 1) || {};
+        const buyTenkan = buyData.tenkan?.value ?? buyData.tenkan_sen?.value;
+        const buyKijun = buyData.kijun?.value ?? buyData.kijun_sen?.value;
+        const buyPrevTenkan = buyPrev.tenkan?.value ?? buyPrev.tenkan_sen?.value;
+        const buyPrevKijun = buyPrev.kijun?.value ?? buyPrev.kijun_sen?.value;
+        const buySenkouA = buyData.senkou_span_a?.value ?? buyData.senkou_a?.value;
+        const buySenkouB = buyData.senkou_span_b?.value ?? buyData.senkou_b?.value;
+        const buyChikouVal = buyData.chikou?.value ?? buyData.chikou_span?.value;
+        const buyPrice = Number(t.entry_price);
+        buyCloudDetail = `P:${fmt(buyPrice)} A:${fmt(buySenkouA)} B:${fmt(buySenkouB)}`;
+        if (buySenkouA !== undefined && buySenkouB !== undefined && isFinite(buyPrice)) {
+          buyCloud = buyPrice > Math.max(buySenkouA, buySenkouB) ? 'Y' : 'N';
+        }
+        if (buyTenkan !== undefined && buyKijun !== undefined) {
+          if (buyPrevTenkan !== undefined && buyPrevKijun !== undefined) {
+            buyCross = ((buyTenkan > buyKijun) && (buyPrevTenkan <= buyPrevKijun)) ? 'Y' : 'N';
+            buyCrossDetail = `T:${fmt(buyTenkan)} K:${fmt(buyKijun)} prev(T≤K):${buyPrevTenkan <= buyPrevKijun ? 'Y' : 'N'}`;
+          } else {
+            buyCross = (buyTenkan > buyKijun) ? 'Y' : 'N';
+            buyCrossDetail = `T:${fmt(buyTenkan)} K:${fmt(buyKijun)}`;
+          }
+        }
+        buyChikouDetail = `C:${fmt(buyChikouVal)} P:${fmt(buyPrice)}`;
+        if (buyChikouVal !== undefined && isFinite(buyPrice)) {
+          buyChikou = (buyChikouVal > buyPrice) ? 'Y' : 'N';
+        }
+
+        // SELL side (exit)
+        const sellData: any = findIndicatorDataAtTime(indRoot, t.exit_time || t.exitTime || t.close_time, idx) || {};
+        const sellPrev: any = findIndicatorDataAtTime(indRoot, t.exit_time || t.exitTime || t.close_time, idx - 1) || {};
+        const sellTenkanVal = sellData.tenkan?.value ?? sellData.tenkan_sen?.value;
+        const sellKijunVal = sellData.kijun?.value ?? sellData.kijun_sen?.value;
+        const sellPrevTenkanVal = sellPrev.tenkan?.value ?? sellPrev.tenkan_sen?.value;
+        const sellPrevKijunVal = sellPrev.kijun?.value ?? sellPrev.kijun_sen?.value;
+        const sellSenkouAVal = sellData.senkou_span_a?.value ?? sellData.senkou_a?.value;
+        const sellSenkouBVal = sellData.senkou_span_b?.value ?? sellData.senkou_b?.value;
+        const sellChikouVal = sellData.chikou?.value ?? sellData.chikou_span?.value;
+        const sellPrice = Number(t.exit_price);
+        sellCloudDetail = `P:${fmt(sellPrice)} A:${fmt(sellSenkouAVal)} B:${fmt(sellSenkouBVal)}`;
+        if (sellSenkouAVal !== undefined && sellSenkouBVal !== undefined && isFinite(sellPrice)) {
+          sellCloud = sellPrice < Math.min(sellSenkouAVal, sellSenkouBVal) ? 'Y' : 'N';
+        }
+        if (sellTenkanVal !== undefined && sellKijunVal !== undefined) {
+          if (sellPrevTenkanVal !== undefined && sellPrevKijunVal !== undefined) {
+            sellCross = ((sellTenkanVal < sellKijunVal) && (sellPrevTenkanVal >= sellPrevKijunVal)) ? 'Y' : 'N';
+            sellCrossDetail = `T:${fmt(sellTenkanVal)} K:${fmt(sellKijunVal)} prev(T≥K):${sellPrevTenkanVal >= sellPrevKijunVal ? 'Y' : 'N'}`;
+          } else {
+            sellCross = (sellTenkanVal < sellKijunVal) ? 'Y' : 'N';
+            sellCrossDetail = `T:${fmt(sellTenkanVal)} K:${fmt(sellKijunVal)}`;
+          }
+        }
+        sellChikouDetail = `C:${fmt(sellChikouVal)} P:${fmt(sellPrice)}`;
+        if (sellChikouVal !== undefined && isFinite(sellPrice)) {
+          sellChikou = (sellChikouVal < sellPrice) ? 'Y' : 'N';
+        }
+      } else {
+        // Non-ichimoku: use existing text helpers
+        buySignalText = getBuySignalText(experiment, t, idx);
+        sellSignalText = getSellSignalText(experiment, t, idx);
+      }
+    } catch (err) {
+      console.error('CSV signal computation error:', err);
+    }
 
     return [
       formatTradeTime(t.entry_time || t.entryTime || t.open_time),
@@ -739,7 +836,18 @@ function exportTradesToCSV(trades: any[], fileName: string = 'trades.csv') {
       gross.toFixed(2),
       fee > 0 ? fee.toFixed(2) : '0',
       net.toFixed(2),
-      profitRatio.toFixed(2)
+      profitRatio.toFixed(2),
+      ...(isIchimoku ? [] : [buySignalText ?? '', sellSignalText ?? '']),
+      ...(isIchimoku ? [
+        buyCloud ?? '', buyCloudDetail ?? '',
+        buyCross ?? '', buyCrossDetail ?? '',
+        buyChikou ?? '', buyChikouDetail ?? '',
+      ] : []),
+      ...(isIchimoku ? [
+        sellCloud ?? '', sellCloudDetail ?? '',
+        sellCross ?? '', sellCrossDetail ?? '',
+        sellChikou ?? '', sellChikouDetail ?? '',
+      ] : []),
     ].map(escapeCsv).join(',');
   });
 
@@ -5855,7 +5963,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => exportTradesToCSV(resultObj.trades, `trades_${selectedExperiment?.id || 'export'}.csv`)}
+                                        onClick={() => exportTradesToCSV(resultObj.trades, selectedExperiment, `trades_${selectedExperiment?.id || 'export'}.csv`)}
                                         className="gap-2"
                                       >
                                         <Download className="h-4 w-4" />

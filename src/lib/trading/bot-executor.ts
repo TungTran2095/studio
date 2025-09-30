@@ -300,6 +300,20 @@ export class BotExecutor {
         return;
       }
 
+      // Kiểm tra thời gian giữa các lần execute - chỉ cho phép 1 lần mỗi timeframe
+      const now = Date.now();
+      const intervalMs = timeframeToMs(this.config.timeframe);
+      const timeSinceLastExecution = now - this.lastExecutionTime;
+      
+      if (this.lastExecutionTime > 0 && timeSinceLastExecution < intervalMs) {
+        const remainingTime = Math.ceil((intervalMs - timeSinceLastExecution) / 1000);
+        console.log(`[${this.bot.name}] ⏳ Chưa đến thời gian execute tiếp theo (còn ${remainingTime}s)`);
+        return;
+      }
+
+      // Cập nhật thời gian thực thi ngay từ đầu để tránh duplicate execution
+      this.lastExecutionTime = now;
+
       // Kiểm tra status từ database - DỪNG ngay nếu không phải running
       try {
         const { data: botStatus } = await this.supabaseAdmin
@@ -345,42 +359,44 @@ export class BotExecutor {
         timeSinceLastExecution: this.lastExecutionTime ? Date.now() - this.lastExecutionTime : 'N/A'
       });
       
-      // Lấy dữ liệu candles
-      const candlesRes = await fetch(`${API_BASE_URL}/api/trading/binance/candles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: this.config.symbol,
-          interval: this.config.timeframe,
-          limit: 100,
-          apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret,
-          isTestnet: this.bot.config.account.testnet,
-        })
+      // Lấy dữ liệu candles trực tiếp từ Binance API
+      console.log(`[BotExecutor] 📊 Fetching candles directly from Binance API...`);
+      
+      const baseUrl = this.bot.config.account.testnet 
+        ? 'https://testnet.binance.vision' 
+        : 'https://api.binance.com';
+      
+      const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
+      
+      const candlesRes = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': this.bot.config.account.apiKey || '',
+        },
       });
 
       if (!candlesRes.ok) {
-        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
-        console.log(`[BotExecutor] ⏭️ Bỏ qua signal - Không thể lấy dữ liệu candles`);
-        return;
+        const errorText = await candlesRes.text().catch(() => '');
+        console.log(`[BotExecutor] ❌ Binance API error: ${candlesRes.status} - ${errorText}`);
+        throw new Error(`Binance API error: ${candlesRes.status}`);
       }
 
       const candlesData = await candlesRes.json();
       
-      // Kiểm tra format dữ liệu trả về
-      if (!candlesData.candles || !Array.isArray(candlesData.candles) || candlesData.candles.length === 0) {
+      // Kiểm tra dữ liệu candles
+      if (!candlesData || !Array.isArray(candlesData) || candlesData.length === 0) {
         throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
       }
 
-      console.log(`[BotExecutor] 📊 Fetched ${candlesData.candles.length} candles`);
-      console.log(`[BotExecutor] 📅 Latest candle time: ${new Date(candlesData.candles[candlesData.candles.length - 1].time).toLocaleString()}`);
+      console.log(`[BotExecutor] 📊 Fetched ${candlesData.length} candles`);
+      console.log(`[BotExecutor] 📅 Latest candle time: ${new Date(candlesData[candlesData.length - 1][0]).toLocaleString()}`);
       
       // Enhanced candles logging
-      const latestCandle = candlesData.candles[candlesData.candles.length - 1];
-      const oldestCandle = candlesData.candles[0];
+      const latestCandle = candlesData[candlesData.length - 1];
+      const oldestCandle = candlesData[0];
       
       console.log(`[BotExecutor] 🔍 DEBUG: Candles data analysis:`, {
-        totalCandles: candlesData.candles.length,
+        totalCandles: candlesData.length,
         oldestCandle: {
           time: new Date(oldestCandle[0]).toISOString(),
           open: oldestCandle[1],
@@ -403,7 +419,7 @@ export class BotExecutor {
       botLogger.debug('Candles data fetched', {
         botName: this.bot.name,
         symbol: this.config.symbol,
-        totalCandles: candlesData.candles.length,
+        totalCandles: candlesData.length,
         timeRange: {
           from: new Date(oldestCandle[0]).toISOString(),
           to: new Date(latestCandle[0]).toISOString()
@@ -411,7 +427,7 @@ export class BotExecutor {
       });
 
       // Format dữ liệu candles từ Binance API
-      const formattedCandles = candlesData.candles.map((candle: any[]) => ({
+      const formattedCandles = candlesData.map((candle: any[]) => ({
         openTime: candle[0],
         open: parseFloat(candle[1]),
         high: parseFloat(candle[2]),
@@ -670,8 +686,7 @@ export class BotExecutor {
         });
       }
 
-              // Cập nhật thời gian thực thi cuối
-        this.lastExecutionTime = Date.now();
+              // Thời gian thực thi đã được cập nhật ở đầu hàm
         
         // Log summary của cycle này
         console.log(`[BotExecutor] 📊 Cycle Summary:`, {
@@ -756,10 +771,17 @@ export class BotExecutor {
       
       const strategyExecutionTime = Date.now() - strategyStartTime;
       
+      // Ghi nhận TẤT CẢ trạng thái - có signal hoặc không có signal
       if (signalResult) {
         console.log(`[${this.bot.name}] 🎯 Signal: ${signalResult.toUpperCase()} (${strategyExecutionTime}ms)`);
+        
+        // Lưu signal vào database
+        await this.saveSignalToDatabase(signalResult, strategy, candles);
       } else {
         console.log(`[${this.bot.name}] ⏸️ No signal (${strategyExecutionTime}ms)`);
+        
+        // Lưu trạng thái "no signal" vào database
+        await this.saveSignalToDatabase('no_signal', strategy, candles);
       }
       
       return signalResult;
@@ -2039,6 +2061,232 @@ export class BotExecutor {
       // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
       console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Lỗi khi kiểm tra balance`);
       return false; // Bỏ qua signal nếu có lỗi
+    }
+  }
+
+  /**
+   * Lưu signal vào database trong cột signals (JSONB)
+   */
+  private async saveSignalToDatabase(signal: 'buy' | 'sell' | 'no_signal', strategy: any, candles: any[]): Promise<void> {
+    try {
+      const currentPrice = candles[candles.length - 1]?.close;
+      const timestamp = new Date().toISOString();
+      
+      // Tạo signal data
+      const signalData = {
+        timestamp,
+        signal,
+        price: currentPrice,
+        strategy: strategy.type,
+        parameters: strategy.parameters,
+        action: signal === 'buy' ? 'BUY' : signal === 'sell' ? 'SELL' : 'NO SIGNAL',
+        // Thêm thông tin chi tiết cho từng strategy
+        details: this.getSignalDetails(strategy.type, signal, candles)
+      };
+
+      // Lấy signals hiện tại từ database
+      const { data: currentBot } = await this.supabaseAdmin
+        .from('trading_bots')
+        .select('signals')
+        .eq('id', this.bot.id)
+        .single();
+
+      let signals = currentBot?.signals || [];
+      
+      // Thêm signal mới vào đầu array (latest first)
+      signals.unshift(signalData);
+      
+      // Giới hạn chỉ lưu 100 signals gần nhất để tránh database quá lớn
+      if (signals.length > 100) {
+        signals = signals.slice(0, 100);
+      }
+
+      // Cập nhật database
+      const { error } = await this.supabaseAdmin
+        .from('trading_bots')
+        .update({ 
+          signals: signals,
+          updated_at: timestamp
+        })
+        .eq('id', this.bot.id);
+
+      if (error) {
+        console.error(`[${this.bot.name}] ❌ Error saving signal to database:`, error);
+      } else {
+        console.log(`[${this.bot.name}] ✅ Signal saved to database: ${signal.toUpperCase()}`);
+      }
+
+    } catch (error) {
+      console.error(`[${this.bot.name}] ❌ Error in saveSignalToDatabase:`, (error as Error).message);
+    }
+  }
+
+  /**
+   * Lấy thông tin chi tiết của signal dựa trên strategy type
+   */
+  private getSignalDetails(strategyType: string, signal: 'buy' | 'sell' | 'no_signal', candles: any[]): any {
+    const currentPrice = candles[candles.length - 1]?.close;
+    
+    switch (strategyType.toLowerCase()) {
+      case 'ichimoku':
+        return this.getIchimokuSignalDetails(candles);
+      case 'ma_crossover':
+      case 'ma_cross':
+        return this.getMACrossoverSignalDetails(candles);
+      case 'rsi':
+        return this.getRSISignalDetails(candles);
+      case 'bollinger_bands':
+      case 'bollinger':
+      case 'bb':
+        return this.getBollingerBandsSignalDetails(candles);
+      default:
+        return {
+          strategy: strategyType,
+          signal,
+          price: currentPrice,
+          timestamp: new Date().toISOString()
+        };
+    }
+  }
+
+  /**
+   * Lấy chi tiết signal cho Ichimoku strategy
+   */
+  private getIchimokuSignalDetails(candles: any[]): any {
+    try {
+      const closes = candles.map(c => c.close);
+      const highs = candles.map(c => c.high);
+      const lows = candles.map(c => c.low);
+      
+      // Tính các thành phần Ichimoku
+      const tenkanPeriod = 9;
+      const kijunPeriod = 26;
+      const senkouSpanBPeriod = 52;
+      
+      const tenkanSen = this.calculateTenkanSen(highs, lows, tenkanPeriod);
+      const kijunSen = this.calculateKijunSen(highs, lows, kijunPeriod);
+      const senkouSpanB = this.calculateSenkouSpanB(highs, lows, senkouSpanBPeriod);
+      
+      const currentTenkan = tenkanSen[tenkanSen.length - 1];
+      const currentKijun = kijunSen[kijunSen.length - 1];
+      const currentSenkouB = senkouSpanB[senkouSpanB.length - 1];
+      const currentPrice = closes[closes.length - 1];
+      
+      // Tính crossover - so sánh với giá trị trước đó
+      const prevTenkan = tenkanSen.length > 1 ? tenkanSen[tenkanSen.length - 2] : currentTenkan;
+      const prevKijun = kijunSen.length > 1 ? kijunSen[kijunSen.length - 2] : currentKijun;
+      
+      const tenkanCrossAboveKijun = currentTenkan > currentKijun && prevTenkan <= prevKijun;
+      const tenkanCrossBelowKijun = currentTenkan < currentKijun && prevTenkan >= prevKijun;
+      
+      const senkouSpanA = (currentTenkan + currentKijun) / 2;
+      const chikouSpan = closes[closes.length - 1 - 26];
+      
+      return {
+        tenkanSen: currentTenkan,
+        kijunSen: currentKijun,
+        senkouSpanA,
+        senkouSpanB: currentSenkouB,
+        chikouSpan,
+        currentPrice,
+        cloudTop: Math.max(senkouSpanA, currentSenkouB),
+        cloudBottom: Math.min(senkouSpanA, currentSenkouB),
+        priceAboveCloud: currentPrice > Math.max(senkouSpanA, currentSenkouB),
+        priceBelowCloud: currentPrice < Math.min(senkouSpanA, currentSenkouB),
+        tenkanAboveKijun: currentTenkan > currentKijun,
+        tenkanBelowKijun: currentTenkan < currentKijun,
+        tenkanCrossAboveKijun,
+        tenkanCrossBelowKijun
+      };
+    } catch (error) {
+      return { error: 'Failed to calculate Ichimoku details' };
+    }
+  }
+
+  /**
+   * Lấy chi tiết signal cho MA Crossover strategy
+   */
+  private getMACrossoverSignalDetails(candles: any[]): any {
+    try {
+      const closes = candles.map(c => c.close);
+      const fastPeriod = 10;
+      const slowPeriod = 20;
+      
+      const fastMA = this.calculateSMA(closes, fastPeriod);
+      const slowMA = this.calculateSMA(closes, slowPeriod);
+      
+      const currentFast = fastMA[fastMA.length - 1];
+      const currentSlow = slowMA[slowMA.length - 1];
+      const currentPrice = closes[closes.length - 1];
+      
+      return {
+        fastMA: currentFast,
+        slowMA: currentSlow,
+        currentPrice,
+        fastAboveSlow: currentFast > currentSlow,
+        fastBelowSlow: currentFast < currentSlow,
+        maSpread: Math.abs(currentFast - currentSlow)
+      };
+    } catch (error) {
+      return { error: 'Failed to calculate MA Crossover details' };
+    }
+  }
+
+  /**
+   * Lấy chi tiết signal cho RSI strategy
+   */
+  private getRSISignalDetails(candles: any[]): any {
+    try {
+      const closes = candles.map(c => c.close);
+      const rsi = this.calculateRSI(closes, 14);
+      const currentRSI = rsi[rsi.length - 1];
+      const currentPrice = closes[closes.length - 1];
+      
+      return {
+        rsi: currentRSI,
+        currentPrice,
+        overbought: currentRSI > 70,
+        oversold: currentRSI < 30,
+        neutral: currentRSI >= 30 && currentRSI <= 70
+      };
+    } catch (error) {
+      return { error: 'Failed to calculate RSI details' };
+    }
+  }
+
+  /**
+   * Lấy chi tiết signal cho Bollinger Bands strategy
+   */
+  private getBollingerBandsSignalDetails(candles: any[]): any {
+    try {
+      const closes = candles.map(c => c.close);
+      const period = 20;
+      const stdDev = 2;
+      
+      const sma = this.calculateSMA(closes, period);
+      const currentSMA = sma[sma.length - 1];
+      const currentPrice = closes[closes.length - 1];
+      
+      // Tính standard deviation
+      const recentCloses = closes.slice(-period);
+      const variance = recentCloses.reduce((sum, price) => sum + Math.pow(price - currentSMA, 2), 0) / period;
+      const standardDeviation = Math.sqrt(variance);
+      
+      const upperBand = currentSMA + (stdDev * standardDeviation);
+      const lowerBand = currentSMA - (stdDev * standardDeviation);
+      
+      return {
+        sma: currentSMA,
+        upperBand,
+        lowerBand,
+        currentPrice,
+        priceAboveUpper: currentPrice > upperBand,
+        priceBelowLower: currentPrice < lowerBand,
+        priceInMiddle: currentPrice >= lowerBand && currentPrice <= upperBand,
+        bandWidth: upperBand - lowerBand
+      };
+    } catch (error) {
+      return { error: 'Failed to calculate Bollinger Bands details' };
     }
   }
 } 
