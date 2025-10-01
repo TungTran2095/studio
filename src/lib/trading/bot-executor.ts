@@ -85,6 +85,15 @@ export class BotExecutor {
         this.bot.config.account.apiSecret,
         this.bot.config.account.testnet || false
       );
+      // Subscribe WS candles to reduce HTTP calls
+      try {
+        const interval = this.config.timeframe || '1m';
+        const symbol = this.config.symbol || 'BTCUSDT';
+        this.binanceService.subscribeKlines(symbol, interval, 600);
+        console.log(`[BotExecutor] Subscribed WS klines for ${symbol} ${interval}`);
+      } catch (e) {
+        console.warn('[BotExecutor] Cannot subscribe WS klines:', (e as Error).message);
+      }
     }
     
     // Lấy đúng các trường từ cấu trúc config lồng
@@ -360,68 +369,18 @@ export class BotExecutor {
         timeSinceLastExecution: this.lastExecutionTime ? Date.now() - this.lastExecutionTime : 'N/A'
       });
       
-      // Lấy dữ liệu candles trực tiếp từ Binance API
-      console.log(`[BotExecutor] 📊 Fetching candles directly from Binance API...`);
-      
-      const baseUrl = this.bot.config.account.testnet 
-        ? 'https://testnet.binance.vision' 
-        : 'https://api.binance.com';
-      
-      const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
-
-      // Robust fetch with retry and fallback for 5xx errors (e.g., 502 Bad Gateway)
-      const fetchWithRetry = async (primaryUrl: string, options: RequestInit, maxRetries: number = 4): Promise<Response> => {
-        const fallbackHosts = this.bot?.config?.account?.testnet
-          ? ['https://testnet.binance.vision']
-          : [
-              'https://api.binance.com',
-              'https://data-api.binance.vision',
-              'https://api1.binance.com',
-              'https://api2.binance.com'
-            ];
-
-        let lastError: any;
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          const delay = Math.min(500 * Math.pow(2, attempt), 4000);
-          const targetBase = fallbackHosts[Math.min(attempt, fallbackHosts.length - 1)];
-          const targetUrl = primaryUrl.replace(/^https?:\/\/[^/]+/, targetBase);
-          try {
-            const res = await fetch(targetUrl, options);
-            if (res.ok) return res;
-            // Retry only on 5xx
-            if (res.status >= 500) {
-              const text = await res.text().catch(() => '');
-              console.log(`[BotExecutor] ⚠️ Binance 5xx (${res.status}) on ${targetBase}. Attempt ${attempt + 1}/${maxRetries + 1}.`);
-              if (attempt < maxRetries) {
-                await new Promise(r => setTimeout(r, delay));
-                continue;
-              }
-              lastError = new Error(`Binance API 5xx: ${res.status} ${text}`);
-              break;
-            } else {
-              // Non-retryable
-              return res;
-            }
-          } catch (err) {
-            lastError = err;
-            console.log(`[BotExecutor] ⚠️ Network error to ${targetBase}: ${(err as Error).message}. Attempt ${attempt + 1}/${maxRetries + 1}.`);
-            if (attempt < maxRetries) {
-              await new Promise(r => setTimeout(r, delay));
-              continue;
-            }
-          }
-        }
-        throw lastError || new Error('Unknown Binance fetch error');
-      };
-
-      const candlesRes = await fetchWithRetry(url, {
-        method: 'GET',
-        headers: {
-          'X-MBX-APIKEY': this.bot.config.account.apiKey || '',
-        },
-      });
-
-      const candlesData = await candlesRes.json();
+      // Ưu tiên dùng WS buffer, fallback sang HTTP khi thiếu dữ liệu
+      let candlesData = this.binanceService.getRecentCandles(this.config.symbol, this.config.timeframe, 120);
+      if (!candlesData || candlesData.length === 0) {
+        console.log('[BotExecutor] 📊 WS buffer trống, fallback sang HTTP klines (limit=100)...');
+        const baseUrl = this.bot.config.account.testnet 
+          ? 'https://testnet.binance.vision' 
+          : 'https://api.binance.com';
+        const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
+        const res = await fetch(url, { method: 'GET' });
+        if (!res.ok) throw new Error(`HTTP klines failed: ${res.status} ${res.statusText}`);
+        candlesData = await res.json();
+      }
       
       // Kiểm tra dữ liệu candles
       if (!candlesData || !Array.isArray(candlesData) || candlesData.length === 0) {
@@ -466,8 +425,8 @@ export class BotExecutor {
         }
       });
 
-      // Format dữ liệu candles từ Binance API
-      const formattedCandles = candlesData.map((candle: any[]) => ({
+      // Format dữ liệu candles từ WS/HTTP (cùng format mảng)
+      const formattedCandles = (candlesData as any[]).map((candle: any[]) => ({
         openTime: candle[0],
         open: parseFloat(candle[1]),
         high: parseFloat(candle[2]),

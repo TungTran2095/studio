@@ -64,6 +64,9 @@ export class BinanceService {
   private apiKey: string;
   private apiSecret: string;
   private testnet: boolean;
+  // WS candles buffer: key = `${symbol}|${interval}` -> array of klines
+  private wsCandles: Map<string, any[]> = new Map();
+  private wsUnsubscribers: Map<string, () => void> = new Map();
 
   constructor(apiKey: string, apiSecret: string, testnet: boolean = false) {
     // Lưu credentials để có thể tạo lại client
@@ -88,6 +91,61 @@ export class BinanceService {
     });
     
     console.log(`[BinanceService] Đã khởi tạo với getTime function (${testnet ? 'testnet' : 'realnet'})`);
+  }
+
+  /**
+   * Subscribe WS kline và lưu buffer nội bộ để giảm HTTP calls
+   */
+  subscribeKlines(symbol: string, interval: string, bufferSize: number = 500): void {
+    const key = `${symbol}|${interval}`;
+    if (this.wsUnsubscribers.has(key)) return; // already subscribed
+
+    if (!this.client?.ws?.candles) {
+      console.warn('[BinanceService] WS candles API is not available on client');
+      return;
+    }
+
+    const unsub = this.client.ws.candles(symbol, interval, (candle: any) => {
+      // candle.k is kline payload (per binance-api-node)
+      const k = candle.k || candle;
+      const arr = this.wsCandles.get(key) || [];
+      // Build normalized array record like REST klines
+      const record = [
+        k.t,           // openTime
+        k.o,           // open
+        k.h,           // high
+        k.l,           // low
+        k.c,           // close
+        k.v,           // volume
+        k.T,           // closeTime
+        k.q,           // quoteAssetVolume
+        k.n,           // numberOfTrades
+        k.V,           // takerBuyBaseAssetVolume
+        k.Q            // takerBuyQuoteAssetVolume
+      ];
+      // Replace last if same openTime, else push
+      if (arr.length > 0 && arr[arr.length - 1][0] === record[0]) {
+        arr[arr.length - 1] = record;
+      } else {
+        arr.push(record);
+      }
+      // Trim buffer
+      if (arr.length > bufferSize) arr.splice(0, arr.length - bufferSize);
+      this.wsCandles.set(key, arr);
+    });
+
+    this.wsUnsubscribers.set(key, unsub);
+    console.log(`[BinanceService] WS subscribed klines ${symbol} ${interval}`);
+  }
+
+  /**
+   * Lấy candles từ WS buffer (đã normalize theo REST format)
+   */
+  getRecentCandles(symbol: string, interval: string, limit: number = 100): any[] {
+    const key = `${symbol}|${interval}`;
+    const arr = this.wsCandles.get(key) || [];
+    if (arr.length === 0) return [];
+    return arr.slice(-limit);
   }
 
   /**

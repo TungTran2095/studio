@@ -42,6 +42,14 @@ export class TimeSync {
       }
 
       console.log('[TimeSync] Đang đồng bộ thời gian với Binance...');
+
+      // Nếu bị ban 418 gần đây, bỏ qua sync để tránh thêm request
+      const BAN_COOLDOWN_MS = Number(process.env.BINANCE_418_COOLDOWN_MS || 15 * 60 * 1000);
+      const lastBanUntil = Number((globalThis as any).__BINANCE_BAN_UNTIL__ || 0);
+      if (lastBanUntil && Date.now() < lastBanUntil) {
+        console.warn(`[TimeSync] Bỏ qua sync vì đang trong thời gian cooldown 418 đến ${new Date(lastBanUntil).toISOString()}`);
+        return;
+      }
       
       // Sử dụng nhiều endpoint thay thế và thêm error handling tốt hơn
       const endpoints = [
@@ -72,6 +80,23 @@ export class TimeSync {
           
           if (!response.ok) {
             const errorText = await response.text().catch(() => 'Unknown error');
+            // Nếu 418, parse message để lấy thời điểm ban và set cooldown
+            if (response.status === 418) {
+              try {
+                const json = JSON.parse(errorText);
+                const msg: string = json?.msg || '';
+                const match = msg.match(/IP banned until\s+(\d{13})/i);
+                if (match) {
+                  const until = Number(match[1]);
+                  (globalThis as any).__BINANCE_BAN_UNTIL__ = until;
+                  console.warn(`[TimeSync] 418 detected. Set ban cooldown until ${new Date(until).toISOString()}`);
+                } else {
+                  (globalThis as any).__BINANCE_BAN_UNTIL__ = Date.now() + BAN_COOLDOWN_MS;
+                }
+              } catch {
+                (globalThis as any).__BINANCE_BAN_UNTIL__ = Date.now() + BAN_COOLDOWN_MS;
+              }
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
           }
           
