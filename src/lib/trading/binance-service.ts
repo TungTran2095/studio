@@ -67,6 +67,7 @@ export class BinanceService {
   // WS candles buffer: key = `${symbol}|${interval}` -> array of klines
   private wsCandles: Map<string, any[]> = new Map();
   private wsUnsubscribers: Map<string, () => void> = new Map();
+  private lastPrices: Map<string, number> = new Map();
 
   constructor(apiKey: string, apiSecret: string, testnet: boolean = false) {
     // Lưu credentials để có thể tạo lại client
@@ -146,6 +147,38 @@ export class BinanceService {
     const arr = this.wsCandles.get(key) || [];
     if (arr.length === 0) return [];
     return arr.slice(-limit);
+  }
+
+  /**
+   * Subscribe WS miniTicker để lấy giá realtime
+   */
+  subscribeMiniTicker(symbol: string): void {
+    const key = symbol.toUpperCase();
+    if (this.wsUnsubscribers.has(`mini|${key}`)) return;
+
+    if (!this.client?.ws?.miniTicker) {
+      console.warn('[BinanceService] WS miniTicker API is not available on client');
+      return;
+    }
+
+    const unsub = this.client.ws.miniTicker(symbol, (t: any) => {
+      const price = parseFloat(t.close || t.c || t.price || t.p || '0');
+      if (!isNaN(price) && price > 0) {
+        this.lastPrices.set(key, price);
+      }
+    });
+
+    this.wsUnsubscribers.set(`mini|${key}`, unsub);
+    console.log(`[BinanceService] WS subscribed miniTicker ${symbol}`);
+  }
+
+  /**
+   * Lấy giá mới nhất từ WS miniTicker
+   */
+  getLastPrice(symbol: string): number | null {
+    const key = symbol.toUpperCase();
+    const v = this.lastPrices.get(key);
+    return v !== undefined ? v : null;
   }
 
   /**

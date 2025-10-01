@@ -90,6 +90,7 @@ export class BotExecutor {
         const interval = this.config.timeframe || '1m';
         const symbol = this.config.symbol || 'BTCUSDT';
         this.binanceService.subscribeKlines(symbol, interval, 600);
+        this.binanceService.subscribeMiniTicker(symbol);
         console.log(`[BotExecutor] Subscribed WS klines for ${symbol} ${interval}`);
       } catch (e) {
         console.warn('[BotExecutor] Cannot subscribe WS klines:', (e as Error).message);
@@ -369,17 +370,12 @@ export class BotExecutor {
         timeSinceLastExecution: this.lastExecutionTime ? Date.now() - this.lastExecutionTime : 'N/A'
       });
       
-      // Ưu tiên dùng WS buffer, fallback sang HTTP khi thiếu dữ liệu
+      // Chỉ dùng WS buffer; KHÔNG gọi HTTP cho klines nữa
       let candlesData = this.binanceService.getRecentCandles(this.config.symbol, this.config.timeframe, 120);
       if (!candlesData || candlesData.length === 0) {
-        console.log('[BotExecutor] 📊 WS buffer trống, fallback sang HTTP klines (limit=100)...');
-        const baseUrl = this.bot.config.account.testnet 
-          ? 'https://testnet.binance.vision' 
-          : 'https://api.binance.com';
-        const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
-        const res = await fetch(url, { method: 'GET' });
-        if (!res.ok) throw new Error(`HTTP klines failed: ${res.status} ${res.statusText}`);
-        candlesData = await res.json();
+        console.log('[BotExecutor] ⏳ WS buffer chưa sẵn sàng, chờ 1s và thử lại...');
+        await new Promise(r => setTimeout(r, 1000));
+        candlesData = this.binanceService.getRecentCandles(this.config.symbol, this.config.timeframe, 120);
       }
       
       // Kiểm tra dữ liệu candles
@@ -1140,55 +1136,21 @@ export class BotExecutor {
       console.log(`[${this.bot.name}] 🚀 Executing ${signal.toUpperCase()} trade...`);
       const priceFetchStart = Date.now();
       
-      // Lấy giá hiện tại
-      const priceUrl = `${API_BASE_URL}/api/trading/binance/price`;
-      
-      const priceRes = await fetch(priceUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: this.config.symbol,
-          apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret,
-          isTestnet: this.bot.config.account.testnet,
-        })
-      }).catch(error => {
-        console.error(`[BotExecutor] ❌ Fetch error for ${priceUrl}:`, error);
-        throw new Error(`Failed to fetch price: ${error.message}`);
-      });
-
-      const priceFetchTime = Date.now() - priceFetchStart;
-      console.log(`[BotExecutor] 🔍 DEBUG: Price fetch completed in ${priceFetchTime}ms`);
-
-      if (!priceRes.ok) {
-        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
-        console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Không thể lấy giá hiện tại`);
-        console.log(`[BotExecutor] 🔍 DEBUG: Price fetch failed:`, {
-          status: priceRes.status,
-          statusText: priceRes.statusText,
-          fetchTime: priceFetchTime,
-          timestamp: new Date().toISOString()
-        });
-        
-        botLogger.warn('Price fetch failed', {
-          botName: this.bot.name,
-          symbol: this.config.symbol,
-          signal: signal,
-          status: priceRes.status,
-          fetchTime: priceFetchTime
-        });
-        
+      // Lấy giá hiện tại từ WS miniTicker
+      const wsPrice = this.binanceService.getLastPrice(this.config.symbol);
+      if (wsPrice === null) {
+        console.log('[BotExecutor] ⏳ Chưa có giá từ WS miniTicker, chờ 500ms...');
+        await new Promise(r => setTimeout(r, 500));
+      }
+      const currentPrice = this.binanceService.getLastPrice(this.config.symbol);
+      if (currentPrice === null) {
+        console.log('[BotExecutor] ⏭️ Bỏ qua signal - chưa có giá WS');
         return;
       }
-
-      const priceData = await priceRes.json();
-      const currentPrice = parseFloat(priceData.price);
       
       console.log(`[BotExecutor] 🔍 DEBUG: Price data received:`, {
         symbol: this.config.symbol,
         price: currentPrice,
-        rawData: priceData,
-        fetchTime: priceFetchTime,
         timestamp: new Date().toISOString()
       });
       
@@ -1196,10 +1158,10 @@ export class BotExecutor {
         botName: this.bot.name,
         symbol: this.config.symbol,
         price: currentPrice,
-        fetchTime: priceFetchTime
+        source: 'ws-miniTicker'
       });
 
-      // Lấy balance thực tế từ Binance
+      // Lấy balance thực tế từ Binance (vẫn qua API theo yêu cầu)
       const balanceUrl = `${API_BASE_URL}/api/trading/binance/balance`;
       console.log(`[BotExecutor] 🔍 DEBUG: Fetching balance from: ${balanceUrl}`);
       
