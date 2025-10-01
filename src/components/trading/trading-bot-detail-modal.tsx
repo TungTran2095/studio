@@ -253,7 +253,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
-  
 
   const createChartData = (signals: any[]) => {
     if (!signals || signals.length === 0) {
@@ -262,11 +261,8 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
       return;
     }
 
-    // Chỉ lấy 200 mốc thời gian gần nhất (dữ liệu đã được sắp xếp mới nhất trước)
-    const source = Array.isArray(signals) ? signals.slice(0, 200) : [];
-
-    // Sắp xếp signals theo thời gian (cũ nhất trước) để vẽ biểu đồ
-    const sortedSignals = [...source].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    // Sắp xếp signals theo thời gian (cũ nhất trước)
+    const sortedSignals = [...signals].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     
     const chartData = sortedSignals.map((signal, index) => {
       const details = signal.details || {};
@@ -335,15 +331,12 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
         const r3 = await fetch(`/api/trading/bot/signals?botId=${bot.id}`);
         if (r3.ok) {
           const d = await r3.json();
-          const limited = Array.isArray(d.signals) ? d.signals.slice(0, 200) : [];
-          setBotSignals(limited);
+          setBotSignals(d.signals || []);
           // Tạo chart data từ signals
-          createChartData(limited);
+          createChartData(d.signals || []);
         }
       } catch {}
       setSignalsLoading(false);
-
-      // Transaction History tab removed
 
       // Fetch config/results trực tiếp từ research_experiments nếu có id liên kết (experiment/backtest)
       try {
@@ -413,8 +406,10 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
     }
   );
 
-  // Tính toán lãi/lỗ tổng dựa trên các cặp giao dịch hoàn thành
-  // Sẽ được tính lại sau khi có kết quả từ calculateCorrectWinrate
+  // Tính toán lãi/lỗ tổng dựa trên lệnh buy/sell
+  const totalBuyValue = botTrades.filter(t => t.side === 'buy').reduce((sum, t) => sum + (t.quantity * t.entry_price), 0);
+  const totalSellValue = botTrades.filter(t => t.side === 'sell').reduce((sum, t) => sum + (t.quantity * t.entry_price), 0);
+  const totalPnL = totalSellValue - totalBuyValue;
 
   // Tính toán Winrate - Logic đúng: gộp các giao dịch cùng side liên tiếp và ghép cặp buy-sell
   function calculateCorrectWinrate(trades: any[]) {
@@ -554,9 +549,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
   }
 
   const winrateResult = calculateCorrectWinrate(botTrades);
-  
-  // Tính toán lãi/lỗ tổng từ các cặp giao dịch hoàn thành
-  const totalPnL = winrateResult.pairs.reduce((sum, pair) => sum + pair.pnl, 0);
 
   const toggleRowExpansion = (index: number) => {
     const newExpandedRows = new Set(expandedRows);
@@ -1172,10 +1164,9 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                             const response = await fetch(`/api/trading/bot/signals?botId=${bot.id}`);
                             if (response.ok) {
                               const data = await response.json();
-                              const limitedRefresh = Array.isArray(data.signals) ? data.signals.slice(0, 200) : [];
-                              setBotSignals(limitedRefresh);
+                              setBotSignals(data.signals || []);
                               // Tạo chart data từ signals
-                              createChartData(limitedRefresh);
+                              createChartData(data.signals || []);
                             }
                           } catch (error) {
                             console.error('Error fetching signals:', error);
@@ -1196,29 +1187,31 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                   ) : (
                     <div className="border rounded-lg">
                       <div className="max-h-96 overflow-auto">
-                        <table className="w-full text-xs table-fixed">
+                        <table className="w-full text-xs">
                           <thead className="bg-muted sticky top-0">
                             <tr>
-                              <th className="p-2 text-left w-[180px]">Thời gian</th>
-                              <th className="p-2 text-center w-[110px]">Signal</th>
-                              <th className="p-2 text-right w-[120px]">Giá</th>
-                              <th className="p-2 text-left">Trạng thái</th>
+                              <th className="p-2 text-left">Thời gian</th>
+                              <th className="p-2 text-center">Signal</th>
+                              <th className="p-2 text-right">Giá</th>
+                              <th className="p-2 text-right">Tenkan</th>
+                              <th className="p-2 text-right">Kijun</th>
+                              <th className="p-2 text-right">Senkou A</th>
+                              <th className="p-2 text-right">Senkou B</th>
+                              <th className="p-2 text-right">Chikou</th>
+                              <th className="p-2 text-right">Cloud Top</th>
+                              <th className="p-2 text-right">Cloud Bottom</th>
+                              <th className="p-2 text-center">Trạng thái</th>
                             </tr>
                           </thead>
                           <tbody>
                             {botSignals.map((signal, index) => {
                               const details = signal.details || {};
-                              const cloudGreen = details.priceAboveCloud;
-                              const tenkanGreen = details.tenkanAboveKijun;
-                              const chikouGreen = details.chikouSpan > details.currentPrice;
-                              const crossUp = details.tenkanCrossAboveKijun;
-                              const crossDown = details.tenkanCrossBelowKijun;
                               return (
                                 <tr key={index} className="border-t hover:bg-muted/50">
-                                  <td className="p-2 whitespace-nowrap">
+                                  <td className="p-2">
                                     {new Date(signal.timestamp).toLocaleString('vi-VN')}
                                   </td>
-                                  <td className="p-2 text-center whitespace-nowrap">
+                                  <td className="p-2 text-center">
                                     <Badge 
                                       variant={signal.signal === 'buy' ? 'default' : signal.signal === 'sell' ? 'destructive' : 'secondary'}
                                       className={
@@ -1230,31 +1223,70 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                                       {signal.action}
                                     </Badge>
                                   </td>
-                                  <td className="p-2 text-right font-mono whitespace-nowrap">
+                                  <td className="p-2 text-right font-mono">
                                     ${signal.price?.toFixed(2) || 'N/A'}
                                   </td>
-                                  <td className="p-2">
-                                    <div className="flex flex-wrap items-center gap-1 whitespace-nowrap">
-                                      <Badge
-                                        className={`text-[10px] px-1 ${cloudGreen ? 'bg-green-600' : 'bg-red-600'}`}
-                                      >
-                                        {cloudGreen ? 'Trên mây' : 'Dưới mây'}
-                                      </Badge>
-                                      <Badge
-                                        className={`text-[10px] px-1 ${tenkanGreen ? 'bg-green-600' : 'bg-red-600'}`}
-                                      >
-                                        {tenkanGreen ? 'T>K' : 'T<K'}
-                                      </Badge>
-                                      <Badge
-                                        className={`text-[10px] px-1 ${chikouGreen ? 'bg-green-600' : 'bg-red-600'}`}
-                                      >
-                                        {chikouGreen ? 'Chikou↑' : 'Chikou↓'}
-                                      </Badge>
-                                      <Badge
-                                        className={`text-[10px] px-1 ${crossUp ? 'bg-green-600' : crossDown ? 'bg-red-600' : 'bg-gray-500'}`}
-                                      >
-                                        {crossUp ? 'T↑K' : crossDown ? 'T↓K' : 'No Cross'}
-                                      </Badge>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.tenkanSen?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.kijunSen?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.senkouSpanA?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.senkouSpanB?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.chikouSpan?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.cloudTop?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-right font-mono">
+                                    ${details.cloudBottom?.toFixed(2) || 'N/A'}
+                                  </td>
+                                  <td className="p-2 text-center">
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex gap-1">
+                                        <Badge 
+                                          variant={details.priceAboveCloud ? 'default' : 'destructive'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.priceAboveCloud ? 'bg-green-600' : 'bg-red-600'
+                                          }`}
+                                        >
+                                          {details.priceAboveCloud ? 'Trên mây' : 'Dưới mây'}
+                                        </Badge>
+                                        <Badge 
+                                          variant={details.tenkanAboveKijun ? 'default' : 'destructive'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.tenkanAboveKijun ? 'bg-green-600' : 'bg-red-600'
+                                          }`}
+                                        >
+                                          {details.tenkanAboveKijun ? 'T>K' : 'T<K'}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex gap-1">
+                                        <Badge 
+                                          variant={details.chikouSpan > details.currentPrice ? 'default' : 'destructive'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.chikouSpan > details.currentPrice ? 'bg-green-600' : 'bg-red-600'
+                                          }`}
+                                        >
+                                          {details.chikouSpan > details.currentPrice ? 'Chikou↑' : 'Chikou↓'}
+                                        </Badge>
+                                        <Badge 
+                                          variant={details.tenkanCrossAboveKijun ? 'default' : details.tenkanCrossBelowKijun ? 'destructive' : 'secondary'}
+                                          className={`text-xs px-1 py-0 ${
+                                            details.tenkanCrossAboveKijun ? 'bg-green-600' : 
+                                            details.tenkanCrossBelowKijun ? 'bg-red-600' : 'bg-gray-500'
+                                          }`}
+                                        >
+                                          {details.tenkanCrossAboveKijun ? 'T↑K' : 
+                                           details.tenkanCrossBelowKijun ? 'T↓K' : 'No Cross'}
+                                        </Badge>
+                                      </div>
                                     </div>
                                   </td>
                                 </tr>
@@ -1267,8 +1299,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                   )}
                 </div>
               </TabsContent>
-              
-              
             </Tabs>
           </div>
           <div className="flex gap-2 mt-4">

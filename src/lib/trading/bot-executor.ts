@@ -21,7 +21,6 @@ interface BotExecutorConfig {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.API_BASE_URL || 'http://localhost:9002';
-const DISABLE_SIGNALS_UPDATE = (process.env.DISABLE_TRADING_SIGNALS === 'true') || (process.env.NEXT_PUBLIC_DISABLE_TRADING_SIGNALS === 'true');
 
 // Debug logging để kiểm tra API_BASE_URL
 console.log('[BotExecutor] 🔍 DEBUG: API_BASE_URL configuration:', {
@@ -85,8 +84,6 @@ export class BotExecutor {
         this.bot.config.account.apiSecret,
         this.bot.config.account.testnet || false
       );
-      // Subscribe WS candles to reduce HTTP calls
-      // Không subscribe WS trong BotExecutor để tuân thủ: BOT dùng API, nghiệp vụ khác dùng WS
     }
     
     // Lấy đúng các trường từ cấu trúc config lồng
@@ -362,28 +359,33 @@ export class BotExecutor {
         timeSinceLastExecution: this.lastExecutionTime ? Date.now() - this.lastExecutionTime : 'N/A'
       });
       
-      // Lấy candles qua API (BOT dùng API)
-      const candlesApiUrl = `${API_BASE_URL}/api/trading/binance`;
-      const candlesRes = await fetch(candlesApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: this.config.symbol,
-          interval: this.config.timeframe,
-          limit: 120,
-          apiKey: this.bot.config.account.apiKey,
-          apiSecret: this.bot.config.account.apiSecret
-        })
+      // Lấy dữ liệu candles trực tiếp từ Binance API
+      console.log(`[BotExecutor] 📊 Fetching candles directly from Binance API...`);
+      
+      const baseUrl = this.bot.config.account.testnet 
+        ? 'https://testnet.binance.vision' 
+        : 'https://api.binance.com';
+      
+      const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
+      
+      const candlesRes = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': this.bot.config.account.apiKey || '',
+        },
       });
-      let candlesData = [] as any[];
-      if (candlesRes.ok) {
-        candlesData = await candlesRes.json();
+
+      if (!candlesRes.ok) {
+        const errorText = await candlesRes.text().catch(() => '');
+        console.log(`[BotExecutor] ❌ Binance API error: ${candlesRes.status} - ${errorText}`);
+        throw new Error(`Binance API error: ${candlesRes.status}`);
       }
+
+      const candlesData = await candlesRes.json();
       
       // Kiểm tra dữ liệu candles
       if (!candlesData || !Array.isArray(candlesData) || candlesData.length === 0) {
-        console.log('[BotExecutor] ⏭️ Bỏ qua chu kỳ: dữ liệu candles WS chưa sẵn sàng');
-        return;
+        throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
       }
 
       console.log(`[BotExecutor] 📊 Fetched ${candlesData.length} candles`);
@@ -424,8 +426,8 @@ export class BotExecutor {
         }
       });
 
-      // Format dữ liệu candles từ WS/HTTP (cùng format mảng)
-      const formattedCandles = (candlesData as any[]).map((candle: any[]) => ({
+      // Format dữ liệu candles từ Binance API
+      const formattedCandles = candlesData.map((candle: any[]) => ({
         openTime: candle[0],
         open: parseFloat(candle[1]),
         high: parseFloat(candle[2]),
@@ -1139,8 +1141,9 @@ export class BotExecutor {
       console.log(`[${this.bot.name}] 🚀 Executing ${signal.toUpperCase()} trade...`);
       const priceFetchStart = Date.now();
       
-      // Lấy giá hiện tại qua API
+      // Lấy giá hiện tại
       const priceUrl = `${API_BASE_URL}/api/trading/binance/price`;
+      
       const priceRes = await fetch(priceUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1150,28 +1153,54 @@ export class BotExecutor {
           apiSecret: this.bot.config.account.apiSecret,
           isTestnet: this.bot.config.account.testnet,
         })
+      }).catch(error => {
+        console.error(`[BotExecutor] ❌ Fetch error for ${priceUrl}:`, error);
+        throw new Error(`Failed to fetch price: ${error.message}`);
       });
+
+      const priceFetchTime = Date.now() - priceFetchStart;
+      console.log(`[BotExecutor] 🔍 DEBUG: Price fetch completed in ${priceFetchTime}ms`);
+
       if (!priceRes.ok) {
-        console.log('[BotExecutor] ⏭️ Bỏ qua signal - không lấy được giá API');
+        // Bỏ qua một cách im lặng - không báo lỗi, chờ signal tiếp theo
+        console.log(`[BotExecutor] ⏭️ Bỏ qua ${signal} signal - Không thể lấy giá hiện tại`);
+        console.log(`[BotExecutor] 🔍 DEBUG: Price fetch failed:`, {
+          status: priceRes.status,
+          statusText: priceRes.statusText,
+          fetchTime: priceFetchTime,
+          timestamp: new Date().toISOString()
+        });
+        
+        botLogger.warn('Price fetch failed', {
+          botName: this.bot.name,
+          symbol: this.config.symbol,
+          signal: signal,
+          status: priceRes.status,
+          fetchTime: priceFetchTime
+        });
+        
         return;
       }
+
       const priceData = await priceRes.json();
       const currentPrice = parseFloat(priceData.price);
       
       console.log(`[BotExecutor] 🔍 DEBUG: Price data received:`, {
         symbol: this.config.symbol,
         price: currentPrice,
+        rawData: priceData,
+        fetchTime: priceFetchTime,
         timestamp: new Date().toISOString()
       });
       
-      botLogger.debug('Price fetched successfully (API)', {
+      botLogger.debug('Price fetched successfully', {
         botName: this.bot.name,
         symbol: this.config.symbol,
         price: currentPrice,
-        source: 'api'
+        fetchTime: priceFetchTime
       });
 
-      // Lấy balance thực tế từ Binance (vẫn qua API theo yêu cầu)
+      // Lấy balance thực tế từ Binance
       const balanceUrl = `${API_BASE_URL}/api/trading/binance/balance`;
       console.log(`[BotExecutor] 🔍 DEBUG: Fetching balance from: ${balanceUrl}`);
       
@@ -2040,12 +2069,6 @@ export class BotExecutor {
    */
   private async saveSignalToDatabase(signal: 'buy' | 'sell' | 'no_signal', strategy: any, candles: any[]): Promise<void> {
     try {
-      // Cho phép tắt chức năng cập nhật signals qua biến môi trường
-      if (DISABLE_SIGNALS_UPDATE) {
-        console.log(`[${this.bot.name}] 📴 Signals update is disabled by env, skipping save.`);
-        return;
-      }
-
       const currentPrice = candles[candles.length - 1]?.close;
       const timestamp = new Date().toISOString();
       

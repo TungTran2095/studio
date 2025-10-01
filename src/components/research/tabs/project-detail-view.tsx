@@ -328,6 +328,7 @@ function getBuySignalText(experiment: any, trade: any, tradeIndex?: number): str
       return trade.entry_reason || trade.reason || trade.buy_signal || trade.signal || '-';
   }
 }
+
 function getSellSignalText(experiment: any, trade: any, tradeIndex?: number): string {
   // Ưu tiên hiển thị exit_reason từ backend nếu có
   if (trade.exit_reason) {
@@ -631,6 +632,8 @@ function formatTradeTime(timeValue: any): string {
     return '-';
   }
 }
+
+
 // Hàm tính toán tỷ lệ lãi/lỗ net trung bình từ dữ liệu thực
 function calculateNetProfitRatios(trades: any[]) {
   console.log('🔍 calculateNetProfitRatios - Input trades:', trades);
@@ -686,6 +689,7 @@ function calculateNetProfitRatios(trades: any[]) {
 
   return { avgWinNet, avgLossNet };
 }
+
 // Xuất CSV danh sách giao dịch
 function exportTradesToCSV(trades: any[], experiment: any, fileName: string = 'trades.csv') {
   if (!Array.isArray(trades) || trades.length === 0) {
@@ -1101,6 +1105,7 @@ function SettingsTab({ project, onUpdate }: any) {
     </div>
   );
 }
+
 function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
   const [showCreateModel, setShowCreateModel] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -1565,6 +1570,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       console.log('🏁 [Reload Data] Loading finished');
     }
   };
+
   // Hàm tổng hợp OHLCV từ 1m sang timeframe lớn hơn
   function aggregateOHLCV(data: any[], timeframe: string) {
     // Hỗ trợ các timeframe: 1m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d
@@ -1892,6 +1898,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
       </div>
     );
   }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -2175,6 +2182,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
           </div>
         </div>
       )}
+
       {/* Create Model Form */}
       <Dialog open={showCreateModel} onOpenChange={setShowCreateModel}>
         <DialogContent className="max-w-4xl w-[90vw] max-h-[90vh] overflow-auto">
@@ -2379,6 +2387,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
           </div>
         </DialogContent>
       </Dialog>
+
       {/* Data Selector Modal */}
       <Dialog open={showDataSelector && !!modelToTrain} onOpenChange={setShowDataSelector}>
         <DialogContent className="max-w-4xl w-[90vw] max-h-[90vh] overflow-auto">
@@ -2753,8 +2762,7 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
   );
 }
 
-interface UIBacktestConfig {
-  type?: string;
+interface BacktestConfig {
   name: string;
   description: string;
   startDate: string;
@@ -2823,6 +2831,7 @@ interface OHLCV {
   close: number;
   volume: number;
 }
+
 function ExperimentsTab({ projectId, models }: { projectId: string, models: any[] }) {
   const { toast } = useToast();
   const [experiments, setExperiments] = useState<any[]>([]);
@@ -2831,8 +2840,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const [showExperimentTypeModal, setShowExperimentTypeModal] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
-  const [backtestConfig, setBacktestConfig] = useState<UIBacktestConfig>({
-    type: 'backtest',
+  const [backtestConfig, setBacktestConfig] = useState<BacktestConfig>({
     name: '',
     description: '',
     startDate: format(new Date(), 'yyyy-MM-dd'),
@@ -3307,6 +3315,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       setLoading(false);
     }
   };
+  
   const setupDatabase = async () => {
     setSettingUp(true);
     try {
@@ -3440,6 +3449,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       toast({ title: "Lỗi", description: "Lỗi kết nối khi bắt đầu thí nghiệm", variant: 'destructive' });
     }
   };
+
   const createMA20Backtest = async () => {
     try {
       setCreatingExperiment(true);
@@ -3624,6 +3634,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       setBacktests([]);
     }
   };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -3686,6 +3697,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
       </div>
     );
   }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -4084,14 +4096,13 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           </div>
         </div>
       )}
+
             {/* Phần 2: Các tab */}
             <div className="space-y-4">
               <Tabs defaultValue="data" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="data">Cấu hình dữ liệu</TabsTrigger>
                   <TabsTrigger value="config">Cấu hình backtest</TabsTrigger>
-                  <TabsTrigger value="tfexp">TF experiment</TabsTrigger>
-                  <TabsTrigger value="script">Script</TabsTrigger>
                 </TabsList>
                 <TabsContent value="data" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -4743,303 +4754,6 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                     </div>
                   </div>
                 </TabsContent>
-                <TabsContent value="config" className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tên thí nghiệm</Label>
-                      <Input 
-                        placeholder="Nhập tên thí nghiệm" 
-                        value={backtestConfig.name}
-                        onChange={(e) => handleBacktestConfigChange('name', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Mô tả</Label>
-                      <Input 
-                        placeholder="Nhập mô tả" 
-                        value={backtestConfig.description}
-                        onChange={(e) => handleBacktestConfigChange('description', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Loại thí nghiệm</Label>
-                      <Select 
-                        value={backtestConfig.type}
-                        onValueChange={(value) => handleBacktestConfigChange('type', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chọn loại thí nghiệm" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="backtest">Backtest</SelectItem>
-                          <SelectItem value="hypothesis">Kiểm tra giả thuyết</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Loại strategy</Label>
-                      <Select 
-                        value={backtestConfig.strategyType}
-                        onValueChange={(value) => handleBacktestConfigChange('strategyType', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chọn loại strategy" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ma_crossover">MA Crossover</SelectItem>
-                          <SelectItem value="rsi">RSI</SelectItem>
-                          <SelectItem value="ichimoku">Ichimoku</SelectItem>
-                          <SelectItem value="ai_model">AI Model</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {backtestConfig.strategyType && backtestConfig.strategyType.startsWith('ai_') && (
-                      <div className="space-y-2 col-span-2">
-                        <Label>Rule giao dịch AI Model</Label>
-                        <Textarea
-                          placeholder="Nhập rule giao dịch cho AI model (ví dụ: Mua khi dự báo tăng > 0.7, bán khi dự báo giảm > 0.7)"
-                          value={backtestConfig.aiRule || ''}
-                          onChange={e => handleBacktestConfigChange('aiRule', e.target.value)}
-                          className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
-                        />
-                      </div>
-                    )}
-                    {/* Các trường còn lại */}
-                    <div className="space-y-2">
-                      <Label>Vốn ban đầu</Label>
-                      <Input 
-                        type="number"
-                        value={backtestConfig.initialCapital}
-                        onChange={(e) => handleBacktestConfigChange('initialCapital', Number(e.target.value))}
-                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Kích thước vị thế (%)</Label>
-                      <Input 
-                        type="number"
-                        value={backtestConfig.positionSize}
-                        onChange={(e) => handleBacktestConfigChange('positionSize', Number(e.target.value))}
-                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Stop Loss (%)</Label>
-                      <Input 
-                        type="number"
-                        value={backtestConfig.stopLoss}
-                        onChange={(e) => handleBacktestConfigChange('stopLoss', Number(e.target.value))}
-                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Take Profit (%)</Label>
-                      <Input 
-                        type="number"
-                        value={backtestConfig.takeProfit}
-                        onChange={(e) => handleBacktestConfigChange('takeProfit', Number(e.target.value))}
-                        className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={backtestConfig.prioritizeStoploss || false}
-                          onChange={(e) => handleBacktestConfigChange('prioritizeStoploss', e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        <span>Ưu tiên bán theo stoploss</span>
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Khi bật: Stoploss (ưu tiên 1) → Sell Signal (ưu tiên 2) → Take Profit (ưu tiên 3)
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={backtestConfig.useTakeProfit || false}
-                          onChange={(e) => handleBacktestConfigChange('useTakeProfit', e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        <span>Sử dụng Take Profit</span>
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Khi bật: Take Profit sẽ được sử dụng làm ưu tiên số 3. Khi tắt: chỉ có Stoploss và Sell Signal
-                      </p>
-                    </div>
-                    <div className="col-span-2 space-y-2">
-                      <Label>
-                        <input
-                          type="checkbox"
-                          checked={useDefaultFee}
-                          onChange={e => {
-                            setUseDefaultFee(e.target.checked);
-                            setBacktestConfig(prev => ({
-                              ...prev,
-                              maker_fee: e.target.checked ? 0.1 : prev.maker_fee,
-                              taker_fee: e.target.checked ? 0.1 : prev.taker_fee
-                            }));
-                          }}
-                          className="mr-2"
-                        />
-                        Sử dụng phí giao dịch mặc định (Maker/Taker: 0.1%)
-                      </Label>
-                      
-                      {/* Patch-based Backtesting Options */}
-                      <div className="mt-4 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/30">
-                        <div className="space-y-3">
-                          <Label className="flex items-center space-x-2 text-blue-700 dark:text-blue-300">
-                            <input
-                              type="checkbox"
-                              checked={backtestConfig.usePatchBacktest || false}
-                              onChange={(e) => handleBacktestConfigChange('usePatchBacktest', e.target.checked)}
-                              className="h-4 w-4 rounded border-blue-300"
-                            />
-                            <span className="font-semibold">🔄 Sử dụng Patch-based Backtesting</span>
-                          </Label>
-                          <p className="text-xs text-blue-600 dark:text-blue-400">
-                            Chia dữ liệu thành các patch nhỏ để tránh lỗi timeout khi xử lý dữ liệu lớn. 
-                            Mỗi patch sẽ được backtest riêng và rebalance sau mỗi patch.
-                          </p>
-                          
-                          {backtestConfig.usePatchBacktest && (
-                            <div className="space-y-2">
-                              <Label className="text-sm text-blue-700 dark:text-blue-300">
-                                Độ dài mỗi patch (ngày)
-                              </Label>
-                              <Input
-                                type="number"
-                                min="1"
-                                max="90"
-                                value={backtestConfig.patchDays || 30}
-                                onChange={(e) => handleBacktestConfigChange('patchDays', Number(e.target.value))}
-                                className="border border-blue-300 bg-white px-3 py-2 text-sm text-black font-normal"
-                                placeholder="30"
-                              />
-                              <p className="text-xs text-blue-600 dark:text-blue-400">
-                                Khuyến nghị: 30 ngày cho dữ liệu 1m, 60 ngày cho dữ liệu 1h
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Maker fee (%)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.0001"
-                            value={backtestConfig.maker_fee}
-                            disabled={useDefaultFee}
-                            onChange={e => handleFeeChange('maker_fee', e.target.value)}
-                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Taker fee (%)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.0001"
-                            value={backtestConfig.taker_fee}
-                            disabled={useDefaultFee}
-                            onChange={e => handleFeeChange('taker_fee', e.target.value)}
-                            className="border border-input bg-background px-3 py-2 text-sm text-black font-normal"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent value="tfexp" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Multi-timeframe Experiment</CardTitle>
-                      <CardDescription>Sử dụng cùng cấu hình dữ liệu ở tab bên trái. Mặc định TF: 5m, 15m, 30m, 1h</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>Symbol</Label>
-                          <Input value={backtestConfig.symbol} onChange={(e)=>handleBacktestConfigChange('symbol', e.target.value)} />
-                        </div>
-                        <div>
-                          <Label>Timeframes</Label>
-                          <Input id="tfexp-tfs" defaultValue="5m,15m,30m,1h" />
-                        </div>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button onClick={async()=>{
-                          const tfsStr = (document.getElementById('tfexp-tfs') as HTMLInputElement)?.value || '5m,15m,30m,1h';
-                          const timeframes = tfsStr.split(',').map(s=>s.trim()).filter(Boolean);
-                          const body = {
-                            symbol: backtestConfig.symbol,
-                            strategy: 'ichimoku',
-                            timeframes,
-                            startDate: backtestConfig.startDate,
-                            endDate: backtestConfig.endDate
-                          };
-                          try {
-                            const res = await fetch('/api/experiments/mtf/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-                            const data = await res.json();
-                            (window as any).__TFEXP__ = data;
-                            alert('Đã chạy TF experiment. Kéo xuống để xem bảng kết quả.');
-                          } catch (e:any) {
-                            alert('Lỗi chạy TF experiment: ' + (e?.message||e));
-                          }
-                        }}>Chạy TF experiment</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Kết quả</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {(()=>{
-                        const d: any = (window as any).__TFEXP__;
-                        if (!d || !d.results) return <div className="text-sm text-muted-foreground">Chưa có kết quả</div>;
-                        return (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-xs border">
-                              <thead className="bg-muted">
-                                <tr>
-                                  <th className="p-2 text-left">TF</th>
-                                  <th className="p-2 text-right">Trades</th>
-                                  <th className="p-2 text-right">Winrate</th>
-                                  <th className="p-2 text-right">Sharpe</th>
-                                  <th className="p-2 text-right">PnL</th>
-                                  <th className="p-2 text-right">Max DD</th>
-                                  <th className="p-2 text-left">Trạng thái</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {d.results.map((r:any, i:number)=>{
-                                  const p = r.performance || {};
-                                  return (
-                                    <tr key={i} className="border-b hover:bg-muted/50">
-                                      <td className="p-2">{r.timeframe}</td>
-                                      <td className="p-2 text-right">{p.total_trades ?? r.trades_count ?? '—'}</td>
-                                      <td className="p-2 text-right">{p.winrate ? (p.winrate*100).toFixed(1)+'%' : '—'}</td>
-                                      <td className="p-2 text-right">{p.sharpe?.toFixed?.(2) ?? '—'}</td>
-                                      <td className="p-2 text-right">{p.total_pnl?.toFixed?.(4) ?? '—'}</td>
-                                      <td className="p-2 text-right">{p.max_drawdown ? (p.max_drawdown*100).toFixed(1)+'%' : '—'}</td>
-                                      <td className="p-2">{r.error || 'OK'}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        );
-                      })()}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
                 <TabsContent value="script" className="space-y-4">
                   <div className="h-[300px] border rounded-lg p-4 flex flex-col">
                     <div className="flex items-center justify-between mb-4">
@@ -5109,7 +4823,331 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* Hypothesis Test Configuration Modal */}
+      {showHypothesisConfig && (
+        <Card className="fixed z-50 bg-background border shadow-lg overflow-auto animate-in scale-x-95 duration-300 max-w-4xl max-h-[90vh]">
+          <CardHeader>
+            <CardTitle>Cấu hình Kiểm tra giả thuyết</CardTitle>
+            <CardDescription>
+              Thiết lập các tham số cho thí nghiệm kiểm tra giả thuyết
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tên thí nghiệm</Label>
+                <Input 
+                  placeholder="Nhập tên thí nghiệm" 
+                  value={hypothesisConfig.name}
+                  onChange={(e) => handleHypothesisConfigChange('name', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mô tả</Label>
+                <Input 
+                  placeholder="Nhập mô tả" 
+                  value={hypothesisConfig.description}
+                  onChange={(e) => handleHypothesisConfigChange('description', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Giả thuyết</Label>
+                <Textarea 
+                  placeholder="Nhập giả thuyết cần kiểm tra" 
+                  value={hypothesisConfig.hypothesis}
+                  onChange={(e) => handleHypothesisConfigChange('hypothesis', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mức ý nghĩa</Label>
+                <Select 
+                  value={hypothesisConfig.significanceLevel}
+                  onValueChange={(value) => handleHypothesisConfigChange('significanceLevel', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn mức ý nghĩa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0.01">0.01 (1%)</SelectItem>
+                    <SelectItem value="0.05">0.05 (5%)</SelectItem>
+                    <SelectItem value="0.1">0.1 (10%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Loại kiểm định</Label>
+                <Select 
+                  value={hypothesisConfig.testType}
+                  onValueChange={(value) => handleHypothesisConfigChange('testType', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn loại kiểm định" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="t-test">T-test</SelectItem>
+                    <SelectItem value="z-test">Z-test</SelectItem>
+                    <SelectItem value="chi-square">Chi-square</SelectItem>
+                    <SelectItem value="anova">ANOVA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowHypothesisConfig(false)}
+              className="flex-1"
+            >
+              Hủy
+            </Button>
+            <Button 
+              onClick={createHypothesisExperiment}
+              disabled={creatingExperiment}
+              className="flex-1"
+            >
+              {creatingExperiment ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Đang tạo...
+                </>
+              ) : (
+                'Tạo thí nghiệm'
+              )}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
+      {experiments.length === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Thí nghiệm Trading & Research</CardTitle>
+            <CardDescription>Test strategies, phân tích rủi ro và tối ưu hóa portfolio</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <TestTube className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-medium mb-2">Chưa có thí nghiệm nào</h3>
+              <p className="text-muted-foreground mb-4">
+                Bắt đầu với một template có sẵn hoặc tự tạo experiment
+              </p>
+              <div className="flex flex-col gap-2 max-w-sm mx-auto">
+                <Button 
+                  onClick={createMA20Backtest}
+                  disabled={creatingExperiment}
+                  className="w-full"
+                >
+                  {creatingExperiment ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Đang tạo...
+                    </>
+                  ) : (
+                    <>
+                      <LineChart className="h-4 w-4 mr-2" />
+                      Tạo Backtest MA20
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  onClick={handleCreateExperiment}
+                  disabled={creatingExperiment}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {creatingExperiment ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Đang tạo...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Tạo thí nghiệm tùy chỉnh
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredExperiments.map((experiment) => (
+            <Card key={experiment.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-500">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base font-semibold truncate">{experiment.name}</CardTitle>
+                        <Badge variant="outline" className="capitalize text-xs">
+                          {experiment.type === 'backtest' ? 'Backtest' :
+                           experiment.type === 'hypothesis_test' ? 'Kiểm định' : experiment.type}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="pt-0">
+                {/* Hiển thị mô tả nếu có */}
+                {experiment.description && (
+                  <div className="mb-4">
+                    <p className="text-sm text-muted-foreground line-clamp-2">{experiment.description}</p>
+                  </div>
+                )}
+
+                {/* Hiển thị chỉ số backtest nếu có kết quả */}
+                {experiment.status === 'completed' && experiment.results && experiment.type === 'backtest' && (
+                  <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                    <h4 className="text-sm font-medium mb-2 text-foreground">Kết quả Backtest</h4>
+                    <div className="grid grid-cols-5 gap-2 text-xs">
+                      {experiment.results.total_trades !== undefined && (
+                        <div className="text-center">
+                          <div className="font-semibold text-blue-600" title="Số lượng Trade: Tổng số giao dịch đã thực hiện">
+                            {experiment.results.total_trades}
+                          </div>
+                          <div className="text-muted-foreground">Số lượng Trade</div>
+                        </div>
+                      )}
+                      {experiment.results.win_rate !== undefined && (
+                        <div className="text-center">
+                          <div className="font-semibold text-purple-600" title="Winrate: Tỷ lệ giao dịch thắng">
+                            {experiment.results.win_rate?.toFixed(1)}%
+                          </div>
+                          <div className="text-muted-foreground">Winrate</div>
+                        </div>
+                      )}
+                      {(() => {
+                        let avgWinNet = 0;
+                        let avgLossNet = 0;
+                        
+                        // Tính toán trực tiếp từ trades nếu có
+                        if (experiment.results?.trades && experiment.results.trades.length > 0) {
+                          const tradesWithRatios = experiment.results.trades.map((trade: any) => {
+                            const entry = Number(trade.entry_price);
+                            const exit = Number(trade.exit_price);
+                            const size = Number(trade.size);
+                            const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                            const fee = (trade.entry_fee || 0) + (trade.exit_fee || 0);
+                            const net = gross - fee;
+                            const tradeValue = entry * size;
+                            const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0;
+                            
+                            return { ...trade, net, profitRatio };
+                          });
+                          
+                          // Phân loại trades thắng/thua
+                          const winningTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio > 0);
+                          const losingTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio < 0);
+                          
+                          // Tính trung bình
+                          avgWinNet = winningTrades.length > 0 
+                            ? winningTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / winningTrades.length 
+                            : 0;
+                            
+                          avgLossNet = losingTrades.length > 0 
+                            ? losingTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / losingTrades.length 
+                            : 0;
+                        } else {
+                          // Fallback về dữ liệu từ database nếu không có trades
+                          avgWinNet = Number(experiment.results?.performance?.avg_win_net || experiment.results?.avg_win_net || 0);
+                          avgLossNet = Number(experiment.results?.performance?.avg_loss_net || experiment.results?.avg_loss_net || 0);
+                        }
+                        
+                        return (
+                          <>
+                            <div className="text-center">
+                              <div className="font-semibold text-green-600" title="Tỷ lệ lãi net trung bình: Lãi trung bình sau khi đã trừ chi phí">
+                                {avgWinNet.toFixed(2)}%
+                              </div>
+                              <div className="text-muted-foreground">Tỷ lệ lãi net trung bình</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="font-semibold text-red-600" title="Tỷ lệ lỗ net trung bình: Lỗ trung bình sau khi đã trừ chi phí">
+                                {Math.abs(avgLossNet).toFixed(2)}%
+                              </div>
+                              <div className="text-muted-foreground">Tỷ lệ lỗ net trung bình</div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                      {experiment.results.total_return !== undefined && (
+                        <div className="text-center">
+                          <div className={`font-semibold ${
+                            experiment.results.total_return >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`} title="Tổng lợi nhuận: Chỉ số này cho thấy hiệu suất tổng thể của chiến lược">
+                            {experiment.results.total_return >= 0 ? '+' : ''}{experiment.results.total_return?.toFixed(2)}%
+                          </div>
+                          <div className="text-muted-foreground">Tổng lợi nhuận</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Hiển thị thông tin chiến lược nếu có */}
+                {experiment.config?.strategy && experiment.type === 'backtest' && (
+                  <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
+                    <div className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
+                      Chiến lược: {experiment.config.strategy.type || 'N/A'}
+                    </div>
+                    {experiment.config.trading && (
+                      <div className="text-xs text-blue-600 dark:text-blue-400">
+                        {experiment.config.trading.symbol} • {experiment.config.trading.timeframe}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Hiển thị thông tin thời gian */}
+                <div className="text-xs text-muted-foreground mb-4">
+                  Tạo lúc: {new Date(experiment.created_at).toLocaleString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => {
+                      console.log('🔍 [Button Click] View details clicked for experiment:', experiment);
+                      viewExperimentDetails(experiment);
+                    }}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    Chi tiết
+                  </Button>
+                  {experiment.status === 'pending' && (
+                    <Button 
+                      size="sm" 
+                      variant="default"
+                      className="flex-1"
+                      onClick={() => startExperiment(experiment.id)}
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Bắt đầu
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Quick Stats */}
+
       {/* Experiment Details Modal */}
       {selectedExperiment && (
         <Dialog open={showDetails} onOpenChange={(open) => {
@@ -5281,6 +5319,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                               yAxis: 1
                             });
                           }
+
                           if (indicators && strategyType) {
                             if (strategyType === 'rsi' && indicators.rsi) {
                               // Lọc bỏ các giá trị null/undefined
@@ -5607,6 +5646,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                               }
                             }
                           }
+
                           // Thêm series marker cho buy/sell
                           if (tradeMarkers.length > 0) {
                             series.push({
@@ -5724,6 +5764,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                       </div>
                     </div>
                   )}
+
                   <Tabs defaultValue="config" className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="config">Cấu hình backtest</TabsTrigger>
@@ -5828,6 +5869,92 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                 ) : (
                                   <BacktestResultDetail results={resultObj} />
                                 )}
+                                
+                                {/* Monte Carlo Profit Simulation */}
+                                {resultObj.total_trades && resultObj.win_rate && (
+                                  <div className="mt-6 space-y-6">
+                                    {(() => {
+                                      // Debug: kiểm tra dữ liệu thực tế từ backend
+                                      console.log('🔍 DEBUG resultObj:', resultObj);
+                                      console.log('🔍 DEBUG resultObj.performance:', resultObj.performance);
+                                      console.log('🔍 DEBUG resultObj.avg_win_net:', resultObj.avg_win_net);
+                                      console.log('🔍 DEBUG resultObj.avg_loss_net:', resultObj.avg_loss_net);
+                                      
+                                      // Tính toán avgWinNet và avgLossNet trực tiếp từ dữ liệu trades
+                                      let avgWinNet = 0;
+                                      let avgLossNet = 0;
+                                      
+                                      if (resultObj.trades && resultObj.trades.length > 0) {
+                                        // Tính tỷ lệ lợi nhuận cho từng trade (giống như trong bảng)
+                                        const tradesWithRatios = resultObj.trades.map((trade: any) => {
+                                          const entry = Number(trade.entry_price);
+                                          const exit = Number(trade.exit_price);
+                                          const size = Number(trade.size);
+                                          const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
+                                          const fee = (trade.entry_fee || 0) + (trade.exit_fee || 0);
+                                          const net = gross - fee;
+                                          const tradeValue = entry * size;
+                                          const profitRatio = tradeValue > 0 ? (net / tradeValue) * 100 : 0;
+                                          
+                                          return { ...trade, net, profitRatio };
+                                        });
+                                        
+                                        // Phân loại trades thắng/thua dựa trên profitRatio
+                                        const winningTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio > 0);
+                                        const losingTrades = tradesWithRatios.filter((trade: any) => trade.profitRatio < 0);
+                                        
+                                        // Tính trung bình
+                                        avgWinNet = winningTrades.length > 0 
+                                          ? winningTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / winningTrades.length 
+                                          : 0;
+                                          
+                                        avgLossNet = losingTrades.length > 0 
+                                          ? losingTrades.reduce((sum: number, trade: any) => sum + trade.profitRatio, 0) / losingTrades.length 
+                                          : 0;
+                                      }
+                                      
+                                      const metrics = {
+                                        totalTrades: Number(resultObj.total_trades) || 0,
+                                        winRate: Number(resultObj.win_rate) || 0,
+                                        avgWinNet: avgWinNet,
+                                        avgLossNet: avgLossNet
+                                      };
+                                      
+                                      console.log('🔍 DEBUG metrics:', metrics);
+                                      console.log('🔍 DEBUG avgWinNet:', avgWinNet);
+                                      console.log('🔍 DEBUG avgLossNet:', avgLossNet);
+
+                                      // Chỉ hiển thị Monte Carlo khi có đủ dữ liệu cơ bản
+                                      if (metrics.totalTrades > 0 && metrics.winRate > 0) {
+                                      return (
+                                        <MonteCarloProfitSimulation 
+                                          backtestMetrics={metrics}
+                                          initialCapital={selectedExperiment.config?.trading?.initialCapital || 10000}
+                                          simulations={1000}
+                                          backtestResult={{
+                                            totalReturn: resultObj.total_return,
+                                            maxDrawdown: resultObj.max_drawdown,
+                                            totalProfit: resultObj.total_profit || (resultObj.total_return ? (resultObj.total_return / 100) * (selectedExperiment.config?.trading?.initialCapital || 10000) : 0),
+                                            positionSize: selectedExperiment.config?.trading?.positionSize || 0.1
+                                          }}
+                                          onSimulationComplete={setMonteCarloResults}
+                                          experimentId={selectedExperiment.id}
+                                        />
+                                      );
+                                      } else {
+                                        return (
+                                          <div className="text-center text-muted-foreground py-8">
+                                            <p>Không đủ dữ liệu để chạy Monte Carlo simulation</p>
+                                            <p className="text-sm">Cần có ít nhất 1 trade với thông tin lãi/lỗ</p>
+                                          </div>
+                                        );
+                                      }
+                                    })()}
+                                    
+
+                                  </div>
+                                )}
+                                
                                 {/* Hiển thị bảng trades nếu có */}
                                 {Array.isArray(resultObj.trades) && resultObj.trades.length > 0 ? (
                                   <div className="mb-6">
@@ -6058,11 +6185,7 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                                   const entry = Number(t.entry_price);
                                                   const exit = Number(t.exit_price);
                                                   const size = Number(t.size);
-                                                  // Chỉ tính các lệnh đã đóng (có cả entry và exit)
-                                                  if (!entry || !exit || !size || !isFinite(entry) || !isFinite(exit) || !isFinite(size)) {
-                                                    return sum;
-                                                  }
-                                                  const gross = (exit - entry) * size;
+                                                  const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
                                                   const fee = (t.entry_fee || 0) + (t.exit_fee || 0);
                                                   return sum + (gross - fee);
                                                 }, 0);
@@ -6073,23 +6196,14 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
                                               {(() => {
                                                 const totalTradeValue = resultObj.trades.reduce((sum: number, t: any) => {
                                                   const entry = Number(t.entry_price);
-                                                  const exit = Number(t.exit_price);
                                                   const size = Number(t.size);
-                                                  // Chỉ tính các lệnh đã đóng (có cả entry và exit)
-                                                  if (!entry || !exit || !size || !isFinite(entry) || !isFinite(exit) || !isFinite(size)) {
-                                                    return sum;
-                                                  }
                                                   return sum + (entry * size);
                                                 }, 0);
                                                 const totalNet = resultObj.trades.reduce((sum: number, t: any) => {
                                                   const entry = Number(t.entry_price);
                                                   const exit = Number(t.exit_price);
                                                   const size = Number(t.size);
-                                                  // Chỉ tính các lệnh đã đóng (có cả entry và exit)
-                                                  if (!entry || !exit || !size || !isFinite(entry) || !isFinite(exit) || !isFinite(size)) {
-                                                    return sum;
-                                                  }
-                                                  const gross = (exit - entry) * size;
+                                                  const gross = (isFinite(entry) && isFinite(exit) && isFinite(size)) ? (exit - entry) * size : 0;
                                                   const fee = (t.entry_fee || 0) + (t.exit_fee || 0);
                                                   return sum + (gross - fee);
                                                 }, 0);
@@ -6273,6 +6387,7 @@ function BacktestResultDetail({ results }: { results: any }) {
     </div>
   );
 }
+
 export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps) {
   const { toast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
@@ -6502,7 +6617,9 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
       </div>
     );
   }
+
   const { progress, tasks } = calculateProjectProgress(project, models);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -6657,6 +6774,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
           )}
         </CardContent>
       </Card>
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-5">

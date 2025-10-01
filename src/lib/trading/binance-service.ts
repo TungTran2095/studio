@@ -64,10 +64,6 @@ export class BinanceService {
   private apiKey: string;
   private apiSecret: string;
   private testnet: boolean;
-  // WS candles buffer: key = `${symbol}|${interval}` -> array of klines
-  private wsCandles: Map<string, any[]> = new Map();
-  private wsUnsubscribers: Map<string, () => void> = new Map();
-  private lastPrices: Map<string, number> = new Map();
 
   constructor(apiKey: string, apiSecret: string, testnet: boolean = false) {
     // Lưu credentials để có thể tạo lại client
@@ -95,177 +91,70 @@ export class BinanceService {
   }
 
   /**
-   * Subscribe WS kline và lưu buffer nội bộ để giảm HTTP calls
+   * Retry logic với timestamp sync cho các API calls
    */
-  subscribeKlines(symbol: string, interval: string, bufferSize: number = 500): void {
-    const key = `${symbol}|${interval}`;
-    if (this.wsUnsubscribers.has(key)) return; // already subscribed
-
-    if (!this.client?.ws?.candles) {
-      console.warn('[BinanceService] WS candles API is not available on client');
-      return;
-    }
-
-    const unsub = this.client.ws.candles(symbol, interval, (candle: any) => {
-      // candle.k is kline payload (per binance-api-node)
-      const k = candle.k || candle;
-      const arr = this.wsCandles.get(key) || [];
-      // Build normalized array record like REST klines
-      const record = [
-        k.t,           // openTime
-        k.o,           // open
-        k.h,           // high
-        k.l,           // low
-        k.c,           // close
-        k.v,           // volume
-        k.T,           // closeTime
-        k.q,           // quoteAssetVolume
-        k.n,           // numberOfTrades
-        k.V,           // takerBuyBaseAssetVolume
-        k.Q            // takerBuyQuoteAssetVolume
-      ];
-      // Replace last if same openTime, else push
-      if (arr.length > 0 && arr[arr.length - 1][0] === record[0]) {
-        arr[arr.length - 1] = record;
-      } else {
-        arr.push(record);
-      }
-      // Trim buffer
-      if (arr.length > bufferSize) arr.splice(0, arr.length - bufferSize);
-      this.wsCandles.set(key, arr);
-    });
-
-    this.wsUnsubscribers.set(key, unsub);
-    console.log(`[BinanceService] WS subscribed klines ${symbol} ${interval}`);
-  }
-
-  /**
-   * Lấy candles từ WS buffer (đã normalize theo REST format)
-   */
-  getRecentCandles(symbol: string, interval: string, limit: number = 100): any[] {
-    const key = `${symbol}|${interval}`;
-    const arr = this.wsCandles.get(key) || [];
-    if (arr.length === 0) return [];
-    return arr.slice(-limit);
-  }
-
-  /**
-   * Subscribe WS miniTicker để lấy giá realtime
-   */
-  subscribeMiniTicker(symbol: string): void {
-    const key = symbol.toUpperCase();
-    if (this.wsUnsubscribers.has(`mini|${key}`)) return;
-
-    if (!this.client?.ws?.miniTicker) {
-      console.warn('[BinanceService] WS miniTicker API is not available on client');
-      return;
-    }
-
-    const unsub = this.client.ws.miniTicker(symbol, (t: any) => {
-      const price = parseFloat(t.close || t.c || t.price || t.p || '0');
-      if (!isNaN(price) && price > 0) {
-        this.lastPrices.set(key, price);
-      }
-    });
-
-    this.wsUnsubscribers.set(`mini|${key}`, unsub);
-    console.log(`[BinanceService] WS subscribed miniTicker ${symbol}`);
-  }
-
-  /**
-   * Lấy giá mới nhất từ WS miniTicker
-   */
-  getLastPrice(symbol: string): number | null {
-    const key = symbol.toUpperCase();
-    const v = this.lastPrices.get(key);
-    return v !== undefined ? v : null;
-  }
-
-  /**
-   * Retry logic với timestamp sync và xử lý 5xx/network (exponential backoff + jitter)
-   */
-  private async retryWithTimestampSync<T>(fn: () => Promise<T>, maxRetries: number = Number(process.env.BINANCE_MAX_RETRIES || 5)): Promise<T> {
+  private async retryWithTimestampSync<T>(fn: () => Promise<T>, maxRetries: number = 3): Promise<T> {
     let lastError: any;
-    const baseDelayMs = Number(process.env.BINANCE_RETRY_BASE_DELAY_MS || 500);
-    const maxDelayMs = Number(process.env.BINANCE_RETRY_MAX_DELAY_MS || 30000);
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await fn();
       } catch (error: any) {
         lastError = error;
-
-        const status = error?.response?.status || error?.status;
-        const message = (error?.message || '').toString();
-
-        // Xác định lỗi timestamp / recvWindow
-        const isTimestampError = (
-          typeof message === 'string' && (
-            message.includes('Timestamp for this request') ||
-            message.toLowerCase().includes('timestamp') ||
-            message.toLowerCase().includes('recvwindow') ||
-            message.toLowerCase().includes('outside of the recvwindow')
-          )
-        ) || error?.code === -1021;
-
-        // Xác định lỗi 5xx hoặc network
-        const is5xx = typeof status === 'number' && status >= 500 && status < 600;
-        const isNetwork = (
-          message.includes('fetch failed') ||
-          message.includes('Failed to fetch') ||
-          message.includes('ECONNRESET') ||
-          message.includes('ENOTFOUND') ||
-          message.includes('EAI_AGAIN') ||
-          message.includes('socket hang up') ||
-          message.includes('timeout') ||
-          message.includes('Bad Gateway') ||
-          message.includes('Gateway Timeout')
+        
+        // Kiểm tra nếu là lỗi timestamp hoặc recvWindow
+        const isTimestampError = error.message && (
+          error.message.includes('Timestamp for this request') ||
+          error.message.includes('timestamp') ||
+          error.message.includes('time') ||
+          error.message.includes('recvWindow') ||
+          error.message.includes('outside of the recvWindow') ||
+          error.code === -1021 // Binance error code cho timestamp issues
         );
-
-        // Nhánh xử lý lỗi timestamp: sync + recreate client
+        
         if (isTimestampError && attempt < maxRetries) {
           console.log(`[BinanceService] Lỗi timestamp (attempt ${attempt}/${maxRetries}), đang sync lại...`);
           console.log(`[BinanceService] Error details:`, error);
           console.log(`[BinanceService] Bot type: ${this.testnet ? 'testnet' : 'realnet'}`);
+          
+          // Force sync timestamp
           try {
             await TimeSync.syncWithServer();
+            
+            // Đợi một chút để đảm bảo sync hoàn tất
             await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Tạo lại client với cấu hình mới
             this.client = Binance({
               apiKey: this.apiKey,
               apiSecret: this.apiSecret,
               httpBase: this.testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
+              // Sử dụng custom getTime function để đảm bảo timestamp chính xác
               getTime: () => {
                 const now = Date.now();
-                const safeTime = now - 1000;
+                const safeTime = now - 1000; // Trừ 1 giây để đảm bảo an toàn
                 console.log(`[BinanceService] Regenerating timestamp: ${safeTime} (${new Date(safeTime).toISOString()})`);
                 return safeTime;
               }
             });
+            
             console.log(`[BinanceService] Đã tạo lại client với timestamp sync (${this.testnet ? 'testnet' : 'realnet'})`);
+            
+            // Đợi thêm một chút trước khi thử lại
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           } catch (syncError) {
             console.error('[BinanceService] Không thể sync timestamp:', syncError);
-            // Nếu sync thất bại, rơi xuống retry chung bên dưới
           }
         }
-
-        // Nhánh xử lý 5xx/network: exponential backoff + jitter
-        if ((is5xx || isNetwork) && attempt < maxRetries) {
-          const expDelay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
-          const jitter = Math.floor(Math.random() * 250);
-          const delay = expDelay + jitter;
-          console.warn(`[BinanceService] Lỗi ${status || 'network'}: ${message}. Sẽ retry attempt ${attempt + 1}/${maxRetries} sau ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-
-        // Hết lượt hoặc lỗi không thuộc nhóm retry -> ném lỗi
-        if (attempt === maxRetries || (!isTimestampError && !is5xx && !isNetwork)) {
+        
+        // Nếu không phải lỗi timestamp hoặc đã hết retry, throw error
+        if (attempt === maxRetries || !isTimestampError) {
           throw error;
         }
       }
     }
+    
     throw lastError;
   }
 
@@ -344,5 +233,3 @@ export class BinanceService {
     }
   }
 }
-
-

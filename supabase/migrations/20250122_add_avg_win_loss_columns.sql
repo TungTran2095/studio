@@ -28,10 +28,3 @@ NOTIFY pgrst, 'reload schema';
 
 
 
-
-
-
-
-
-
-
