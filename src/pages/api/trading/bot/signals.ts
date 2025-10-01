@@ -1,12 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/lib/supabase-client';
 
+// Không đồng bộ signals chéo bot nữa; mỗi bot tự quản signals của mình
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { botId } = req.query;
+  const { botId } = req.query as { botId?: string } as any;
 
   if (!botId) {
     return res.status(400).json({ error: 'Missing botId parameter' });
@@ -17,7 +19,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Lấy signals từ cột signals (JSONB) của trading_bots
+    // Không còn đồng bộ signals từ bot khác
+
+    // Always return signals for requested botId
     const { data: bot, error } = await supabase
       .from('trading_bots')
       .select('signals')
@@ -33,15 +37,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Bot not found' });
     }
 
-    // Trả về signals array (có thể là null nếu chưa có signal nào)
-    const signals = bot.signals || [];
+    // Trả về tối đa 200 signals mới nhất
+    const allSignals = Array.isArray(bot.signals) ? bot.signals : [];
+    const limitedSignals = allSignals.slice(0, 200);
 
     return res.status(200).json({
       success: true,
-      signals: signals,
-      count: signals.length
+      signals: limitedSignals,
+      count: limitedSignals.length,
+      total: allSignals.length
     });
-
   } catch (error) {
     console.error('Error in signals API:', error);
     return res.status(500).json({ error: 'Internal server error' });

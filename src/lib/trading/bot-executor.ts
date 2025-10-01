@@ -21,6 +21,7 @@ interface BotExecutorConfig {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.API_BASE_URL || 'http://localhost:9002';
+const DISABLE_SIGNALS_UPDATE = (process.env.DISABLE_TRADING_SIGNALS === 'true') || (process.env.NEXT_PUBLIC_DISABLE_TRADING_SIGNALS === 'true');
 
 // Debug logging để kiểm tra API_BASE_URL
 console.log('[BotExecutor] 🔍 DEBUG: API_BASE_URL configuration:', {
@@ -367,19 +368,58 @@ export class BotExecutor {
         : 'https://api.binance.com';
       
       const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
-      
-      const candlesRes = await fetch(url, {
+
+      // Robust fetch with retry and fallback for 5xx errors (e.g., 502 Bad Gateway)
+      const fetchWithRetry = async (primaryUrl: string, options: RequestInit, maxRetries: number = 4): Promise<Response> => {
+        const fallbackHosts = this.bot?.config?.account?.testnet
+          ? ['https://testnet.binance.vision']
+          : [
+              'https://api.binance.com',
+              'https://data-api.binance.vision',
+              'https://api1.binance.com',
+              'https://api2.binance.com'
+            ];
+
+        let lastError: any;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          const delay = Math.min(500 * Math.pow(2, attempt), 4000);
+          const targetBase = fallbackHosts[Math.min(attempt, fallbackHosts.length - 1)];
+          const targetUrl = primaryUrl.replace(/^https?:\/\/[^/]+/, targetBase);
+          try {
+            const res = await fetch(targetUrl, options);
+            if (res.ok) return res;
+            // Retry only on 5xx
+            if (res.status >= 500) {
+              const text = await res.text().catch(() => '');
+              console.log(`[BotExecutor] ⚠️ Binance 5xx (${res.status}) on ${targetBase}. Attempt ${attempt + 1}/${maxRetries + 1}.`);
+              if (attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+              }
+              lastError = new Error(`Binance API 5xx: ${res.status} ${text}`);
+              break;
+            } else {
+              // Non-retryable
+              return res;
+            }
+          } catch (err) {
+            lastError = err;
+            console.log(`[BotExecutor] ⚠️ Network error to ${targetBase}: ${(err as Error).message}. Attempt ${attempt + 1}/${maxRetries + 1}.`);
+            if (attempt < maxRetries) {
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            }
+          }
+        }
+        throw lastError || new Error('Unknown Binance fetch error');
+      };
+
+      const candlesRes = await fetchWithRetry(url, {
         method: 'GET',
         headers: {
           'X-MBX-APIKEY': this.bot.config.account.apiKey || '',
         },
       });
-
-      if (!candlesRes.ok) {
-        const errorText = await candlesRes.text().catch(() => '');
-        console.log(`[BotExecutor] ❌ Binance API error: ${candlesRes.status} - ${errorText}`);
-        throw new Error(`Binance API error: ${candlesRes.status}`);
-      }
 
       const candlesData = await candlesRes.json();
       
@@ -2069,6 +2109,12 @@ export class BotExecutor {
    */
   private async saveSignalToDatabase(signal: 'buy' | 'sell' | 'no_signal', strategy: any, candles: any[]): Promise<void> {
     try {
+      // Cho phép tắt chức năng cập nhật signals qua biến môi trường
+      if (DISABLE_SIGNALS_UPDATE) {
+        console.log(`[${this.bot.name}] 📴 Signals update is disabled by env, skipping save.`);
+        return;
+      }
+
       const currentPrice = candles[candles.length - 1]?.close;
       const timestamp = new Date().toISOString();
       

@@ -91,70 +91,90 @@ export class BinanceService {
   }
 
   /**
-   * Retry logic với timestamp sync cho các API calls
+   * Retry logic với timestamp sync và xử lý 5xx/network (exponential backoff + jitter)
    */
-  private async retryWithTimestampSync<T>(fn: () => Promise<T>, maxRetries: number = 3): Promise<T> {
+  private async retryWithTimestampSync<T>(fn: () => Promise<T>, maxRetries: number = Number(process.env.BINANCE_MAX_RETRIES || 5)): Promise<T> {
     let lastError: any;
+    const baseDelayMs = Number(process.env.BINANCE_RETRY_BASE_DELAY_MS || 500);
+    const maxDelayMs = Number(process.env.BINANCE_RETRY_MAX_DELAY_MS || 30000);
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await fn();
       } catch (error: any) {
         lastError = error;
-        
-        // Kiểm tra nếu là lỗi timestamp hoặc recvWindow
-        const isTimestampError = error.message && (
-          error.message.includes('Timestamp for this request') ||
-          error.message.includes('timestamp') ||
-          error.message.includes('time') ||
-          error.message.includes('recvWindow') ||
-          error.message.includes('outside of the recvWindow') ||
-          error.code === -1021 // Binance error code cho timestamp issues
+
+        const status = error?.response?.status || error?.status;
+        const message = (error?.message || '').toString();
+
+        // Xác định lỗi timestamp / recvWindow
+        const isTimestampError = (
+          typeof message === 'string' && (
+            message.includes('Timestamp for this request') ||
+            message.toLowerCase().includes('timestamp') ||
+            message.toLowerCase().includes('recvwindow') ||
+            message.toLowerCase().includes('outside of the recvwindow')
+          )
+        ) || error?.code === -1021;
+
+        // Xác định lỗi 5xx hoặc network
+        const is5xx = typeof status === 'number' && status >= 500 && status < 600;
+        const isNetwork = (
+          message.includes('fetch failed') ||
+          message.includes('Failed to fetch') ||
+          message.includes('ECONNRESET') ||
+          message.includes('ENOTFOUND') ||
+          message.includes('EAI_AGAIN') ||
+          message.includes('socket hang up') ||
+          message.includes('timeout') ||
+          message.includes('Bad Gateway') ||
+          message.includes('Gateway Timeout')
         );
-        
+
+        // Nhánh xử lý lỗi timestamp: sync + recreate client
         if (isTimestampError && attempt < maxRetries) {
           console.log(`[BinanceService] Lỗi timestamp (attempt ${attempt}/${maxRetries}), đang sync lại...`);
           console.log(`[BinanceService] Error details:`, error);
           console.log(`[BinanceService] Bot type: ${this.testnet ? 'testnet' : 'realnet'}`);
-          
-          // Force sync timestamp
           try {
             await TimeSync.syncWithServer();
-            
-            // Đợi một chút để đảm bảo sync hoàn tất
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Tạo lại client với cấu hình mới
             this.client = Binance({
               apiKey: this.apiKey,
               apiSecret: this.apiSecret,
               httpBase: this.testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
-              // Sử dụng custom getTime function để đảm bảo timestamp chính xác
               getTime: () => {
                 const now = Date.now();
-                const safeTime = now - 1000; // Trừ 1 giây để đảm bảo an toàn
+                const safeTime = now - 1000;
                 console.log(`[BinanceService] Regenerating timestamp: ${safeTime} (${new Date(safeTime).toISOString()})`);
                 return safeTime;
               }
             });
-            
             console.log(`[BinanceService] Đã tạo lại client với timestamp sync (${this.testnet ? 'testnet' : 'realnet'})`);
-            
-            // Đợi thêm một chút trước khi thử lại
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           } catch (syncError) {
             console.error('[BinanceService] Không thể sync timestamp:', syncError);
+            // Nếu sync thất bại, rơi xuống retry chung bên dưới
           }
         }
-        
-        // Nếu không phải lỗi timestamp hoặc đã hết retry, throw error
-        if (attempt === maxRetries || !isTimestampError) {
+
+        // Nhánh xử lý 5xx/network: exponential backoff + jitter
+        if ((is5xx || isNetwork) && attempt < maxRetries) {
+          const expDelay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
+          const jitter = Math.floor(Math.random() * 250);
+          const delay = expDelay + jitter;
+          console.warn(`[BinanceService] Lỗi ${status || 'network'}: ${message}. Sẽ retry attempt ${attempt + 1}/${maxRetries} sau ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Hết lượt hoặc lỗi không thuộc nhóm retry -> ném lỗi
+        if (attempt === maxRetries || (!isTimestampError && !is5xx && !isNetwork)) {
           throw error;
         }
       }
     }
-    
     throw lastError;
   }
 
@@ -233,3 +253,5 @@ export class BinanceService {
     }
   }
 }
+
+
