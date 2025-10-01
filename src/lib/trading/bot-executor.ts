@@ -373,14 +373,21 @@ export class BotExecutor {
       // Chỉ dùng WS buffer; KHÔNG gọi HTTP cho klines nữa
       let candlesData = this.binanceService.getRecentCandles(this.config.symbol, this.config.timeframe, 120);
       if (!candlesData || candlesData.length === 0) {
-        console.log('[BotExecutor] ⏳ WS buffer chưa sẵn sàng, chờ 1s và thử lại...');
-        await new Promise(r => setTimeout(r, 1000));
-        candlesData = this.binanceService.getRecentCandles(this.config.symbol, this.config.timeframe, 120);
+        let attempts = 0;
+        const maxAttempts = 5;
+        while (attempts < maxAttempts && (!candlesData || candlesData.length === 0)) {
+          const waitMs = 500 + attempts * 250;
+          console.log(`[BotExecutor] ⏳ WS buffer chưa sẵn sàng (${attempts + 1}/${maxAttempts}), chờ ${waitMs}ms...`);
+          await new Promise(r => setTimeout(r, waitMs));
+          candlesData = this.binanceService.getRecentCandles(this.config.symbol, this.config.timeframe, 120);
+          attempts++;
+        }
       }
       
       // Kiểm tra dữ liệu candles
       if (!candlesData || !Array.isArray(candlesData) || candlesData.length === 0) {
-        throw new Error('Dữ liệu candles không hợp lệ hoặc rỗng');
+        console.log('[BotExecutor] ⏭️ Bỏ qua chu kỳ: dữ liệu candles WS chưa sẵn sàng');
+        return;
       }
 
       console.log(`[BotExecutor] 📊 Fetched ${candlesData.length} candles`);
