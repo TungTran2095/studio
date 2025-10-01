@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
+import { MainNavigation } from '@/components/main-navigation';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -18,7 +19,10 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
+        <MainNavigation />
+        <main className="min-h-screen bg-gray-50">
+          {children}
+        </main>
         <Toaster />
       </body>
     </html>

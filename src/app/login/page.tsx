@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { LogIn, Loader2, AlertCircle } from 'lucide-react';
+import { LogIn, Loader2, AlertCircle, Shield, User } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -27,6 +27,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Badge } from '@/components/ui/badge';
 
 const formSchema = z.object({
   email: z.string().email('Email không hợp lệ.'),
@@ -106,7 +107,7 @@ export default function LoginPage() {
       }
     } else {
       // Login
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -117,7 +118,26 @@ export default function LoginPage() {
           title: 'Lỗi đăng nhập',
           description: error.message,
         });
-      } else {
+      } else if (data.user) {
+        // Check if user is admin
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_admin, full_name')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profile?.is_admin) {
+          toast({
+            title: 'Đăng nhập thành công!',
+            description: `Chào mừng Admin ${profile.full_name || email}`,
+          });
+        } else {
+          toast({
+            title: 'Đăng nhập thành công!',
+            description: `Chào mừng ${profile?.full_name || email}`,
+          });
+        }
+        
         router.push('/');
       }
     }
