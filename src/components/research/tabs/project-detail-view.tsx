@@ -2753,7 +2753,8 @@ function ModelsTab({ models, onCreateModel, onRefresh, projectId }: any) {
   );
 }
 
-interface BacktestConfig {
+interface UIBacktestConfig {
+  type?: string;
   name: string;
   description: string;
   startDate: string;
@@ -2830,7 +2831,8 @@ function ExperimentsTab({ projectId, models }: { projectId: string, models: any[
   const [showExperimentTypeModal, setShowExperimentTypeModal] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
-  const [backtestConfig, setBacktestConfig] = useState<BacktestConfig>({
+  const [backtestConfig, setBacktestConfig] = useState<UIBacktestConfig>({
+    type: 'backtest',
     name: '',
     description: '',
     startDate: format(new Date(), 'yyyy-MM-dd'),
