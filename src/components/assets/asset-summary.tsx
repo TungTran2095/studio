@@ -42,6 +42,7 @@ import { useAssetStore, BinanceAccount } from '@/store/asset-store'; // Import Z
 import { useRouter } from 'next/navigation'; // Import router
 import { supabase as supabaseClient } from '@/lib/supabase-client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
+import { ApiMonitoringTab } from './api-monitoring-tab';
 
 // Schema for form validation - remains the same
 const formSchema = z.object({
@@ -266,6 +267,7 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
           <TabsList className="mb-2">
             <TabsTrigger value="assets">Tình trạng tài sản</TabsTrigger>
             <TabsTrigger value="history">Lịch sử giao dịch</TabsTrigger>
+            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           </TabsList>
           {/* Tab tình trạng tài sản */}
           <TabsContent value="assets" className="flex-1 flex flex-col">
@@ -399,6 +401,11 @@ export const AssetSummary: FC<AssetSummaryProps> = ({ isExpanded, onToggle }) =>
                 </TableBody>
               </Table>
             </div>
+          </TabsContent>
+          
+          {/* Tab Monitoring */}
+          <TabsContent value="monitoring" className="flex-1 flex flex-col">
+            <ApiMonitoringTab className="flex-1" />
           </TabsContent>
         </Tabs>
       </CardContent>

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       .from('trades')
       .select('*')
       .eq('bot_id', botId)
-      .order('created_at', { ascending: false })
+      .order('open_time', { ascending: true })
       .limit(100);
 
     if (error) {

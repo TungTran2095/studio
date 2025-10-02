@@ -1,4 +1,5 @@
 import Binance from 'binance-api-node';
+import { binanceRateLimiter } from '@/lib/monitor/binance-rate-limiter';
 import { TimeSync } from '@/lib/time-sync';
 
 export interface BinanceAccountInfo {
@@ -160,6 +161,7 @@ export class BinanceService {
 
   async getAccountInfo(): Promise<BinanceAccountInfo> {
     try {
+      await binanceRateLimiter.throttle('account');
       return await this.retryWithTimestampSync(() => this.client.accountInfo());
     } catch (error) {
       console.error('Error getting account info:', error);
@@ -169,6 +171,7 @@ export class BinanceService {
 
   async getCandles(symbol: string, interval: string, limit: number = 100): Promise<BinanceCandle[]> {
     try {
+      await binanceRateLimiter.throttle('market');
       const candles = await this.retryWithTimestampSync(() => this.client.candles({ symbol, interval, limit })) as any[];
       return candles.map((candle: any[]) => ({
         openTime: candle[0],
@@ -191,6 +194,7 @@ export class BinanceService {
 
   async getPrice(symbol: string): Promise<BinancePrice> {
     try {
+      await binanceRateLimiter.throttle('market');
       return await this.retryWithTimestampSync(() => this.client.price({ symbol }));
     } catch (error) {
       console.error('Error getting price:', error);
@@ -206,6 +210,7 @@ export class BinanceService {
     price?: string;
   }): Promise<BinanceOrder> {
     try {
+      await binanceRateLimiter.throttle('order');
       const order = await this.retryWithTimestampSync(() => this.client.order({
         symbol: orderParams.symbol,
         side: orderParams.side,

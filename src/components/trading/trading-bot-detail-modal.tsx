@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, Pause, ChevronDown, ChevronRight } from 'lucide-react';
+import { Play, Pause, ChevronDown, ChevronRight, TestTube, Wifi, MessageCircle, TrendingUp, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { PriceChart } from '@/components/research/price-chart';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -247,6 +247,8 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
   const [showApiKey, setShowApiKey] = useState(false);
   const [showApiSecret, setShowApiSecret] = useState(false);
   const [experimentConfig, setExperimentConfig] = useState<any>({});
+  const [testResults, setTestResults] = useState<{[key: string]: any}>({});
+  const [testLoading, setTestLoading] = useState<{[key: string]: boolean}>({});
   const [experimentResults, setExperimentResults] = useState<any>({});
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [botSignals, setBotSignals] = useState<any[]>([]);
@@ -558,6 +560,110 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
       newExpandedRows.add(index);
     }
     setExpandedRows(newExpandedRows);
+  };
+
+  // Test functions
+  const testBinanceConnection = async () => {
+    if (!bot?.id) return;
+    
+    setTestLoading(prev => ({ ...prev, binance: true }));
+    try {
+      const response = await fetch(`/api/trading/bot/test/binance?botId=${bot.id}`);
+      const result = await response.json();
+      
+      setTestResults(prev => ({ ...prev, binance: result }));
+      
+      if (result.success) {
+        toast({
+          title: "✅ Binance Connection Test",
+          description: `Kết nối thành công! Balance: ${result.data?.totalWalletBalance || 'N/A'} USDT`,
+        });
+      } else {
+        toast({
+          title: "❌ Binance Connection Test",
+          description: result.error || "Kết nối thất bại",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Binance Connection Test",
+        description: "Lỗi khi test kết nối",
+        variant: "destructive",
+      });
+    } finally {
+      setTestLoading(prev => ({ ...prev, binance: false }));
+    }
+  };
+
+  const testTelegramNotification = async () => {
+    if (!bot?.name) return;
+    
+    setTestLoading(prev => ({ ...prev, telegram: true }));
+    try {
+      const response = await fetch('/api/trading/bot/test/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botName: bot.name }),
+      });
+      const result = await response.json();
+      
+      setTestResults(prev => ({ ...prev, telegram: result }));
+      
+      if (result.success) {
+        toast({
+          title: "✅ Telegram Test",
+          description: "Thông báo test đã được gửi thành công!",
+        });
+      } else {
+        toast({
+          title: "❌ Telegram Test",
+          description: result.error || "Gửi thông báo thất bại",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Telegram Test",
+        description: "Lỗi khi test Telegram",
+        variant: "destructive",
+      });
+    } finally {
+      setTestLoading(prev => ({ ...prev, telegram: false }));
+    }
+  };
+
+  const testStrategy = async () => {
+    if (!bot?.id) return;
+    
+    setTestLoading(prev => ({ ...prev, strategy: true }));
+    try {
+      const response = await fetch(`/api/trading/bot/test/strategy?botId=${bot.id}`);
+      const result = await response.json();
+      
+      setTestResults(prev => ({ ...prev, strategy: result }));
+      
+      if (result.success) {
+        toast({
+          title: "✅ Strategy Test",
+          description: `Signal: ${result.data?.signal || 'HOLD'} | Price: $${result.data?.currentPrice || 'N/A'}`,
+        });
+      } else {
+        toast({
+          title: "❌ Strategy Test",
+          description: result.error || "Test strategy thất bại",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Strategy Test",
+        description: "Lỗi khi test strategy",
+        variant: "destructive",
+      });
+    } finally {
+      setTestLoading(prev => ({ ...prev, strategy: false }));
+    }
   };
 
   return (
@@ -1301,6 +1407,82 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
               </TabsContent>
             </Tabs>
           </div>
+          
+          {/* Test Buttons Section */}
+          <div className="mt-4 p-4 border rounded-lg bg-muted/20">
+            <div className="flex items-center gap-2 mb-3">
+              <TestTube className="h-4 w-4" />
+              <span className="font-medium text-sm">Test Functions</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={testBinanceConnection}
+                disabled={testLoading.binance}
+                className="flex items-center gap-1"
+              >
+                {testLoading.binance ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Wifi className="h-3 w-3" />
+                )}
+                <span className="text-xs">Binance</span>
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={testTelegramNotification}
+                disabled={testLoading.telegram}
+                className="flex items-center gap-1"
+              >
+                {testLoading.telegram ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <MessageCircle className="h-3 w-3" />
+                )}
+                <span className="text-xs">Telegram</span>
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={testStrategy}
+                disabled={testLoading.strategy}
+                className="flex items-center gap-1"
+              >
+                {testLoading.strategy ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <TrendingUp className="h-3 w-3" />
+                )}
+                <span className="text-xs">Strategy</span>
+              </Button>
+            </div>
+            
+            {/* Test Results Display */}
+            {(testResults.binance || testResults.telegram || testResults.strategy) && (
+              <div className="mt-3 space-y-2">
+                {testResults.binance && (
+                  <div className="text-xs p-2 rounded bg-background border">
+                    <span className="font-medium">Binance:</span> {testResults.binance.success ? '✅' : '❌'} {testResults.binance.message || testResults.binance.error}
+                  </div>
+                )}
+                {testResults.telegram && (
+                  <div className="text-xs p-2 rounded bg-background border">
+                    <span className="font-medium">Telegram:</span> {testResults.telegram.success ? '✅' : '❌'} {testResults.telegram.message || testResults.telegram.error}
+                  </div>
+                )}
+                {testResults.strategy && (
+                  <div className="text-xs p-2 rounded bg-background border">
+                    <span className="font-medium">Strategy:</span> {testResults.strategy.success ? '✅' : '❌'} {testResults.strategy.message || testResults.strategy.error}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-2 mt-4">
             {bot.status !== 'running' ? (
               <Button className="w-full" onClick={() => onToggleBot && onToggleBot(bot)}>

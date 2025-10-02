@@ -1,6 +1,9 @@
 import { TradingBot } from './trading-bot';
 import { supabase } from '@/lib/supabase-client';
 import { BinanceService } from './binance-service';
+import { instrumentedFetch } from '@/lib/monitor/server-logger';
+import { binanceRateLimiter } from '@/lib/monitor/binance-rate-limiter';
+import { notifyTrade, notifyError, notifyBotStatus } from '@/lib/notifications/telegram-service';
 import { createClient } from '@supabase/supabase-js';
 import { botLogger } from './bot-logger';
 
@@ -213,6 +216,9 @@ export class BotExecutor {
       this.isRunning = true;
       await this.updateBotStatus('running');
       console.log('[BotExecutor] ✅ Bot status updated to running');
+      
+      // Thông báo Telegram bot khởi động
+      await notifyBotStatus(this.bot.name, 'START');
 
       // Đợi một chút để đảm bảo status đã được cập nhật
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -269,6 +275,9 @@ export class BotExecutor {
     
     // Cập nhật status trong database ngay lập tức
     await this.updateBotStatus('stopped');
+    
+    // Thông báo Telegram bot dừng
+    await notifyBotStatus(this.bot.name, 'STOP');
     
     // Clear current position để tránh "ghost trading"
     this.currentPosition = null;
@@ -368,7 +377,9 @@ export class BotExecutor {
       
       const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
       
-      const candlesRes = await fetch(url, {
+      // Throttle market data
+      await binanceRateLimiter.throttle('market');
+      const candlesRes = await instrumentedFetch(url, {
         method: 'GET',
         headers: {
           'X-MBX-APIKEY': this.bot.config.account.apiKey || '',
@@ -1144,7 +1155,8 @@ export class BotExecutor {
       // Lấy giá hiện tại
       const priceUrl = `${API_BASE_URL}/api/trading/binance/price`;
       
-      const priceRes = await fetch(priceUrl, {
+      // Internal API (no binance limit)
+      const priceRes = await instrumentedFetch(priceUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1204,7 +1216,7 @@ export class BotExecutor {
       const balanceUrl = `${API_BASE_URL}/api/trading/binance/balance`;
       console.log(`[BotExecutor] 🔍 DEBUG: Fetching balance from: ${balanceUrl}`);
       
-      const balanceRes = await fetch(balanceUrl, {
+      const balanceRes = await instrumentedFetch(balanceUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1419,6 +1431,17 @@ export class BotExecutor {
       });
       console.log(`[BotExecutor] ✅ Trade saved to database`);
 
+      // Thông báo Telegram giao dịch thành công
+      const tradePrice = parseFloat(order.fills[0].price);
+      const tradeValue = tradePrice * quantity;
+      await notifyTrade(
+        this.bot.name,
+        signal.toUpperCase() as 'BUY' | 'SELL',
+        this.config.symbol,
+        tradePrice,
+        quantity
+      );
+
       // Cập nhật thống kê
       console.log(`[BotExecutor] 📊 Updating bot statistics...`);
       await this.updateBotStats({
@@ -1450,7 +1473,7 @@ export class BotExecutor {
       }
 
       // Lấy giá hiện tại
-      const priceRes = await fetch(`${API_BASE_URL}/api/trading/binance/price`, {
+      const priceRes = await instrumentedFetch(`${API_BASE_URL}/api/trading/binance/price`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1497,7 +1520,9 @@ export class BotExecutor {
         }
 
         // Đóng vị thế
-        const orderRes = await fetch(`${API_BASE_URL}/api/trading/binance/order`, {
+        // Throttle order endpoints
+        await binanceRateLimiter.throttle('order');
+        const orderRes = await instrumentedFetch(`${API_BASE_URL}/api/trading/binance/order`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1626,14 +1651,20 @@ export class BotExecutor {
 
   private async handleError(error: any) {
     try {
+      const errorMessage = error.message || JSON.stringify(error);
+      
+      // Cập nhật database
       await this.supabaseAdmin
         .from('trading_bots')
         .update({
           status: 'error',
-          last_error: error.message || JSON.stringify(error),
+          last_error: errorMessage,
           updated_at: new Date().toISOString()
         })
         .eq('id', this.bot.id);
+      
+      // Thông báo Telegram lỗi
+      await notifyError(this.bot.name, errorMessage);
     } catch (dbError) {
       console.error('Error handling bot error:', dbError);
     }
@@ -1729,7 +1760,7 @@ export class BotExecutor {
   private async checkRealPosition(): Promise<boolean> {
     try {
       // Lấy thông tin position từ Binance
-      const balanceRes = await fetch(`${API_BASE_URL}/api/trading/binance/balance`, {
+      const balanceRes = await instrumentedFetch(`${API_BASE_URL}/api/trading/binance/balance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
