@@ -62,7 +62,8 @@ export async function GET(request: NextRequest) {
       const binanceService = new BinanceService(accountConfig.apiKey, accountConfig.apiSecret);
       
       // Lấy giá hiện tại
-      const currentPrice = await binanceService.getPrice(tradingConfig.symbol);
+      const priceData = await binanceService.getPrice(tradingConfig.symbol);
+      const currentPrice = Number(priceData.price);
       
       // Lấy dữ liệu candles để test strategy
       const candles = await binanceService.getCandles(
