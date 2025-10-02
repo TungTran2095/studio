@@ -82,9 +82,9 @@ export async function GET(request: NextRequest) {
       let signal = 'HOLD';
       let details: any = {};
 
-      const closes = candles.map(c => c.close);
-      const highs = candles.map(c => c.high);
-      const lows = candles.map(c => c.low);
+      const closes = candles.map(c => Number(c.close));
+      const highs = candles.map(c => Number(c.high));
+      const lows = candles.map(c => Number(c.low));
       const latestClose = closes[closes.length - 1];
 
       switch (strategyConfig.type) {
@@ -112,8 +112,8 @@ export async function GET(request: NextRequest) {
           const slowPeriod = strategyConfig.parameters?.slowPeriod || 20;
           
           if (closes.length >= slowPeriod) {
-            const fastMA = closes.slice(-fastPeriod).reduce((a, b) => a + b, 0) / fastPeriod;
-            const slowMA = closes.slice(-slowPeriod).reduce((a, b) => a + b, 0) / slowPeriod;
+            const fastMA = closes.slice(-fastPeriod).reduce((a: number, b: number) => a + b, 0) / fastPeriod;
+            const slowMA = closes.slice(-slowPeriod).reduce((a: number, b: number) => a + b, 0) / slowPeriod;
             
             details.fastMA = fastMA.toFixed(2);
             details.slowMA = slowMA.toFixed(2);
@@ -132,8 +132,8 @@ export async function GET(request: NextRequest) {
           const stdDev = strategyConfig.parameters?.stdDev || 2;
           
           if (closes.length >= period) {
-            const sma = closes.slice(-period).reduce((a, b) => a + b, 0) / period;
-            const variance = closes.slice(-period).reduce((sum, close) => sum + Math.pow(close - sma, 2), 0) / period;
+            const sma = closes.slice(-period).reduce((a: number, b: number) => a + b, 0) / period;
+            const variance = closes.slice(-period).reduce((sum: number, close: number) => sum + Math.pow(close - sma, 2), 0) / period;
             const standardDeviation = Math.sqrt(variance);
             
             const upperBand = sma + (standardDeviation * stdDev);
