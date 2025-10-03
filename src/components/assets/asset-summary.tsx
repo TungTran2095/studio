@@ -65,7 +65,7 @@ interface AssetSummaryProps {
 
 // Define the list of symbols to ALWAYS check for trade history and display assets for
 const TARGET_SYMBOLS = ['BTC', 'USDT']; // UPDATED: Only BTC and USDT
-const REFRESH_INTERVAL_MS = 5000; // 5 seconds
+const REFRESH_INTERVAL_MS = 30000; // 30 seconds
 
 // Helper lấy message từ error
 const getErrorMessage = (error: any) => typeof error === 'object' && error !== null ? error.message : error;

@@ -34,28 +34,96 @@ export type BinanceEndpointKind = 'market' | 'account' | 'order';
 // Simplified cost mapping per endpoint kind (approximation)
 const COST: Record<BinanceEndpointKind, { weight: number; order10s?: number; order1m?: number }> = {
   market: { weight: 1 },
-  account: { weight: 5 },
+  account: { weight: 10 }, // Tăng từ 5 lên 10 để phản ánh đúng weight của /api/v3/account
   order: { weight: 1, order10s: 1, order1m: 1 },
 };
 
 class BinanceRateLimiter {
   private limiter = new SlidingWindowLimiter();
+  private emergencyMode = false;
+  private lastEmergencyReset = 0;
 
   constructor() {
     // Default conservative limits; can be tuned via env
-    const usedWeightPerMin = Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1100);
-    const ordersPer10s = Number(process.env.BINANCE_ORDERS_PER_10S || 50);
-    const ordersPer1m = Number(process.env.BINANCE_ORDERS_PER_1M || 1600);
-    this.limiter.defineBucket('weight:1m', 60_000, usedWeightPerMin - 50); // leave headroom
-    this.limiter.defineBucket('orders:10s', 10_000, Math.max(1, ordersPer10s - 2));
-    this.limiter.defineBucket('orders:1m', 60_000, Math.max(5, ordersPer1m - 20));
+    const usedWeightPerMin = Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000); // Giảm từ 1100 xuống 1000 để an toàn hơn
+    const ordersPer10s = Number(process.env.BINANCE_ORDERS_PER_10S || 40); // Giảm từ 50 xuống 40
+    const ordersPer1m = Number(process.env.BINANCE_ORDERS_PER_1M || 1500); // Giảm từ 1600 xuống 1500
+    this.limiter.defineBucket('weight:1m', 60_000, usedWeightPerMin - 100); // Tăng headroom từ 50 lên 100
+    this.limiter.defineBucket('orders:10s', 10_000, Math.max(1, ordersPer10s - 5)); // Tăng headroom từ 2 lên 5
+    this.limiter.defineBucket('orders:1m', 60_000, Math.max(5, ordersPer1m - 50)); // Tăng headroom từ 20 lên 50
   }
 
-  async throttle(kind: BinanceEndpointKind) {
+  async throttle(kind: BinanceEndpointKind): Promise<void> {
     const c = COST[kind];
-    await this.limiter.acquire('weight:1m', c.weight);
-    if (c.order10s) await this.limiter.acquire('orders:10s', c.order10s);
-    if (c.order1m) await this.limiter.acquire('orders:1m', c.order1m);
+    
+    // Emergency mode: reject all calls if we're in emergency mode
+    if (this.emergencyMode) {
+      const now = Date.now();
+      if (now - this.lastEmergencyReset > 300000) { // Reset emergency mode after 5 minutes
+        this.emergencyMode = false;
+        console.log('[BinanceRateLimiter] 🚨 Emergency mode reset');
+      } else {
+        throw new Error('Rate limit emergency mode active - too many requests');
+      }
+    }
+
+    try {
+      await this.limiter.acquire('weight:1m', c.weight);
+      if (c.order10s) await this.limiter.acquire('orders:10s', c.order10s);
+      if (c.order1m) await this.limiter.acquire('orders:1m', c.order1m);
+    } catch (error) {
+      // If we hit rate limits, enter emergency mode
+      this.emergencyMode = true;
+      this.lastEmergencyReset = Date.now();
+      console.error('[BinanceRateLimiter] 🚨 Rate limit exceeded, entering emergency mode');
+      throw error;
+    }
+  }
+
+  // Method to check if we can make a call without actually making it
+  canMakeCall(kind: BinanceEndpointKind): boolean {
+    const c = COST[kind];
+    
+    if (this.emergencyMode) {
+      return false;
+    }
+
+    // For now, return true - would need to implement capacity checking in SlidingWindowLimiter
+    return true;
+  }
+
+  // Method to get current usage statistics
+  getUsageStats(): {
+    weight1m: { used: number; limit: number; available: number };
+    orders10s: { used: number; limit: number; available: number };
+    orders1m: { used: number; limit: number; available: number };
+    emergencyMode: boolean;
+  } {
+    return {
+      weight1m: {
+        used: 0, // Would need to implement in SlidingWindowLimiter
+        limit: Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000) - 100,
+        available: Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000) - 100
+      },
+      orders10s: {
+        used: 0,
+        limit: Number(process.env.BINANCE_ORDERS_PER_10S || 40) - 5,
+        available: Number(process.env.BINANCE_ORDERS_PER_10S || 40) - 5
+      },
+      orders1m: {
+        used: 0,
+        limit: Number(process.env.BINANCE_ORDERS_PER_1M || 1500) - 50,
+        available: Number(process.env.BINANCE_ORDERS_PER_1M || 1500) - 50
+      },
+      emergencyMode: this.emergencyMode
+    };
+  }
+
+  // Method to reset emergency mode manually
+  resetEmergencyMode(): void {
+    this.emergencyMode = false;
+    this.lastEmergencyReset = 0;
+    console.log('[BinanceRateLimiter] 🔄 Emergency mode manually reset');
   }
 }
 
