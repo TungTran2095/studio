@@ -1,26 +1,18 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { useAssetStore } from '@/store/asset-store';
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import { useWebSocketPrice } from '@/hooks/use-websocket-price';
 
 export function TotalAssetsCard({ className = '' }: { className?: string }) {
   const accounts = useAssetStore(state => state.accounts);
-  const [btcUsdt, setBtcUsdt] = useState<number | null>(null);
+  
+  // Sử dụng WebSocket thay vì REST API để lấy giá BTCUSDT
+  const { price: btcUsdtPrice, isLoading, error } = useWebSocketPrice({ 
+    symbol: 'BTCUSDT',
+    fallbackToRest: true // Cho phép fallback nếu WebSocket không hoạt động
+  });
 
-  // Lấy giá BTCUSDT realtime
-  useEffect(() => {
-    async function fetchPrice() {
-      try {
-        const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
-        const data = await res.json();
-        setBtcUsdt(parseFloat(data.price));
-      } catch {
-        setBtcUsdt(null);
-      }
-    }
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 30000); // cập nhật mỗi 30s
-    return () => clearInterval(interval);
-  }, []);
+  const btcUsdt = btcUsdtPrice ? parseFloat(btcUsdtPrice) : null;
 
   // Tính tổng tài sản quy đổi về USDT
   const { totalBTC, totalUSDT, totalInUSDT } = useMemo(() => {

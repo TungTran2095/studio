@@ -44,13 +44,16 @@ class BinanceRateLimiter {
   private lastEmergencyReset = 0;
 
   constructor() {
-    // Default conservative limits; can be tuned via env
-    const usedWeightPerMin = Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000); // Giảm từ 1100 xuống 1000 để an toàn hơn
-    const ordersPer10s = Number(process.env.BINANCE_ORDERS_PER_10S || 40); // Giảm từ 50 xuống 40
-    const ordersPer1m = Number(process.env.BINANCE_ORDERS_PER_1M || 1500); // Giảm từ 1600 xuống 1500
-    this.limiter.defineBucket('weight:1m', 60_000, usedWeightPerMin - 100); // Tăng headroom từ 50 lên 100
-    this.limiter.defineBucket('orders:10s', 10_000, Math.max(1, ordersPer10s - 5)); // Tăng headroom từ 2 lên 5
-    this.limiter.defineBucket('orders:1m', 60_000, Math.max(5, ordersPer1m - 50)); // Tăng headroom từ 20 lên 50
+    // EMERGENCY MODE: Ultra conservative limits to avoid IP ban
+    const usedWeightPerMin = Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 500); // Giảm xuống 500 để tránh ban
+    const ordersPer10s = Number(process.env.BINANCE_ORDERS_PER_10S || 20); // Giảm xuống 20
+    const ordersPer1m = Number(process.env.BINANCE_ORDERS_PER_1M || 800); // Giảm xuống 800
+    this.limiter.defineBucket('weight:1m', 60_000, usedWeightPerMin - 200); // Tăng headroom lên 200
+    this.limiter.defineBucket('orders:10s', 10_000, Math.max(1, ordersPer10s - 10)); // Tăng headroom lên 10
+    this.limiter.defineBucket('orders:1m', 60_000, Math.max(5, ordersPer1m - 100)); // Tăng headroom lên 100
+    
+    // Auto-enable emergency mode if we detect high usage
+    this.checkAndEnableEmergencyMode();
   }
 
   async throttle(kind: BinanceEndpointKind): Promise<void> {
@@ -124,6 +127,27 @@ class BinanceRateLimiter {
     this.emergencyMode = false;
     this.lastEmergencyReset = 0;
     console.log('[BinanceRateLimiter] 🔄 Emergency mode manually reset');
+  }
+
+  // Method to check and enable emergency mode based on usage
+  private checkAndEnableEmergencyMode(): void {
+    // Enable emergency mode immediately to prevent further API calls
+    this.emergencyMode = true;
+    this.lastEmergencyReset = Date.now();
+    console.log('[BinanceRateLimiter] 🚨 EMERGENCY MODE ENABLED - All API calls blocked to prevent IP ban');
+    
+    // Auto-reset after 10 minutes instead of 5
+    setTimeout(() => {
+      this.emergencyMode = false;
+      console.log('[BinanceRateLimiter] 🔄 Emergency mode auto-reset after 10 minutes');
+    }, 600000); // 10 minutes
+  }
+
+  // Method to force enable emergency mode
+  forceEmergencyMode(): void {
+    this.emergencyMode = true;
+    this.lastEmergencyReset = Date.now();
+    console.log('[BinanceRateLimiter] 🚨 Emergency mode FORCED ENABLED');
   }
 }
 

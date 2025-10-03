@@ -117,10 +117,10 @@ export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorPr
     }
   };
 
-  // Fetch data every 10 seconds (giảm từ 3s để giảm API calls)
+  // Fetch data every 30 seconds (EMERGENCY: tăng từ 10s lên 30s để giảm API calls)
   useEffect(() => {
     fetchRateData();
-    const interval = setInterval(fetchRateData, 10000); // Tăng từ 3s lên 10s
+    const interval = setInterval(fetchRateData, 30000); // EMERGENCY: Tăng từ 10s lên 30s
     return () => clearInterval(interval);
   }, []);
 

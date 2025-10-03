@@ -292,7 +292,7 @@ export const AnalysisPanel: FC<AnalysisPanelProps> = ({ isExpanded, onToggle }) 
      const startFetching = () => {
         fetchIndicators();
         if (indicatorsIntervalIdRef.current) clearInterval(indicatorsIntervalIdRef.current);
-        indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 15000); // Tăng từ 5s lên 15s để giảm API calls
+        indicatorsIntervalIdRef.current = setInterval(fetchIndicators, 60000); // EMERGENCY: Tăng từ 15s lên 60s để giảm API calls
     };
 
     const stopFetching = () => {

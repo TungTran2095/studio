@@ -36,12 +36,12 @@ export function ApiMonitoringTab({ className }: ApiMonitoringTabProps) {
   const [stats, setStats] = useState<ApiUsageStats[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  // Cập nhật stats mỗi 15 giây (giảm từ 5s để giảm API calls)
+  // Cập nhật stats mỗi 60 giây (EMERGENCY: tăng từ 15s để giảm API calls)
   useEffect(() => {
     const interval = setInterval(() => {
       setStats(getApiUsageStats());
       setLastUpdated(new Date());
-    }, 15000); // Tăng từ 5s lên 15s
+    }, 60000); // EMERGENCY: Tăng từ 15s lên 60s
 
     return () => clearInterval(interval);
   }, [getApiUsageStats]);

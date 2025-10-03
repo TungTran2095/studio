@@ -1,6 +1,6 @@
 import { TradingBot } from './trading-bot';
 import { supabase } from '@/lib/supabase-client';
-import { BinanceService } from './binance-service';
+import { TransparentBinanceService } from './transparent-binance-service';
 import { instrumentedFetch } from '@/lib/monitor/server-logger';
 import { binanceRateLimiter } from '@/lib/monitor/binance-rate-limiter';
 import { notifyTrade, notifyError, notifyBotStatus } from '@/lib/notifications/telegram-service';
@@ -51,7 +51,7 @@ function timeframeToMs(timeframe: string): number {
 
 export class BotExecutor {
   private bot: TradingBot;
-  private binanceService!: BinanceService;
+  private binanceService!: TransparentBinanceService;
   private config: BotExecutorConfig = {
     symbol: '',
     strategy: {
@@ -81,13 +81,14 @@ export class BotExecutor {
   constructor(bot: TradingBot) {
     this.bot = bot;
     
-    // Khởi tạo BinanceService
+    // Khởi tạo TransparentBinanceService (TRANSPARENT REPLACEMENT)
     if (this.bot.config.account?.apiKey && this.bot.config.account?.apiSecret) {
-      this.binanceService = new BinanceService(
+      this.binanceService = new TransparentBinanceService(
         this.bot.config.account.apiKey,
         this.bot.config.account.apiSecret,
         this.bot.config.account.testnet || false
       );
+      console.log(`[BotExecutor] ✅ TransparentBinanceService initialized for ${this.bot.name}`);
     }
     
     // Lấy đúng các trường từ cấu trúc config lồng
@@ -382,31 +383,19 @@ export class BotExecutor {
         timeSinceLastExecution: this.lastExecutionTime ? Date.now() - this.lastExecutionTime : 'N/A'
       });
       
-      // Lấy dữ liệu candles trực tiếp từ Binance API
-      console.log(`[BotExecutor] 📊 Fetching candles directly from Binance API...`);
+      // TRANSPARENT: Sử dụng TransparentBinanceService để lấy candles
+      // Không cần thay đổi gì - service tự động sử dụng WebSocket khi có thể
+      console.log(`[BotExecutor] 📊 Getting candles via TransparentBinanceService...`);
       
-      const baseUrl = this.bot.config.account.testnet 
-        ? 'https://testnet.binance.vision' 
-        : 'https://api.binance.com';
+      const candlesData = await this.binanceService.getKlines(
+        this.config.symbol,
+        this.config.timeframe,
+        undefined, // startTime
+        undefined, // endTime
+        100 // limit
+      );
       
-      const url = `${baseUrl}/api/v3/klines?symbol=${this.config.symbol}&interval=${this.config.timeframe}&limit=100`;
-      
-      // Throttle market data
-      await binanceRateLimiter.throttle('market');
-      const candlesRes = await instrumentedFetch(url, {
-        method: 'GET',
-        headers: {
-          'X-MBX-APIKEY': this.bot.config.account.apiKey || '',
-        },
-      });
-
-      if (!candlesRes.ok) {
-        const errorText = await candlesRes.text().catch(() => '');
-        console.log(`[BotExecutor] ❌ Binance API error: ${candlesRes.status} - ${errorText}`);
-        throw new Error(`Binance API error: ${candlesRes.status}`);
-      }
-
-      const candlesData = await candlesRes.json();
+      console.log(`[BotExecutor] ✅ TransparentBinanceService returned ${candlesData.length} candles`);
       
       // Kiểm tra dữ liệu candles
       if (!candlesData || !Array.isArray(candlesData) || candlesData.length === 0) {

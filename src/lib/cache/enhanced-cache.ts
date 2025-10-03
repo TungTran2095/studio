@@ -17,9 +17,9 @@ export class EnhancedCache {
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = {
-      defaultTTL: 30000, // 30 seconds default
-      maxSize: 1000,
-      cleanupInterval: 60000, // Cleanup every minute
+      defaultTTL: 120000, // EMERGENCY: Tăng từ 30s lên 120s để giảm API calls
+      maxSize: 2000, // Tăng cache size để lưu nhiều data hơn
+      cleanupInterval: 300000, // EMERGENCY: Tăng từ 1m lên 5m để giảm cleanup frequency
       ...config
     };
 

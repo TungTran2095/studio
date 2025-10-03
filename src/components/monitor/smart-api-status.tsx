@@ -42,7 +42,7 @@ export function SmartApiStatus({ className }: SmartApiStatusProps) {
     };
 
     updateStats();
-    const interval = setInterval(updateStats, 10000); // Update every 10 seconds
+    const interval = setInterval(updateStats, 60000); // EMERGENCY: Tăng từ 10s lên 60s để giảm API calls
 
     return () => clearInterval(interval);
   }, []);

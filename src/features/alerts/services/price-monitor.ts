@@ -117,7 +117,7 @@ export class PriceMonitorService {
     // Thiết lập interval để kiểm tra định kỳ
     this.checkInterval = setInterval(() => {
       this.checkAlerts();
-    }, 30000); // Kiểm tra mỗi 30 giây
+    }, 120000); // EMERGENCY: Tăng từ 30s lên 120s để giảm API calls
 
     return () => this.stopMonitoring();
   }

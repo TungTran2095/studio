@@ -200,7 +200,7 @@ export default function TimestampMonitor() {
   // Auto refresh effect
   useEffect(() => {
     if (autoRefresh) {
-      const interval = setInterval(fetchTimestampInfo, 5000); // Refresh every 5 seconds
+      const interval = setInterval(fetchTimestampInfo, 30000); // EMERGENCY: Tăng từ 5s lên 30s để giảm API calls
       return () => clearInterval(interval);
     }
   }, [autoRefresh]);
