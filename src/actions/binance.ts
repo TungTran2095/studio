@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import Binance from 'node-binance-api'; // Import the library
 import { TimeSync } from '@/lib/time-sync'; // Import TimeSync utility
+import { recordBinanceCall } from '@/lib/monitor/server-rate-tracker'; // Import rate tracker
 
 // Define the structure for an asset
 export interface Asset {
@@ -46,6 +47,36 @@ const TradeHistoryInputSchema = BinanceInputSchema.extend({
     limit: z.number().int().positive().optional().default(500), // Optional: Limit number of trades per symbol (ensure integer)
 });
 
+
+// Helper function to track Binance API calls
+async function trackBinanceCall<T>(
+  endpoint: string,
+  method: string,
+  fn: () => Promise<T>,
+  weight: number = 1
+): Promise<T> {
+  const startTime = Date.now();
+  try {
+    const result = await fn();
+    const duration = Date.now() - startTime;
+    
+    // Record the call for monitoring
+    recordBinanceCall(endpoint, method, {
+      'x-mbx-used-weight-1m': String(weight),
+      'response-time': String(duration)
+    });
+    
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    recordBinanceCall(endpoint, method, {
+      'x-mbx-used-weight-1m': String(weight),
+      'response-time': String(duration),
+      'error': 'true'
+    });
+    throw error;
+  }
+}
 
 // Define the output schema (or structure) for the asset action
 interface BinanceAssetsResult {
@@ -341,8 +372,16 @@ export async function fetchBinanceAssets(
     // 1. Fetch account balances with retry logic
     const balances = await withRetry(async () => {
       // Thêm một lần đồng bộ thời gian vào thời điểm gọi API
-      TimeSync.adjustOffset(-2000); 
-      return await binance.balance();
+      TimeSync.adjustOffset(-2000);
+      
+      // Track this API call
+      const baseUrl = input.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com';
+      return await trackBinanceCall(
+        `${baseUrl}/api/v3/account`,
+        'GET',
+        () => binance.balance(),
+        10 // Weight for /api/v3/account
+      );
     }, 5, 500, { apiKey, apiSecret }); // Truyền thông tin API để có thể làm sạch khi cần
     
     if (!balances) {
@@ -600,7 +639,15 @@ export async function fetchBinanceTradeHistory(
                 exchangeInfo = await withRetry(async () => {
                     // Điều chỉnh thời gian trước khi gọi API
                     TimeSync.adjustOffset(-2000);
-                    return await binance.exchangeInfo();
+                    
+                    // Track this API call
+                    const baseUrl = input.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com';
+                    return await trackBinanceCall(
+                        `${baseUrl}/api/v3/exchangeInfo`,
+                        'GET',
+                        () => binance.exchangeInfo(),
+                        10 // Weight for /api/v3/exchangeInfo
+                    );
                 }, 5, 500, { apiKey, apiSecret });
                 
                 // Cache the result
