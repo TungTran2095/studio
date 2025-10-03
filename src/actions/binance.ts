@@ -391,7 +391,7 @@ export async function fetchBinanceAssets(
 
     // 2. Filter assets with positive balance and prepare symbols for price fetching
     const ownedAssetSymbolsWithBalance = Object.keys(balances).filter(
-      symbol => parseFloat(balances[symbol].available) > 0 || parseFloat(balances[symbol].onOrder) > 0
+      symbol => parseFloat((balances as any)[symbol].available) > 0 || parseFloat((balances as any)[symbol].onOrder) > 0
     );
 
 
@@ -480,7 +480,7 @@ export async function fetchBinanceAssets(
     // 4. Calculate total value for each asset
     const assets: Asset[] = [];
     for (const assetSymbol of ownedAssetSymbolsWithBalance) { // Iterate only over symbols with balance
-        const quantity = parseFloat(balances[assetSymbol].available) + parseFloat(balances[assetSymbol].onOrder);
+        const quantity = parseFloat((balances as any)[assetSymbol].available) + parseFloat((balances as any)[assetSymbol].onOrder);
         if (quantity <= 0) continue; // Skip if total quantity is zero or less
 
         let valueInUsd = 0;
