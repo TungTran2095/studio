@@ -1,4 +1,4 @@
-import { transparentWebSocketAdapter } from './transparent-websocket-adapter';
+import { transparentWebSocketAdapter } from '../websocket/transparent-websocket-adapter';
 
 /**
  * Transparent API Service for Trading Bots
