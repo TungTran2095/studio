@@ -269,7 +269,8 @@ class TransparentWebSocketAdapter extends EventEmitter {
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.ping();
+        // Send ping message instead of using ping() method
+        this.ws.send(JSON.stringify({ method: 'ping' }));
       }
     }, 30000);
   }
