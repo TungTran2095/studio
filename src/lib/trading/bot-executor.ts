@@ -70,6 +70,7 @@ export class BotExecutor {
   private isRunning: boolean = false;
   private currentPosition: any = null;
   private lastExecutionTime: number = 0;
+  private lastAccountCheck: number = 0; // Track last account info check
   
   // Supabase admin client để bypass RLS
   private supabaseAdmin = createClient(
@@ -153,9 +154,22 @@ export class BotExecutor {
         throw new Error('BinanceService chưa được khởi tạo - thiếu API Key hoặc Secret');
       }
       
-      // Test kết nối bằng cách lấy thông tin tài khoản
+      // Test kết nối bằng cách lấy thông tin tài khoản (với cache)
       try {
-        const accountInfo = await this.binanceService.getAccountInfo();
+        const now = Date.now();
+        const timeSinceLastCheck = now - this.lastAccountCheck;
+        const ACCOUNT_CHECK_INTERVAL = 30000; // 30 seconds minimum between checks
+        
+        let accountInfo;
+        if (timeSinceLastCheck < ACCOUNT_CHECK_INTERVAL) {
+          console.log('[BotExecutor] ⚡ Using cached account info (checked recently)');
+          // Try to get from cache first
+          accountInfo = await this.binanceService.getAccountInfo();
+        } else {
+          console.log('[BotExecutor] 🔄 Checking fresh account info');
+          accountInfo = await this.binanceService.getAccountInfo();
+          this.lastAccountCheck = now;
+        }
         console.log('[BotExecutor] ✅ Kết nối Binance thành công');
         console.log('[BotExecutor] Account info:', {
           canTrade: accountInfo.canTrade,

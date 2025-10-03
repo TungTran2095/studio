@@ -587,11 +587,25 @@ export async function fetchBinanceTradeHistory(
         // 1. Fetch exchange info for symbol details - useful for understanding base/quote assets
         let exchangeInfo: any;
         try {
-            exchangeInfo = await withRetry(async () => {
-                // Điều chỉnh thời gian trước khi gọi API
-                TimeSync.adjustOffset(-2000);
-                return await binance.exchangeInfo();
-            }, 5, 500, { apiKey, apiSecret });
+            // Import cache service dynamically to avoid circular dependency
+            const { binanceCache } = await import('@/lib/cache/binance-cache');
+            
+            // Try cache first
+            const cachedExchangeInfo = binanceCache.getExchangeInfo();
+            if (cachedExchangeInfo) {
+                console.log('[BinanceActions] ✅ Using cached exchange info');
+                exchangeInfo = cachedExchangeInfo;
+            } else {
+                console.log('[BinanceActions] 🔄 Fetching fresh exchange info');
+                exchangeInfo = await withRetry(async () => {
+                    // Điều chỉnh thời gian trước khi gọi API
+                    TimeSync.adjustOffset(-2000);
+                    return await binance.exchangeInfo();
+                }, 5, 500, { apiKey, apiSecret });
+                
+                // Cache the result
+                binanceCache.setExchangeInfo(exchangeInfo);
+            }
         } catch (infoError: any) {
             // We can continue without exchange info, trades will just lack some additional metadata
             exchangeInfo = { symbols: [] };

@@ -1,6 +1,7 @@
 import Binance from 'binance-api-node';
 import { binanceRateLimiter } from '@/lib/monitor/binance-rate-limiter';
 import { TimeSync } from '@/lib/time-sync';
+import { binanceCache } from '@/lib/cache/binance-cache';
 
 export interface BinanceAccountInfo {
   makerCommission: number;
@@ -161,10 +162,46 @@ export class BinanceService {
 
   async getAccountInfo(): Promise<BinanceAccountInfo> {
     try {
+      // Kiểm tra cache trước
+      const cachedData = binanceCache.getAccountInfo();
+      if (cachedData) {
+        return cachedData;
+      }
+
+      // Cache miss - gọi API
+      console.log('[BinanceService] 🔄 Fetching fresh account info from API');
       await binanceRateLimiter.throttle('account');
-      return await this.retryWithTimestampSync(() => this.client.accountInfo());
+      const accountInfo = await this.retryWithTimestampSync(() => this.client.accountInfo());
+      
+      // Lưu vào cache
+      binanceCache.setAccountInfo(accountInfo);
+      
+      return accountInfo;
     } catch (error) {
       console.error('Error getting account info:', error);
+      throw error;
+    }
+  }
+
+  async getExchangeInfo(): Promise<any> {
+    try {
+      // Kiểm tra cache trước
+      const cachedData = binanceCache.getExchangeInfo();
+      if (cachedData) {
+        return cachedData;
+      }
+
+      // Cache miss - gọi API
+      console.log('[BinanceService] 🔄 Fetching fresh exchange info from API');
+      await binanceRateLimiter.throttle('market');
+      const exchangeInfo = await this.retryWithTimestampSync(() => this.client.exchangeInfo());
+      
+      // Lưu vào cache
+      binanceCache.setExchangeInfo(exchangeInfo);
+      
+      return exchangeInfo;
+    } catch (error) {
+      console.error('Error getting exchange info:', error);
       throw error;
     }
   }
