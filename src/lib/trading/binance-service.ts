@@ -171,7 +171,7 @@ export class BinanceService {
       // Cache miss - gọi API
       console.log('[BinanceService] 🔄 Fetching fresh account info from API');
       await binanceRateLimiter.throttle('account');
-      const accountInfo = await this.retryWithTimestampSync(() => this.client.accountInfo());
+      const accountInfo = await this.retryWithTimestampSync(() => this.client.accountInfo()) as BinanceAccountInfo;
       
       // Lưu vào cache
       binanceCache.setAccountInfo(accountInfo);
@@ -194,7 +194,7 @@ export class BinanceService {
       // Cache miss - gọi API
       console.log('[BinanceService] 🔄 Fetching fresh exchange info from API');
       await binanceRateLimiter.throttle('market');
-      const exchangeInfo = await this.retryWithTimestampSync(() => this.client.exchangeInfo());
+      const exchangeInfo = await this.retryWithTimestampSync(() => this.client.exchangeInfo()) as any;
       
       // Lưu vào cache
       binanceCache.setExchangeInfo(exchangeInfo);
