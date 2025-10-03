@@ -21,12 +21,36 @@ import {
 } from 'lucide-react';
 import { BinanceRateLimit } from '@/lib/monitor/binance-rate-tracker';
 
+interface EndpointStat {
+  endpoint: string;
+  weight: number;
+  calls1m: number;
+  calls10s: number;
+  weight1m: number;
+  orderCalls1m: number;
+  orderCalls10s: number;
+  lastCall: number;
+}
+
+interface RateLimitData {
+  usedWeight1m: number;
+  usedWeight1d: number;
+  orderCount10s: number;
+  orderCount1m: number;
+  orderCount1d: number;
+  rawRequests1m: number;
+  totalCalls: number;
+  lastUpdated: number;
+  endpointStats: EndpointStat[];
+}
+
 interface BinanceRateLimitMonitorProps {
   className?: string;
 }
 
 export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorProps) {
   const [rateLimits, setRateLimits] = useState<BinanceRateLimit[]>([]);
+  const [endpointStats, setEndpointStats] = useState<EndpointStat[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -67,6 +91,7 @@ export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorPr
           ];
 
           setRateLimits(newRateLimits);
+          setEndpointStats(data.endpointStats || []);
           setLastUpdated(new Date(data.lastUpdated));
           setLoading(false);
         }
@@ -339,6 +364,81 @@ export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorPr
           </div>
         </CardContent>
       </Card>
+
+      {/* Chi tiết từng endpoint */}
+      {endpointStats.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Chi tiết từng Endpoint</CardTitle>
+            <CardDescription>
+              Top {endpointStats.length} endpoint được sử dụng nhiều nhất trong 1 phút qua
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {endpointStats.map((endpoint, index) => (
+                <div key={index} className="p-3 border rounded-lg bg-muted/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        #{index + 1}
+                      </Badge>
+                      <code className="text-sm font-mono bg-background px-2 py-1 rounded">
+                        {endpoint.endpoint}
+                      </code>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Lần cuối: {new Date(endpoint.lastCall).toLocaleTimeString()}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Weight/Request</div>
+                      <div className="font-medium">{endpoint.weight}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Calls (1m)</div>
+                      <div className="font-medium">{endpoint.calls1m}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Weight (1m)</div>
+                      <div className="font-medium">{endpoint.weight1m}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Order Calls (1m)</div>
+                      <div className="font-medium">{endpoint.orderCalls1m}</div>
+                    </div>
+                  </div>
+                  
+                  {endpoint.calls10s > 0 && (
+                    <div className="mt-2 pt-2 border-t">
+                      <div className="text-xs text-muted-foreground">
+                        Calls trong 10s: <span className="font-medium">{endpoint.calls10s}</span>
+                        {endpoint.orderCalls10s > 0 && (
+                          <span className="ml-2">
+                            | Order calls: <span className="font-medium">{endpoint.orderCalls10s}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 p-3 bg-muted rounded text-xs">
+              <strong>Giải thích:</strong>
+              <ul className="mt-1 space-y-1 ml-4">
+                <li>• <strong>Weight/Request:</strong> Trọng số của endpoint theo Binance API docs</li>
+                <li>• <strong>Calls (1m):</strong> Số lần gọi endpoint trong 1 phút qua</li>
+                <li>• <strong>Weight (1m):</strong> Tổng trọng số đã sử dụng trong 1 phút</li>
+                <li>• <strong>Order Calls:</strong> Số lần gọi endpoint liên quan đến order</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Hướng dẫn */}
       <Card>

@@ -48,6 +48,9 @@ class ServerRateTracker {
       rawRequests1m: recentCalls.filter(c => c.timestamp >= oneMinuteAgo).length,
     };
 
+    // Group calls by endpoint for detailed view
+    const endpointStats = this.getEndpointStats(recentCalls, oneMinuteAgo, tenSecondsAgo);
+
     // Use headers if available (more accurate), fallback to calculated
     return {
       usedWeight1m: Number(this.latestHeaders['x-mbx-used-weight-1m']) || calculatedStats.usedWeight1m,
@@ -58,7 +61,59 @@ class ServerRateTracker {
       rawRequests1m: calculatedStats.rawRequests1m,
       totalCalls: recentCalls.length,
       lastUpdated: now,
+      endpointStats, // Thêm chi tiết từng endpoint
     };
+  }
+
+  private getEndpointStats(calls: ServerApiCall[], oneMinuteAgo: number, tenSecondsAgo: number) {
+    const endpointMap = new Map<string, {
+      endpoint: string;
+      weight: number;
+      calls1m: number;
+      calls10s: number;
+      weight1m: number;
+      orderCalls1m: number;
+      orderCalls10s: number;
+      lastCall: number;
+    }>();
+
+    calls.forEach(call => {
+      const key = call.endpoint;
+      const existing = endpointMap.get(key) || {
+        endpoint: call.endpoint,
+        weight: call.weight,
+        calls1m: 0,
+        calls10s: 0,
+        weight1m: 0,
+        orderCalls1m: 0,
+        orderCalls10s: 0,
+        lastCall: 0,
+      };
+
+      // Count calls in different time windows
+      if (call.timestamp >= oneMinuteAgo) {
+        existing.calls1m++;
+        existing.weight1m += call.weight;
+        if (call.isOrder) {
+          existing.orderCalls1m++;
+        }
+      }
+
+      if (call.timestamp >= tenSecondsAgo) {
+        existing.calls10s++;
+        if (call.isOrder) {
+          existing.orderCalls10s++;
+        }
+      }
+
+      existing.lastCall = Math.max(existing.lastCall, call.timestamp);
+      endpointMap.set(key, existing);
+    });
+
+    // Convert to array and sort by usage
+    return Array.from(endpointMap.values())
+      .sort((a, b) => b.weight1m - a.weight1m)
+      .slice(0, 20); // Top 20 most used endpoints
   }
 
   cleanup() {
