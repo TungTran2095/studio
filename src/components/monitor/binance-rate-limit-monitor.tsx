@@ -62,6 +62,8 @@ export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorPr
         const result = await response.json();
         if (result.success) {
           const data = result.data;
+          console.log('Rate limit data:', data);
+          console.log('Endpoint stats:', data.endpointStats);
           
           // Default limits (can be configured via env)
           const limits = {
@@ -366,15 +368,18 @@ export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorPr
       </Card>
 
       {/* Chi tiết từng endpoint */}
-      {endpointStats.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Chi tiết từng Endpoint</CardTitle>
-            <CardDescription>
-              Top {endpointStats.length} endpoint được sử dụng nhiều nhất trong 1 phút qua
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Chi tiết từng Endpoint</CardTitle>
+          <CardDescription>
+            {endpointStats.length > 0 
+              ? `Top ${endpointStats.length} endpoint được sử dụng nhiều nhất trong 1 phút qua`
+              : 'Chưa có dữ liệu endpoint nào được track. Hãy chạy bot để thấy chi tiết.'
+            }
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {endpointStats.length > 0 ? (
             <div className="space-y-3">
               {endpointStats.map((endpoint, index) => (
                 <div key={index} className="p-3 border rounded-lg bg-muted/20">
@@ -426,19 +431,25 @@ export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorPr
                 </div>
               ))}
             </div>
-            
-            <div className="mt-4 p-3 bg-muted rounded text-xs">
-              <strong>Giải thích:</strong>
-              <ul className="mt-1 space-y-1 ml-4">
-                <li>• <strong>Weight/Request:</strong> Trọng số của endpoint theo Binance API docs</li>
-                <li>• <strong>Calls (1m):</strong> Số lần gọi endpoint trong 1 phút qua</li>
-                <li>• <strong>Weight (1m):</strong> Tổng trọng số đã sử dụng trong 1 phút</li>
-                <li>• <strong>Order Calls:</strong> Số lần gọi endpoint liên quan đến order</li>
-              </ul>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-sm">Chưa có dữ liệu endpoint nào</p>
+              <p className="text-xs mt-1">Hãy chạy bot để thấy chi tiết API calls</p>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+          
+          <div className="mt-4 p-3 bg-muted rounded text-xs">
+            <strong>Giải thích:</strong>
+            <ul className="mt-1 space-y-1 ml-4">
+              <li>• <strong>Weight/Request:</strong> Trọng số của endpoint theo Binance API docs</li>
+              <li>• <strong>Calls (1m):</strong> Số lần gọi endpoint trong 1 phút qua</li>
+              <li>• <strong>Weight (1m):</strong> Tổng trọng số đã sử dụng trong 1 phút</li>
+              <li>• <strong>Order Calls:</strong> Số lần gọi endpoint liên quan đến order</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Hướng dẫn */}
       <Card>
