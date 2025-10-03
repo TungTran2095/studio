@@ -38,6 +38,8 @@ class ServerRateTracker {
 
     const recentCalls = this.calls.filter(c => c.timestamp >= oneDayAgo);
     
+    console.log(`[BinanceRateTracker] 📈 Stats request: ${this.calls.length} total calls, ${recentCalls.length} recent calls`);
+    
     // Calculate from our tracking
     const calculatedStats = {
       usedWeight1m: recentCalls.filter(c => c.timestamp >= oneMinuteAgo).reduce((sum, c) => sum + c.weight, 0),
@@ -133,6 +135,8 @@ export function recordBinanceCall(url: string, method: string, headers?: Record<
     const weight = getEndpointWeight(urlObj.pathname);
     const isOrder = isOrderEndpoint(urlObj.pathname);
 
+    console.log(`[BinanceRateTracker] 📊 Recording API call: ${method} ${url} (weight: ${weight})`);
+
     serverRateTracker.recordCall({
       timestamp: Date.now(),
       endpoint: url,
@@ -142,6 +146,6 @@ export function recordBinanceCall(url: string, method: string, headers?: Record<
       headers,
     });
   } catch (e) {
-    // Ignore errors
+    console.error('[BinanceRateTracker] Error recording call:', e);
   }
 }
