@@ -1,35 +1,41 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable static export for Heroku
-  output: 'standalone',
+  // Fix for Render.com deployment
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   
-  // Disable image optimization for Heroku
-  images: {
-    unoptimized: true,
-  },
-  
-  // Enable experimental features - Fixed deprecated option
+  // Experimental features for better compatibility
   experimental: {
-    // serverComponentsExternalPackages đã được move thành serverExternalPackages
+    serverComponentsExternalPackages: ['binance-api-node'],
+    esmExternals: 'loose'
   },
   
-  // Server external packages configuration
-  serverExternalPackages: ['@supabase/supabase-js'],
+  // Webpack configuration
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+      };
+    }
+    
+    return config;
+  },
   
   // Environment variables
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
   
-  // API routes configuration
-  async rewrites() {
-    return [
-      {
-        source: '/api/python/:path*',
-        destination: 'http://localhost:5000/:path*',
-      },
-    ];
+  // Disable static optimization for dynamic pages
+  trailingSlash: true,
+  
+  // Image optimization
+  images: {
+    domains: ['api.binance.com', 'testnet.binance.vision'],
   },
 };
 
-export default nextConfig; 
+export default nextConfig;
