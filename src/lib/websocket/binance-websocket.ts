@@ -178,7 +178,8 @@ export class BinanceWebSocketManager extends EventEmitter {
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.ping();
+        // Send ping message to keep connection alive
+        this.ws.send(JSON.stringify({ ping: Date.now() }));
       }
     }, 30000); // Ping every 30 seconds
   }
