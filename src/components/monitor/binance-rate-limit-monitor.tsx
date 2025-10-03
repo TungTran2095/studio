@@ -373,14 +373,14 @@ export function BinanceRateLimitMonitor({ className }: BinanceRateLimitMonitorPr
           <CardTitle className="text-base">Chi tiết từng Endpoint</CardTitle>
           <CardDescription>
             {endpointStats.length > 0 
-              ? `Top ${endpointStats.length} endpoint được sử dụng nhiều nhất trong 1 phút qua`
+              ? `Tất cả ${endpointStats.length} endpoint được sắp xếp theo mức độ sử dụng (nhiều → ít)`
               : 'Chưa có dữ liệu endpoint nào được track. Hãy chạy bot để thấy chi tiết.'
             }
           </CardDescription>
         </CardHeader>
         <CardContent>
           {endpointStats.length > 0 ? (
-            <div className="space-y-3">
+            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2">
               {endpointStats.map((endpoint, index) => (
                 <div key={index} className="p-3 border rounded-lg bg-muted/20">
                   <div className="flex items-center justify-between mb-2">

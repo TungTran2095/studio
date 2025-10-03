@@ -105,7 +105,7 @@ export function ApiMonitoringTab({ className }: ApiMonitoringTabProps) {
   const totalDataTransferred = stats.reduce((sum, stat) => sum + stat.totalDataTransferred, 0);
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div className={`space-y-4 overflow-y-auto max-h-[600px] ${className}`}>
       {/* Header với controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

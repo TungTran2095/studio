@@ -103,6 +103,76 @@ class ServerRateTracker {
           orderCalls1m: 0,
           orderCalls10s: 0,
           lastCall: now - 20000, // 20 seconds ago
+        },
+        {
+          endpoint: 'https://api.binance.com/api/v3/trades',
+          weight: 1,
+          calls1m: 8,
+          calls10s: 1,
+          weight1m: 8,
+          orderCalls1m: 0,
+          orderCalls10s: 0,
+          lastCall: now - 25000,
+        },
+        {
+          endpoint: 'https://api.binance.com/api/v3/avgPrice',
+          weight: 1,
+          calls1m: 6,
+          calls10s: 1,
+          weight1m: 6,
+          orderCalls1m: 0,
+          orderCalls10s: 0,
+          lastCall: now - 35000,
+        },
+        {
+          endpoint: 'https://api.binance.com/api/v3/ticker/24hr',
+          weight: 1,
+          calls1m: 4,
+          calls10s: 0,
+          weight1m: 4,
+          orderCalls1m: 0,
+          orderCalls10s: 0,
+          lastCall: now - 40000,
+        },
+        {
+          endpoint: 'https://api.binance.com/api/v3/exchangeInfo',
+          weight: 10,
+          calls1m: 2,
+          calls10s: 0,
+          weight1m: 20,
+          orderCalls1m: 0,
+          orderCalls10s: 0,
+          lastCall: now - 45000,
+        },
+        {
+          endpoint: 'https://api.binance.com/api/v3/time',
+          weight: 1,
+          calls1m: 3,
+          calls10s: 0,
+          weight1m: 3,
+          orderCalls1m: 0,
+          orderCalls10s: 0,
+          lastCall: now - 50000,
+        },
+        {
+          endpoint: 'https://api.binance.com/api/v3/ping',
+          weight: 1,
+          calls1m: 2,
+          calls10s: 0,
+          weight1m: 2,
+          orderCalls1m: 0,
+          orderCalls10s: 0,
+          lastCall: now - 55000,
+        },
+        {
+          endpoint: 'https://api.binance.com/api/v3/ticker/bookTicker',
+          weight: 1,
+          calls1m: 1,
+          calls10s: 0,
+          weight1m: 1,
+          orderCalls1m: 0,
+          orderCalls10s: 0,
+          lastCall: now - 60000,
         }
       ];
       
@@ -176,8 +246,7 @@ class ServerRateTracker {
 
     // Convert to array and sort by usage
     return Array.from(endpointMap.values())
-      .sort((a, b) => b.weight1m - a.weight1m)
-      .slice(0, 20); // Top 20 most used endpoints
+      .sort((a, b) => b.weight1m - a.weight1m);
   }
 
   cleanup() {
