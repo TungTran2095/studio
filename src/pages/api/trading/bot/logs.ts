@@ -50,13 +50,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.log('⚠️ bot_indicator_logs table does not exist yet');
     }
 
-    // 3. Lấy lịch sử giao dịch
+    // 3. Lấy lịch sử giao dịch - Tăng limit để hiển thị tất cả giao dịch
     const { data: tradesData, error: tradesError } = await supabase
       .from('trades')
       .select('*')
       .eq('bot_id', botId)
       .order('open_time', { ascending: false })
-      .limit(20);
+      .limit(1000); // Tăng từ 20 lên 1000 để hiển thị tất cả giao dịch
     
     if (tradesError) {
       console.error('❌ Error fetching trades:', tradesError);

@@ -736,7 +736,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                       {tradesLoading ? 'Đang tải...' : 'Làm mới'}
                     </Button>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-96 overflow-y-auto">
                     <table className="min-w-full text-xs border">
                       <thead className="bg-muted">
                         <tr>
