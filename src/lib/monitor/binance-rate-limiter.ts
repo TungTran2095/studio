@@ -44,13 +44,13 @@ class BinanceRateLimiter {
   private lastEmergencyReset = 0;
 
   constructor() {
-    // EMERGENCY MODE: Ultra conservative limits to avoid IP ban
-    const usedWeightPerMin = Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 500); // Giảm xuống 500 để tránh ban
-    const ordersPer10s = Number(process.env.BINANCE_ORDERS_PER_10S || 20); // Giảm xuống 20
-    const ordersPer1m = Number(process.env.BINANCE_ORDERS_PER_1M || 800); // Giảm xuống 800
-    this.limiter.defineBucket('weight:1m', 60_000, usedWeightPerMin - 200); // Tăng headroom lên 200
-    this.limiter.defineBucket('orders:10s', 10_000, Math.max(1, ordersPer10s - 10)); // Tăng headroom lên 10
-    this.limiter.defineBucket('orders:1m', 60_000, Math.max(5, ordersPer1m - 100)); // Tăng headroom lên 100
+    // OPTIMIZED: Increased limits to safe levels to prevent false rate limiting
+    const usedWeightPerMin = Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000); // Increased from 500 to 1000
+    const ordersPer10s = Number(process.env.BINANCE_ORDERS_PER_10S || 50); // Increased from 20 to 50
+    const ordersPer1m = Number(process.env.BINANCE_ORDERS_PER_1M || 1200); // Increased from 800 to 1200
+    this.limiter.defineBucket('weight:1m', 60_000, usedWeightPerMin - 100); // Reduced headroom from 200 to 100
+    this.limiter.defineBucket('orders:10s', 10_000, Math.max(5, ordersPer10s - 5)); // Reduced headroom from 10 to 5
+    this.limiter.defineBucket('orders:1m', 60_000, Math.max(10, ordersPer1m - 50)); // Reduced headroom from 100 to 50
     
     // Auto-enable emergency mode if we detect high usage
     this.checkAndEnableEmergencyMode();
@@ -105,18 +105,18 @@ class BinanceRateLimiter {
     return {
       weight1m: {
         used: 0, // Would need to implement in SlidingWindowLimiter
-        limit: Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000) - 100,
-        available: Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000) - 100
+        limit: Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000) - 50, // Increased from 1000-100 to 1000-50
+        available: Number(process.env.BINANCE_USED_WEIGHT_PER_MIN || 1000) - 50
       },
       orders10s: {
         used: 0,
-        limit: Number(process.env.BINANCE_ORDERS_PER_10S || 40) - 5,
-        available: Number(process.env.BINANCE_ORDERS_PER_10S || 40) - 5
+        limit: Number(process.env.BINANCE_ORDERS_PER_10S || 50) - 2, // Increased from 40-5 to 50-2
+        available: Number(process.env.BINANCE_ORDERS_PER_10S || 50) - 2
       },
       orders1m: {
         used: 0,
-        limit: Number(process.env.BINANCE_ORDERS_PER_1M || 1500) - 50,
-        available: Number(process.env.BINANCE_ORDERS_PER_1M || 1500) - 50
+        limit: Number(process.env.BINANCE_ORDERS_PER_1M || 1200) - 25, // Increased from 1500-50 to 1200-25
+        available: Number(process.env.BINANCE_ORDERS_PER_1M || 1200) - 25
       },
       emergencyMode: this.emergencyMode
     };
@@ -131,16 +131,16 @@ class BinanceRateLimiter {
 
   // Method to check and enable emergency mode based on usage
   private checkAndEnableEmergencyMode(): void {
-    // Enable emergency mode immediately to prevent further API calls
-    this.emergencyMode = true;
-    this.lastEmergencyReset = Date.now();
-    console.log('[BinanceRateLimiter] 🚨 EMERGENCY MODE ENABLED - All API calls blocked to prevent IP ban');
+    // DISABLED: Emergency mode auto-enable to prevent false positives
+    // this.emergencyMode = true;
+    // this.lastEmergencyReset = Date.now();
+    console.log('[BinanceRateLimiter] ✅ Emergency mode auto-enable DISABLED - Manual control only');
     
-    // Auto-reset after 10 minutes instead of 5
-    setTimeout(() => {
-      this.emergencyMode = false;
-      console.log('[BinanceRateLimiter] 🔄 Emergency mode auto-reset after 10 minutes');
-    }, 600000); // 10 minutes
+    // Emergency mode will only be enabled manually or when explicitly triggered
+    // setTimeout(() => {
+    //   this.emergencyMode = false;
+    //   console.log('[BinanceRateLimiter] 🔄 Emergency mode auto-reset after 10 minutes');
+    // }, 600000); // 10 minutes
   }
 
   // Method to force enable emergency mode

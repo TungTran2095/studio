@@ -259,8 +259,8 @@ export class TimeSync {
    * @returns number Timestamp đã hiệu chỉnh
    */
   static getTimestamp(): number {
-    // Trả về thời gian hiện tại trừ đi một khoảng lớn để đảm bảo luôn nhỏ hơn server time
-    return Date.now() - 300000; // Tăng từ 180000ms lên 300000ms (5 phút)
+    // FIXED: Reduced offset from 5 minutes to 5 seconds to prevent timestamp rejection
+    return Date.now() - 5000; // Reduced from 300000ms (5 minutes) to 5000ms (5 seconds)
   }
 
   /**
@@ -343,8 +343,8 @@ export class TimeSync {
    * @returns number Timestamp an toàn cho Binance
    */
   static getSafeTimestamp(): number {
-    // Timestamp tối thiểu sẽ nhỏ hơn thời gian hiện tại 
-    return Date.now() - 10000; // Tăng từ 5000ms lên 10000ms
+    // FIXED: Reduced offset to prevent timestamp rejection
+    return Date.now() - 2000; // Reduced from 10000ms to 2000ms (2 seconds)
   }
 
   /**
@@ -376,15 +376,15 @@ export class TimeSync {
     // Nếu đã sync với server, sử dụng offset đã tính toán
     if (this.isSynced && this.lastServerTime > 0) {
       // Tính timestamp an toàn dựa trên server time
-      const safeOffset = 30000; // 30 giây trước server time
+      const safeOffset = 5000; // Reduced from 30000ms to 5000ms (5 seconds)
       const safeTimestamp = this.lastServerTime - safeOffset;
       
-      // Đảm bảo timestamp không quá cũ (không quá 5 phút trước)
-      const minTimestamp = now - 300000; // 5 phút trước
+      // Đảm bảo timestamp không quá cũ (không quá 1 phút trước)
+      const minTimestamp = now - 60000; // Reduced from 300000ms to 60000ms (1 minute)
       return Math.max(safeTimestamp, minTimestamp);
     }
     
     // Fallback: trả về thời gian còn thấp hơn nữa cho các giao dịch quan trọng
-    return now - 60000; // 1 phút trước để an toàn
+    return now - 10000; // Reduced from 60000ms to 10000ms (10 seconds)
   }
 } 

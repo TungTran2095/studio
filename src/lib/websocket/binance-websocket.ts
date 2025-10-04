@@ -75,12 +75,22 @@ export class BinanceWebSocketManager extends EventEmitter {
 
       this.ws.onerror = (error) => {
         console.error('[BinanceWebSocket] ❌ WebSocket error:', error);
-        this.emit('error', error);
+        // FIXED: Add proper error handling to prevent unhandled errors
+        try {
+          this.emit('error', error);
+        } catch (emitError) {
+          console.error('[BinanceWebSocket] Error emitting error event:', emitError);
+        }
       };
 
     } catch (error) {
       console.error('[BinanceWebSocket] ❌ Connection failed:', error);
-      this.emit('error', error);
+      // FIXED: Add proper error handling to prevent unhandled errors
+      try {
+        this.emit('error', error);
+      } catch (emitError) {
+        console.error('[BinanceWebSocket] Error emitting connection error:', emitError);
+      }
     }
   }
 
@@ -245,7 +255,11 @@ export const binanceWebSocketManager = new BinanceWebSocketManager({
   streams: ['ticker', 'trade']
 });
 
-// Auto-connect on import
+// Auto-connect on import with error handling
 if (typeof window !== 'undefined') {
-  binanceWebSocketManager.connect();
+  try {
+    binanceWebSocketManager.connect();
+  } catch (error) {
+    console.error('[BinanceWebSocket] Failed to auto-connect:', error);
+  }
 }
