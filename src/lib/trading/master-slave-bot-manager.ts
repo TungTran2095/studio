@@ -5,7 +5,7 @@
  * Slave Bot (Mainnet): Only executes orders when signals are generated
  */
 
-import { binanceAPIUsageManager } from './binance-api-usage-manager';
+import { binanceAPIUsageManager } from '../monitor/binance-api-usage-manager';
 
 interface BotSignal {
   id: string;
