@@ -1,3 +1,5 @@
+import { binanceAPIUsageManager } from './binance-api-usage-manager';
+
 // In-memory rate limiter tailored for Binance REST limits
 // Targeting common limits: Used-Weight (per minute) and Order count (10s/1m)
 
@@ -59,6 +61,12 @@ class BinanceRateLimiter {
   async throttle(kind: BinanceEndpointKind): Promise<void> {
     const c = COST[kind];
     
+    // Check with comprehensive API usage manager first
+    const canMakeCall = binanceAPIUsageManager.canMakeCall(`/api/v3/${kind}`);
+    if (!canMakeCall.allowed) {
+      throw new Error(`API call blocked: ${canMakeCall.reason}`);
+    }
+    
     // Emergency mode: reject all calls if we're in emergency mode
     if (this.emergencyMode) {
       const now = Date.now();
@@ -74,11 +82,19 @@ class BinanceRateLimiter {
       await this.limiter.acquire('weight:1m', c.weight);
       if (c.order10s) await this.limiter.acquire('orders:10s', c.order10s);
       if (c.order1m) await this.limiter.acquire('orders:1m', c.order1m);
+      
+      // Record API usage in comprehensive manager
+      binanceAPIUsageManager.recordAPICall(`/api/v3/${kind}`, true, 0);
+      
     } catch (error) {
       // If we hit rate limits, enter emergency mode
       this.emergencyMode = true;
       this.lastEmergencyReset = Date.now();
       console.error('[BinanceRateLimiter] 🚨 Rate limit exceeded, entering emergency mode');
+      
+      // Record failed API call
+      binanceAPIUsageManager.recordAPICall(`/api/v3/${kind}`, false, 0);
+      
       throw error;
     }
   }
