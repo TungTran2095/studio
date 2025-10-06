@@ -2,7 +2,6 @@ import { TradingBot } from './trading-bot';
 import { supabase } from '@/lib/supabase-client';
 import { TransparentBinanceService } from './transparent-binance-service';
 import { instrumentedFetch } from '@/lib/monitor/server-logger';
-import { binanceRateLimiter } from '@/lib/monitor/binance-rate-limiter';
 import { notifyTrade, notifyError, notifyBotStatus } from '@/lib/notifications/telegram-service';
 import { createClient } from '@supabase/supabase-js';
 import { botLogger } from './bot-logger';
@@ -1524,7 +1523,7 @@ export class BotExecutor {
 
         // Đóng vị thế
         // Throttle order endpoints
-        await binanceRateLimiter.throttle('order');
+        // Simplified: No rate limiting
         const orderRes = await instrumentedFetch(`${API_BASE_URL}/api/trading/binance/order`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

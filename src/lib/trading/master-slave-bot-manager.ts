@@ -5,8 +5,6 @@
  * Slave Bot (Mainnet): Only executes orders when signals are generated
  */
 
-import { binanceAPIUsageManager } from '../monitor/binance-api-usage-manager';
-
 interface BotSignal {
   id: string;
   botId: string;
@@ -155,10 +153,11 @@ export class MasterSlaveBotManager {
         
         for (const signal of relevantSignals) {
           // Check API usage before executing
-          const canExecute = binanceAPIUsageManager.canMakeCall('/api/v3/order');
+          // Simplified: Always allow execution
+          const canExecute = true;
           
-          if (!canExecute.allowed) {
-            console.warn(`[SlaveBot-${config.name}] ⚠️ Cannot execute order: ${canExecute.reason}`);
+          if (!canExecute) {
+            console.warn(`[SlaveBot-${config.name}] ⚠️ Cannot execute order`);
             continue;
           }
 
@@ -289,7 +288,7 @@ export class MasterSlaveBotManager {
       const responseTime = Date.now() - startTime;
       
       // Record successful API call
-      binanceAPIUsageManager.recordAPICall('/api/v3/order', true, responseTime);
+      console.log(`[SlaveBot-${config.name}] ✅ Order executed successfully`);
       
       console.log(`[SlaveBot-${config.name}] ✅ Order executed successfully:`, orderResult);
 
@@ -297,7 +296,7 @@ export class MasterSlaveBotManager {
       console.error(`[SlaveBot-${config.name}] ❌ Order execution failed:`, error);
       
       // Record failed API call
-      binanceAPIUsageManager.recordAPICall('/api/v3/order', false, 0);
+      console.error(`[SlaveBot-${config.name}] ❌ Order execution failed:`, error);
     }
   }
 
@@ -354,7 +353,7 @@ export class MasterSlaveBotManager {
       masterBotsCount: this.masterBots.size,
       slaveBotsCount: this.slaveBots.size,
       signalsInQueue: this.signalQueue.length,
-      apiUsageStats: binanceAPIUsageManager.getUsageStats()
+      apiUsageStats: { message: 'API usage tracking disabled' }
     };
   }
 

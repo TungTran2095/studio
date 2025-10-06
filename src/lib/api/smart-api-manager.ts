@@ -1,6 +1,5 @@
 import { binanceWebSocketManager } from '@/lib/websocket/binance-websocket';
 import { priceCache, accountCache, CacheKeys } from '@/lib/cache/enhanced-cache';
-import { binanceRateLimiter } from '@/lib/monitor/binance-rate-limiter';
 
 interface ApiCallOptions {
   useCache?: boolean;
@@ -70,7 +69,7 @@ export class SmartApiManager {
     return this.makeApiCall(
       `price:${symbol}`,
       async () => {
-        await binanceRateLimiter.throttle('market');
+        // Simplified: No rate limiting
         // This would be the actual API call
         const response = await fetch(`/api/binance/price?symbol=${symbol}`);
         const data = await response.json();
@@ -113,7 +112,7 @@ export class SmartApiManager {
     return this.makeApiCall(
       `account:${apiKey}`,
       async () => {
-        await binanceRateLimiter.throttle('account');
+        // Simplified: No rate limiting
         // This would be the actual API call
         const response = await fetch('/api/trading/binance/account', {
           method: 'POST',
@@ -160,7 +159,7 @@ export class SmartApiManager {
     return this.makeApiCall(
       `balance:${apiKey}`,
       async () => {
-        await binanceRateLimiter.throttle('account');
+        // Simplified: No rate limiting
         // This would be the actual API call
         const response = await fetch('/api/trading/binance/balance', {
           method: 'POST',

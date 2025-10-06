@@ -4,7 +4,6 @@
 import { z } from 'zod';
 import Binance from 'node-binance-api'; // Import the library
 import { TimeSync } from '@/lib/time-sync'; // Import TimeSync utility
-import { recordBinanceCall } from '@/lib/monitor/server-rate-tracker'; // Import rate tracker
 
 // Define the structure for an asset
 export interface Asset {
@@ -48,32 +47,19 @@ const TradeHistoryInputSchema = BinanceInputSchema.extend({
 });
 
 
-// Helper function to track Binance API calls
+// Helper function to make Binance API calls (simplified)
 async function trackBinanceCall<T>(
   endpoint: string,
   method: string,
   fn: () => Promise<T>,
   weight: number = 1
 ): Promise<T> {
-  const startTime = Date.now();
   try {
     const result = await fn();
-    const duration = Date.now() - startTime;
-    
-    // Record the call for monitoring
-    recordBinanceCall(endpoint, method, {
-      'x-mbx-used-weight-1m': String(weight),
-      'response-time': String(duration)
-    });
-    
+    console.log(`[Binance] ✅ API call successful: ${method} ${endpoint}`);
     return result;
   } catch (error) {
-    const duration = Date.now() - startTime;
-    recordBinanceCall(endpoint, method, {
-      'x-mbx-used-weight-1m': String(weight),
-      'response-time': String(duration),
-      'error': 'true'
-    });
+    console.error(`[Binance] ❌ API call failed: ${method} ${endpoint}`, error);
     throw error;
   }
 }

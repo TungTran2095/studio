@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
     if (!apiKey || !apiSecret) {
       return NextResponse.json({ success: false, error: 'Thiếu API key hoặc secret.' }, { status: 400 });
     }
+
     const result = await fetchBinanceAssets({ apiKey, apiSecret, isTestnet: !!isTestnet });
     if (result.success) {
       return NextResponse.json({ success: true, data: result.data });
@@ -16,4 +17,4 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message || 'Lỗi không xác định.' }, { status: 500 });
   }
-} 
+}

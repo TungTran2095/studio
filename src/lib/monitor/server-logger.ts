@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase-client';
-import { recordBinanceCall } from './server-rate-tracker';
 
 export type ApiCategory = 'Giá' | 'Giao dịch' | 'Tài khoản' | 'Nội bộ' | 'Khác';
 export type ApiService = 'Binance' | 'App API' | 'Khác';
@@ -92,7 +91,7 @@ export async function instrumentedFetch(input: string, init?: RequestInit) {
     const orderCount1m = Number(res.headers.get('x-mbx-order-count-1m') || '');
     
     // Track Binance API calls in server rate tracker
-    recordBinanceCall(input, (init?.method || 'GET'), headers);
+    // Simplified: No Binance call tracking
     
     await logApiCall({
       method: (init?.method || 'GET').toUpperCase(),

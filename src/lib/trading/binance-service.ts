@@ -1,5 +1,4 @@
 import Binance from 'binance-api-node';
-import { binanceRateLimiter } from '@/lib/monitor/binance-rate-limiter';
 import { TimeSync } from '@/lib/time-sync';
 import { binanceCache } from '@/lib/cache/binance-cache';
 
@@ -170,7 +169,7 @@ export class BinanceService {
 
       // Cache miss - gọi API
       console.log('[BinanceService] 🔄 Fetching fresh account info from API');
-      await binanceRateLimiter.throttle('account');
+      // Simplified: No rate limiting
       const accountInfo = await this.retryWithTimestampSync(() => this.client.accountInfo()) as BinanceAccountInfo;
       
       // Lưu vào cache
@@ -193,7 +192,7 @@ export class BinanceService {
 
       // Cache miss - gọi API
       console.log('[BinanceService] 🔄 Fetching fresh exchange info from API');
-      await binanceRateLimiter.throttle('market');
+      // Simplified: No rate limiting
       const exchangeInfo = await this.retryWithTimestampSync(() => this.client.exchangeInfo()) as any;
       
       // Lưu vào cache
@@ -208,7 +207,7 @@ export class BinanceService {
 
   async getCandles(symbol: string, interval: string, limit: number = 100): Promise<BinanceCandle[]> {
     try {
-      await binanceRateLimiter.throttle('market');
+      // Simplified: No rate limiting
       const candles = await this.retryWithTimestampSync(() => this.client.candles({ symbol, interval, limit })) as any[];
       return candles.map((candle: any[]) => ({
         openTime: candle[0],
@@ -231,7 +230,7 @@ export class BinanceService {
 
   async getPrice(symbol: string): Promise<BinancePrice> {
     try {
-      await binanceRateLimiter.throttle('market');
+      // Simplified: No rate limiting
       return await this.retryWithTimestampSync(() => this.client.price({ symbol }));
     } catch (error) {
       console.error('Error getting price:', error);
@@ -247,7 +246,7 @@ export class BinanceService {
     price?: string;
   }): Promise<BinanceOrder> {
     try {
-      await binanceRateLimiter.throttle('order');
+      // Simplified: No rate limiting
       const order = await this.retryWithTimestampSync(() => this.client.order({
         symbol: orderParams.symbol,
         side: orderParams.side,
