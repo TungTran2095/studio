@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { priceApiThrottle } from '@/lib/simple-api-throttle';
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,6 +8,9 @@ export async function POST(req: NextRequest) {
     if (!symbol) {
       return NextResponse.json({ error: 'Symbol is required' }, { status: 400 });
     }
+
+    // Apply simple throttling to prevent spam
+    await priceApiThrottle.throttle();
 
     // Chọn endpoint phù hợp
     const baseUrl = isTestnet

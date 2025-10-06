@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Binance from 'binance-api-node';
+import { accountApiThrottle } from '@/lib/simple-api-throttle';
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +9,9 @@ export async function POST(req: NextRequest) {
     if (!apiKey || !apiSecret) {
       return NextResponse.json({ error: 'Missing API credentials' }, { status: 400 });
     }
+
+    // Apply simple throttling to prevent spam
+    await accountApiThrottle.throttle();
 
     const client = Binance({
       apiKey,

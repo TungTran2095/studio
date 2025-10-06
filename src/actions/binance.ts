@@ -47,7 +47,7 @@ const TradeHistoryInputSchema = BinanceInputSchema.extend({
 });
 
 
-// Helper function to make Binance API calls (simplified)
+// Helper function to make Binance API calls (simplified with basic throttling)
 async function trackBinanceCall<T>(
   endpoint: string,
   method: string,
@@ -55,6 +55,18 @@ async function trackBinanceCall<T>(
   weight: number = 1
 ): Promise<T> {
   try {
+    // Apply basic throttling based on endpoint type
+    if (endpoint.includes('/account')) {
+      const { accountApiThrottle } = await import('@/lib/simple-api-throttle');
+      await accountApiThrottle.throttle();
+    } else if (endpoint.includes('/ticker/price')) {
+      const { priceApiThrottle } = await import('@/lib/simple-api-throttle');
+      await priceApiThrottle.throttle();
+    } else if (endpoint.includes('/order')) {
+      const { orderApiThrottle } = await import('@/lib/simple-api-throttle');
+      await orderApiThrottle.throttle();
+    }
+
     const result = await fn();
     console.log(`[Binance] ✅ API call successful: ${method} ${endpoint}`);
     return result;
