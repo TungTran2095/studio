@@ -65,6 +65,7 @@ export class TransparentBinanceService {
   private apiSecret: string;
   private isTestnet: boolean;
   private baseUrl: string;
+  private pendingCalls: Map<string, Promise<any>> = new Map();
   
   // Cache for account data to reduce API calls
   private accountCache: { data: BinanceAccountInfo | null; timestamp: number; ttl: number } = {
@@ -98,6 +99,40 @@ export class TransparentBinanceService {
     }
   }
 
+  // Unified call executor with dedup + simple cache + throttle
+  private async executeCall<T>(
+    key: string,
+    fn: () => Promise<T>,
+    options: { ttlMs?: number } = {}
+  ): Promise<T> {
+    // Serve from short cache if available
+    const ttl = options.ttlMs ?? 0;
+    if (ttl > 0) {
+      const cached = this.getCachedData(key);
+      if (cached) return cached as T;
+    }
+
+    // Deduplicate concurrent calls
+    if (this.pendingCalls.has(key)) {
+      return this.pendingCalls.get(key)! as Promise<T>;
+    }
+
+    const promise = (async () => {
+      try {
+        const result = await fn();
+        if (ttl > 0) {
+          this.setCachedData(key, result, ttl);
+        }
+        return result;
+      } finally {
+        this.pendingCalls.delete(key);
+      }
+    })();
+
+    this.pendingCalls.set(key, promise);
+    return promise;
+  }
+
   /**
    * Get account info with enhanced caching and API ban handling
    * Same interface as original BinanceService
@@ -111,92 +146,49 @@ export class TransparentBinanceService {
         return this.accountCache.data;
       }
 
-      // Cache miss - try to fetch from API
-      console.log('[TransparentBinanceService] 🔄 Fetching fresh account info from API');
-      
-      try {
-        const response = await fetch(`${this.baseUrl}/api/v3/account`, {
-          headers: {
-            'X-MBX-APIKEY': this.apiKey
-          }
-        });
+      // Cache miss - try to fetch via signed client with retry
+      console.log('[TransparentBinanceService] 🔄 Fetching fresh account info via client');
 
-        if (!response.ok) {
-          // Check if it's API ban error
-          if (response.status === 400 || response.status === 418) {
-            console.log('[TransparentBinanceService] ⚠️ API ban detected, using mock account data');
-            
-            // Return mock account data to keep bot running
-            const mockAccountInfo: BinanceAccountInfo = {
-              makerCommission: 0,
-              takerCommission: 0,
-              buyerCommission: 0,
-              sellerCommission: 0,
-              canTrade: true,
-              canWithdraw: false,
-              canDeposit: false,
-              updateTime: now,
-              accountType: 'SPOT',
-              balances: [
-                { asset: 'USDT', free: '10000', locked: '0' },
-                { asset: 'BTC', free: '0', locked: '0' }
-              ],
-              permissions: ['SPOT']
-            };
-            
-            // Cache mock data for 1 minute
-            this.accountCache = {
-              data: mockAccountInfo,
-              timestamp: now,
-              ttl: 60000 // 1 minute
-            };
-            
-            return mockAccountInfo;
-          }
-          
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const accountInfo = await response.json();
-        
-        // Update cache
-        this.accountCache = {
-          data: accountInfo,
-          timestamp: now,
-          ttl: 300000 // 5 minutes
-        };
-        
-        return accountInfo;
-      } catch (apiError) {
-        console.log('[TransparentBinanceService] ⚠️ API call failed, using mock account data');
-        
-        // Return mock account data to keep bot running
-        const mockAccountInfo: BinanceAccountInfo = {
-          makerCommission: 0,
-          takerCommission: 0,
-          buyerCommission: 0,
-          sellerCommission: 0,
-          canTrade: true,
-          canWithdraw: false,
-          canDeposit: false,
-          updateTime: now,
-          accountType: 'SPOT',
-          balances: [
-            { asset: 'USDT', free: '10000', locked: '0' },
-            { asset: 'BTC', free: '0', locked: '0' }
-          ],
-          permissions: ['SPOT']
-        };
-        
-        // Cache mock data for 1 minute
-        this.accountCache = {
-          data: mockAccountInfo,
-          timestamp: now,
-          ttl: 60000 // 1 minute
-        };
-        
-        return mockAccountInfo;
+      // Lazy initialize client if missing
+      if (!this.client) {
+        this.initializeClient();
       }
+
+      // Retry with small backoff, and provide recvWindow
+      const maxAttempts = 3;
+      const recvWindow = 5000;
+      let lastError: any;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const accountInfo = await this.client.accountInfo({ recvWindow });
+          // Update cache
+          this.accountCache = {
+            data: accountInfo,
+            timestamp: now,
+            ttl: 300000 // 5 minutes
+          };
+          return accountInfo;
+        } catch (err: any) {
+          lastError = err;
+          const message = err?.message || '';
+          const code = err?.code;
+          const isTimeError = code === -1021 || message.includes('Timestamp for this request') || message.includes('recvWindow') || message.includes('outside of the recvWindow');
+          console.warn('[TransparentBinanceService] accountInfo failed', { attempt, code, message });
+          if (isTimeError && attempt < maxAttempts) {
+            try {
+              // Best-effort time sync using server time endpoint without credentials
+              const res = await fetch(`${this.baseUrl}/api/v3/time`);
+              await res.json();
+            } catch {}
+            await new Promise(r => setTimeout(r, 500 * attempt));
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      // If all attempts failed, throw the last error
+      throw lastError;
     } catch (error) {
       console.error('[TransparentBinanceService] Error getting account info:', error);
       throw error;
@@ -211,31 +203,16 @@ export class TransparentBinanceService {
     try {
       // This is static data, cache it for a long time
       const cacheKey = 'exchangeInfo';
-      const cached = this.getCachedData(cacheKey);
-      
-      if (cached) {
-        console.log('[TransparentBinanceService] 📦 Using cached exchange info');
-        return cached;
-      }
-
-      console.log('[TransparentBinanceService] 🔄 Fetching exchange info from API');
-      
-      const response = await fetch(`${this.baseUrl}/api/v3/exchangeInfo`, {
-        headers: {
-          'X-MBX-APIKEY': this.apiKey
+      return this.executeCall(cacheKey, async () => {
+        console.log('[TransparentBinanceService] 🔄 Fetching exchange info from API');
+        const response = await fetch(`${this.baseUrl}/api/v3/exchangeInfo`, {
+          headers: { 'X-MBX-APIKEY': this.apiKey }
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const exchangeInfo = await response.json();
-      
-      // Cache for 1 hour
-      this.setCachedData(cacheKey, exchangeInfo, 3600000);
-      
-      return exchangeInfo;
+        return await response.json();
+      }, { ttlMs: 3600000 }); // 1h
     } catch (error) {
       console.error('[TransparentBinanceService] Error getting exchange info:', error);
       throw error;
@@ -255,29 +232,21 @@ export class TransparentBinanceService {
     } catch (error) {
       console.log(`[TransparentBinanceService] ⚠️ WebSocket failed, using REST API for ${symbol}`);
       
-      // Fallback to internal API
-      const response = await fetch('/api/trading/binance/price', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          symbol: symbol,
-          apiKey: this.apiKey,
-          apiSecret: this.apiSecret,
-          isTestnet: this.isTestnet
-        })
-      });
+      // Fallback to internal API with short cache & dedup
+      const key = `price:${symbol}`;
+      const data = await this.executeCall(key, async () => {
+        const response = await fetch('/api/trading/binance/price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, apiKey: this.apiKey, apiSecret: this.apiSecret, isTestnet: this.isTestnet })
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
+      }, { ttlMs: 2000 });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return {
-        symbol: data.symbol,
-        price: data.price
-      };
+      return { symbol: data.symbol, price: data.price };
     }
   }
 
@@ -306,17 +275,14 @@ export class TransparentBinanceService {
       if (startTime) url += `&startTime=${startTime}`;
       if (endTime) url += `&endTime=${endTime}`;
 
-      const response = await fetch(url, {
-        headers: {
-          'X-MBX-APIKEY': this.apiKey
+      const key = `klines:${symbol}:${interval}:${startTime || 0}:${endTime || 0}:${limit}`;
+      return await this.executeCall(key, async () => {
+        const response = await fetch(url, { headers: { 'X-MBX-APIKEY': this.apiKey } });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+        return await response.json();
+      }, { ttlMs: 5000 });
     }
   }
 
@@ -337,17 +303,14 @@ export class TransparentBinanceService {
       let url = `${this.baseUrl}/api/v3/ticker/24hr`;
       if (symbol) url += `?symbol=${symbol}`;
 
-      const response = await fetch(url, {
-        headers: {
-          'X-MBX-APIKEY': this.apiKey
+      const key = `24hr:${symbol || 'all'}`;
+      return await this.executeCall(key, async () => {
+        const response = await fetch(url, { headers: { 'X-MBX-APIKEY': this.apiKey } });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+        return await response.json();
+      }, { ttlMs: 3000 });
     }
   }
 
@@ -358,7 +321,7 @@ export class TransparentBinanceService {
   async placeOrder(orderParams: BinanceOrderParams): Promise<BinanceOrder> {
     try {
       console.log('[TransparentBinanceService] 🚀 Placing order via REST API');
-      
+      // Do not cache orders; dedup by client-side id if provided
       const response = await fetch(`${this.baseUrl}/api/v3/order`, {
         method: 'POST',
         headers: {
@@ -367,11 +330,9 @@ export class TransparentBinanceService {
         },
         body: new URLSearchParams(orderParams as any).toString()
       });
-
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-
       return await response.json();
     } catch (error) {
       console.error('[TransparentBinanceService] Error placing order:', error);
@@ -386,23 +347,17 @@ export class TransparentBinanceService {
   async cancelOrder(symbol: string, orderId: number): Promise<any> {
     try {
       console.log('[TransparentBinanceService] ❌ Canceling order via REST API');
-      
       const response = await fetch(`${this.baseUrl}/api/v3/order`, {
         method: 'DELETE',
         headers: {
           'X-MBX-APIKEY': this.apiKey,
           'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: new URLSearchParams({
-          symbol,
-          orderId: orderId.toString()
-        }).toString()
+        body: new URLSearchParams({ symbol, orderId: orderId.toString() }).toString()
       });
-
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-
       return await response.json();
     } catch (error) {
       console.error('[TransparentBinanceService] Error canceling order:', error);
@@ -417,21 +372,16 @@ export class TransparentBinanceService {
   async getOpenOrders(symbol?: string): Promise<BinanceOrder[]> {
     try {
       console.log('[TransparentBinanceService] 📋 Getting open orders from REST API');
-      
       let url = `${this.baseUrl}/api/v3/openOrders`;
       if (symbol) url += `?symbol=${symbol}`;
-
-      const response = await fetch(url, {
-        headers: {
-          'X-MBX-APIKEY': this.apiKey
+      const key = `openOrders:${symbol || 'all'}`;
+      return await this.executeCall(key, async () => {
+        const response = await fetch(url, { headers: { 'X-MBX-APIKEY': this.apiKey } });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+        return await response.json();
+      }, { ttlMs: 2000 });
     } catch (error) {
       console.error('[TransparentBinanceService] Error getting open orders:', error);
       throw error;
@@ -445,18 +395,16 @@ export class TransparentBinanceService {
   async getTradeHistory(symbol: string, limit: number = 500): Promise<any[]> {
     try {
       console.log('[TransparentBinanceService] 📈 Getting trade history from REST API');
-      
-      const response = await fetch(`${this.baseUrl}/api/v3/myTrades?symbol=${symbol}&limit=${limit}`, {
-        headers: {
-          'X-MBX-APIKEY': this.apiKey
+      const key = `myTrades:${symbol}:${limit}`;
+      return await this.executeCall(key, async () => {
+        const response = await fetch(`${this.baseUrl}/api/v3/myTrades?symbol=${symbol}&limit=${limit}`, {
+          headers: { 'X-MBX-APIKEY': this.apiKey }
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+        return await response.json();
+      }, { ttlMs: 10000 });
     } catch (error) {
       console.error('[TransparentBinanceService] Error getting trade history:', error);
       throw error;
