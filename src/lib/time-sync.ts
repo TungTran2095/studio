@@ -3,14 +3,14 @@
  */
 
 export class TimeSync {
-  // Đặt hiệu số cực thấp (-20000ms) để đảm bảo timestamp luôn nhỏ hơn thời gian server nhiều
-  private static timeOffset: number = -20000; // Tăng từ -10000ms lên -20000ms
+  // Offset giữa server và local: serverTime - localTime
+  private static offsetMs: number = 0;
   private static isSynced: boolean = false;
   private static lastSyncTime: number = 0;
-  private static readonly SYNC_INTERVAL_MS: number = 2 * 60 * 1000; // Giảm từ 5 phút xuống 2 phút để sync thường xuyên hơn
+  private static syncingPromise: Promise<void> | null = null;
+  private static readonly MIN_SYNC_INTERVAL_MS: number = 10 * 60 * 1000; // 10 phút
+  private static readonly HYSTERESIS_MS: number = 500; // Chỉ cập nhật nếu chênh lệch >= 500ms
   private static lastServerTime: number = 0;
-  private static retryCount: number = 0; // Đếm số lần thử lại kết nối
-  private static readonly MAX_RETRY: number = 3; // Số lần thử lại tối đa
   private static syncHistory: Array<{
     timestamp: number;
     serverTime: number;
@@ -29,18 +29,11 @@ export class TimeSync {
     let syncResult: any = {
       timestamp: startTime,
       serverTime: 0,
-      offset: this.timeOffset,
+      offset: this.offsetMs,
       success: false
     };
 
     try {
-      // Nếu đã đồng bộ gần đây, không cần đồng bộ lại
-      const now = Date.now();
-      if (this.isSynced && (now - this.lastSyncTime) < this.SYNC_INTERVAL_MS) {
-        console.log(`[TimeSync] Đồng bộ thời gian gần đây (${Math.round((now - this.lastSyncTime) / 1000)}s trước), bỏ qua.`);
-        return;
-      }
-
       console.log('[TimeSync] Đang đồng bộ thời gian với Binance...');
       
       // Sử dụng nhiều endpoint thay thế và thêm error handling tốt hơn
@@ -61,7 +54,7 @@ export class TimeSync {
           // Không thêm parameter nào cho endpoint /time
           const response = await fetch(endpoint, {
             method: 'GET',
-            signal: AbortSignal.timeout(8000), // Tăng timeout lên 8 giây
+            signal: AbortSignal.timeout(5000),
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               'Accept': 'application/json',
@@ -85,33 +78,23 @@ export class TimeSync {
           const serverTime = data.serverTime;
           this.lastServerTime = serverTime;
           const localTime = Date.now();
-          const timeDiff = localTime - serverTime;
-          
-          // Điều chỉnh hiệu số thông minh hơn
-          // Nếu local time nhanh hơn server, cần offset âm lớn hơn
-          // Nếu local time chậm hơn server, cần offset dương nhỏ hơn
-          let optimalMargin = 30000; // Margin mặc định 30 giây
-          
-          if (Math.abs(timeDiff) > 10000) {
-            // Nếu chênh lệch lớn, tăng margin an toàn
-            optimalMargin = Math.max(60000, Math.abs(timeDiff) * 2);
-            console.log(`[TimeSync] Chênh lệch thời gian lớn (${timeDiff}ms), tăng margin lên ${optimalMargin}ms`);
+          const newOffset = serverTime - localTime; // không margin, margin áp dụng khi cấp timestamp
+          const prevOffset = this.offsetMs;
+          // Hysteresis: chỉ cập nhật nếu thay đổi đáng kể
+          if (!this.isSynced || Math.abs(newOffset - prevOffset) >= this.HYSTERESIS_MS) {
+            this.offsetMs = newOffset;
           }
-          
-          this.timeOffset = serverTime - localTime - optimalMargin;
           this.isSynced = true;
-          this.lastSyncTime = now;
-          this.retryCount = 0; // Reset số lần thử lại
+          this.lastSyncTime = Date.now();
           
           syncResult.serverTime = serverTime;
-          syncResult.offset = this.timeOffset;
+          syncResult.offset = this.offsetMs;
           syncResult.success = true;
           
           console.log(`[TimeSync] ✅ Đồng bộ thành công với ${endpoint}`);
           console.log(`[TimeSync] Server time: ${new Date(serverTime).toISOString()}`);
           console.log(`[TimeSync] Local time:  ${new Date(localTime).toISOString()}`);
-          console.log(`[TimeSync] Time diff:   ${timeDiff}ms (${timeDiff > 0 ? 'local nhanh hơn' : 'local chậm hơn'})`);
-          console.log(`[TimeSync] New offset:  ${this.timeOffset}ms (margin: ${optimalMargin}ms)`);
+          console.log(`[TimeSync] Offset cập nhật: ${this.offsetMs}ms`);
           
           return; // Thoát nếu thành công
           
@@ -122,60 +105,31 @@ export class TimeSync {
         }
       }
       
-      // Nếu tất cả endpoints đều thất bại, thử sử dụng World Time API
-      try {
-        console.log('[TimeSync] Thử sử dụng World Time API làm fallback...');
-        const worldTimeResponse = await fetch('http://worldtimeapi.org/api/timezone/Etc/UTC', {
-          signal: AbortSignal.timeout(5000)
-        });
-        
-        if (worldTimeResponse.ok) {
-          const worldTimeData = await worldTimeResponse.json();
-          const worldTime = new Date(worldTimeData.datetime).getTime();
-          const localTime = Date.now();
-          
-          this.timeOffset = worldTime - localTime - 30000; // Tăng margin cho World Time API
-          this.isSynced = true;
-          this.lastSyncTime = now;
-          this.retryCount = 0;
-          
-          syncResult.serverTime = worldTime;
-          syncResult.offset = this.timeOffset;
-          syncResult.success = true;
-          
-          console.log(`[TimeSync] ✅ Đồng bộ thành công với World Time API. Hiệu số: ${this.timeOffset}ms`);
-          return;
-        }
-      } catch (worldTimeError) {
-        console.warn('[TimeSync] World Time API cũng thất bại:', worldTimeError);
-      }
-      
       // Nếu tất cả endpoints đều thất bại
       throw lastError || new Error('Không thể kết nối với bất kỳ endpoint nào');
       
     } catch (error) {
       console.error('[TimeSync] Lỗi đồng bộ thời gian:', error);
-      
       syncResult.error = error instanceof Error ? error.message : 'Unknown error';
-      
-      // Tăng số lần thử lại
-      this.retryCount++;
-      
-      if (this.retryCount <= this.MAX_RETRY) {
-        // Tự động thử lại sau 2 giây
-        console.log(`[TimeSync] Thử lại lần ${this.retryCount}/${this.MAX_RETRY} sau 2 giây...`);
-        setTimeout(() => this.syncWithServer(), 2000);
-      } else {
-        console.error(`[TimeSync] Đã thử lại ${this.MAX_RETRY} lần không thành công. Sử dụng offset mặc định.`);
-        // Nếu không thể đồng bộ, sử dụng offset mặc định an toàn
-        this.timeOffset = -300000; // 5 phút trước
-        this.isSynced = false;
-        this.retryCount = 0; // Reset counter
-      }
     } finally {
       // Lưu kết quả sync vào lịch sử
       this.addToSyncHistory(syncResult);
     }
+  }
+
+  /**
+   * Đảm bảo đã sync nếu quá hạn; tránh gọi lặp bằng promise dùng chung
+   */
+  static async ensure(): Promise<void> {
+    const now = Date.now();
+    if (this.isSynced && (now - this.lastSyncTime) < this.MIN_SYNC_INTERVAL_MS) {
+      return;
+    }
+    if (this.syncingPromise) return this.syncingPromise;
+    this.syncingPromise = this.syncWithServer().finally(() => {
+      this.syncingPromise = null;
+    });
+    return this.syncingPromise;
   }
 
   /**
@@ -231,9 +185,11 @@ export class TimeSync {
    * @param offsetAdjustment Giá trị cần điều chỉnh (dương hoặc âm)
    */
   static adjustOffset(offsetAdjustment: number): void {
-    const oldOffset = this.timeOffset;
-    this.timeOffset += offsetAdjustment;
-    console.log(`[TimeSync] Điều chỉnh thủ công timeOffset: ${oldOffset}ms -> ${this.timeOffset}ms (điều chỉnh ${offsetAdjustment}ms)`);
+    const oldOffset = this.offsetMs;
+    // Clamp điều chỉnh nhỏ để tránh drift lớn
+    const clamped = Math.max(-2000, Math.min(2000, offsetAdjustment));
+    this.offsetMs += clamped;
+    console.log(`[TimeSync] Điều chỉnh thủ công offset: ${oldOffset}ms -> ${this.offsetMs}ms (Δ ${clamped}ms)`);
   }
 
   /**
@@ -241,8 +197,8 @@ export class TimeSync {
    * @param newOffset Giá trị hiệu số mới
    */
   static setOffset(newOffset: number): void {
-    const oldOffset = this.timeOffset;
-    this.timeOffset = newOffset;
+    const oldOffset = this.offsetMs;
+    this.offsetMs = newOffset;
     // Tắt log để giảm spam
     // console.log(`[TimeSync] Đặt timeOffset: ${oldOffset}ms -> ${this.timeOffset}ms`);
   }
@@ -251,7 +207,7 @@ export class TimeSync {
    * Lấy hiệu số thời gian hiện tại
    */
   static getOffset(): number {
-    return this.timeOffset;
+    return this.offsetMs;
   }
 
   /**
@@ -259,8 +215,8 @@ export class TimeSync {
    * @returns number Timestamp đã hiệu chỉnh
    */
   static getTimestamp(): number {
-    // FIXED: Reduced offset from 5 minutes to 5 seconds to prevent timestamp rejection
-    return Date.now() - 5000; // Reduced from 300000ms (5 minutes) to 5000ms (5 seconds)
+    // Timestamp an toàn = now + offset - 1000ms margin
+    return Date.now() + this.offsetMs - 1000;
   }
 
   /**
@@ -343,8 +299,8 @@ export class TimeSync {
    * @returns number Timestamp an toàn cho Binance
    */
   static getSafeTimestamp(): number {
-    // FIXED: Reduced offset to prevent timestamp rejection
-    return Date.now() - 2000; // Reduced from 10000ms to 2000ms (2 seconds)
+    // Đồng nhất với getTimestamp
+    return this.getTimestamp();
   }
 
   /**
@@ -374,17 +330,9 @@ export class TimeSync {
     const now = Date.now();
     
     // Nếu đã sync với server, sử dụng offset đã tính toán
-    if (this.isSynced && this.lastServerTime > 0) {
-      // Tính timestamp an toàn dựa trên server time
-      const safeOffset = 5000; // Reduced from 30000ms to 5000ms (5 seconds)
-      const safeTimestamp = this.lastServerTime - safeOffset;
-      
-      // Đảm bảo timestamp không quá cũ (không quá 1 phút trước)
-      const minTimestamp = now - 60000; // Reduced from 300000ms to 60000ms (1 minute)
-      return Math.max(safeTimestamp, minTimestamp);
+    if (this.isSynced) {
+      return now + this.offsetMs - 1000;
     }
-    
-    // Fallback: trả về thời gian còn thấp hơn nữa cho các giao dịch quan trọng
-    return now - 10000; // Reduced from 60000ms to 10000ms (10 seconds)
+    return now - 1000;
   }
 } 

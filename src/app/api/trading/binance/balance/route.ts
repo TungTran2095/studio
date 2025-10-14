@@ -14,11 +14,11 @@ export async function POST(req: NextRequest) {
     // Apply simple throttling to prevent spam
     await accountApiThrottle.throttle();
 
-    // Sync server time to avoid -1021 timestamp errors
+    // Ensure time sync if stale (non-blocking frequent calls)
     try {
-      await TimeSync.syncWithServer();
+      await TimeSync.ensure();
     } catch (e) {
-      console.warn('[Binance Balance API] Time sync failed, continue with local time');
+      console.warn('[Binance Balance API] Time ensure failed, continue with local time');
     }
 
     const client = Binance({
@@ -26,11 +26,7 @@ export async function POST(req: NextRequest) {
       apiSecret,
       ...(isTestnet && { httpBase: 'https://testnet.binance.vision' }),
       // Provide getTime to ensure timestamp within recvWindow
-      getTime: () => {
-        const now = Date.now();
-        // subtract 1000ms as safety margin
-        return now - 1000;
-      }
+      getTime: () => TimeSync.getTimestamp()
     });
 
     // Lấy thông tin tài khoản với retry (đã đồng bộ thời gian qua TimeSync và getTime)
