@@ -552,6 +552,21 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
 
   const winrateResult = calculateCorrectWinrate(botTrades);
 
+  // Tỷ suất lợi nhuận tổng hợp từ tất cả các cặp giao dịch hoàn thành (ghép buy-sell)
+  const cumulativeProfitPercent = (() => {
+    try {
+      if (!winrateResult?.pairs || winrateResult.pairs.length === 0) return 0;
+      const multiplier = winrateResult.pairs.reduce((acc: number, pair: any) => {
+        const r = Number(pair?.profitRatio ?? 0);
+        if (!isFinite(r)) return acc;
+        return acc * (1 + r / 100);
+      }, 1);
+      return (multiplier - 1) * 100;
+    } catch {
+      return 0;
+    }
+  })();
+
   const toggleRowExpansion = (index: number) => {
     const newExpandedRows = new Set(expandedRows);
     if (newExpandedRows.has(index)) {
@@ -682,7 +697,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
               </TabsList>
               <TabsContent value="performance">
                 {/* Thống kê hiệu suất tổng quan - tất cả trong 1 hàng */}
-                <div className="grid grid-cols-5 gap-4 mb-4">
+                <div className="grid grid-cols-6 gap-4 mb-4">
                   <div className="p-3 border rounded">
                     <div className="text-muted-foreground text-sm">Tổng giao dịch</div>
                     <div className="text-lg font-semibold">{bot.total_trades}</div>
@@ -695,6 +710,12 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                     <div className="text-muted-foreground text-sm">Winrate</div>
                     <div className="text-lg font-semibold">
                       {winrateResult.winRate.toFixed(2)}% ({winrateResult.winPairs}/{winrateResult.totalPairs} cặp thắng)
+                    </div>
+                  </div>
+                  <div className="p-3 border rounded">
+                    <div className="text-muted-foreground text-sm">Tỷ suất lợi nhuận</div>
+                    <div className={`text-lg font-semibold ${cumulativeProfitPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {Number.isFinite(cumulativeProfitPercent) ? cumulativeProfitPercent.toFixed(2) : '0.00'}%
                     </div>
                   </div>
                   <div className="p-3 border rounded">
