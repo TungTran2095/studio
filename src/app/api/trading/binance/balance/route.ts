@@ -5,7 +5,7 @@ import { TimeSync } from '@/lib/time-sync';
 
 export async function POST(req: NextRequest) {
   try {
-    const { apiKey, apiSecret, isTestnet, recvWindow = 5000 } = await req.json();
+    const { apiKey, apiSecret, isTestnet } = await req.json();
 
     if (!apiKey || !apiSecret) {
       return NextResponse.json({ error: 'Missing API credentials' }, { status: 400 });
@@ -33,12 +33,12 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Lấy thông tin tài khoản với retry và recvWindow
+    // Lấy thông tin tài khoản với retry (đã đồng bộ thời gian qua TimeSync và getTime)
     let lastError: any;
     let accountInfo: any;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        accountInfo = await client.accountInfo({ recvWindow });
+        accountInfo = await client.accountInfo();
         break;
       } catch (err: any) {
         lastError = err;

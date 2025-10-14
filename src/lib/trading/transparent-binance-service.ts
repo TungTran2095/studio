@@ -156,11 +156,10 @@ export class TransparentBinanceService {
 
       // Retry with small backoff, and provide recvWindow
       const maxAttempts = 3;
-      const recvWindow = 5000;
       let lastError: any;
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          const accountInfo = await this.client.accountInfo({ recvWindow });
+          const accountInfo = await this.client.accountInfo();
           // Update cache
           this.accountCache = {
             data: accountInfo,
