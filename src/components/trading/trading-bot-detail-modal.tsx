@@ -408,11 +408,6 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
     }
   );
 
-  // Tính toán lãi/lỗ tổng dựa trên lệnh buy/sell
-  const totalBuyValue = botTrades.filter(t => t.side === 'buy').reduce((sum, t) => sum + (t.quantity * t.entry_price), 0);
-  const totalSellValue = botTrades.filter(t => t.side === 'sell').reduce((sum, t) => sum + (t.quantity * t.entry_price), 0);
-  const totalPnL = totalSellValue - totalBuyValue;
-
   // Tính toán Winrate - Logic đúng: gộp các giao dịch cùng side liên tiếp và ghép cặp buy-sell
   function calculateCorrectWinrate(trades: any[]) {
     if (!trades || trades.length === 0) {
@@ -552,12 +547,17 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
 
   const winrateResult = calculateCorrectWinrate(botTrades);
 
+  // Tính tổng lãi/lỗ từ cột Lợi nhuận trong bảng Danh sách giao dịch hoàn thành
+  const totalPnL = winrateResult.pairs.reduce((sum, pair) => sum + pair.pnl, 0);
+
   // Tỷ suất lợi nhuận tổng hợp từ tất cả các cặp giao dịch hoàn thành (ghép buy-sell)
   const cumulativeProfitPercent = (() => {
     try {
       if (!winrateResult?.pairs || winrateResult.pairs.length === 0) return 0;
       const multiplier = winrateResult.pairs.reduce((acc: number, pair: any) => {
-        const r = Number(pair?.profitRatio ?? 0);
+        // Tính % lợi nhuận tạm tính cho từng cặp giao dịch
+        const tempProfitPercent = ((pair.sell.avgPrice - pair.buy.avgPrice) / pair.buy.avgPrice) * 100 - 0.2;
+        const r = Number(tempProfitPercent ?? 0);
         if (!isFinite(r)) return acc;
         return acc * (1 + r / 100);
       }, 1);
@@ -769,13 +769,14 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                           <th className="p-2 text-center">Signal mua</th>
                           <th className="p-2 text-center">Signal bán</th>
                           <th className="p-2 text-right">Lợi nhuận</th>
+                          <th className="p-2 text-right">% Lợi nhuận tạm tính</th>
                           <th className="p-2 text-center">Trạng thái</th>
                         </tr>
                       </thead>
                       <tbody>
                         {tradesLoading ? (
                           <tr>
-                            <td colSpan={9} className="p-4 text-center text-muted-foreground">Đang tải...</td>
+                            <td colSpan={10} className="p-4 text-center text-muted-foreground">Đang tải...</td>
                           </tr>
                         ) : winrateResult.pairs.length > 0 ? (
                           winrateResult.pairs.map((pair: any, idx: number) => {
@@ -785,6 +786,9 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                             const pnl = pair.pnl;
                             const profitRatio = pair.profitRatio;
                             const isExpanded = expandedRows.has(idx);
+                            
+                            // Tính % lợi nhuận tạm tính theo công thức ((giá bán-giá mua)/giá mua -0,2%)
+                            const tempProfitPercent = ((sellGroup.avgPrice - buyGroup.avgPrice) / buyGroup.avgPrice) * 100 - 0.2;
                             
                             return (
                               <React.Fragment key={idx}>
@@ -839,6 +843,11 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                                       ({profitRatio.toFixed(2)}%)
                                     </div>
                                   </td>
+                                  <td className="p-2 text-right">
+                                    <span className={tempProfitPercent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                      {tempProfitPercent.toFixed(2)}%
+                                    </span>
+                                  </td>
                                   <td className="p-2 text-center">
                                     <Badge variant="default" className="text-xs">
                                       Hoàn thành
@@ -847,7 +856,7 @@ export function TradingBotDetailModal({ open, onOpenChange, bot, onToggleBot }: 
                                 </tr>
                                 {isExpanded && (
                                   <tr className="border-b bg-muted/30">
-                                    <td colSpan={9} className="p-4">
+                                    <td colSpan={10} className="p-4">
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         {/* Chi tiết giao dịch mua */}
                                         <div className="space-y-3">
