@@ -56,3 +56,4 @@ console.log('\n✅ Tất cả environment variables đã được cấu hình!')
 console.log('🚀 Bây giờ có thể chạy: npm run dev');
 
 
+

@@ -68,3 +68,4 @@ GRANT ALL ON public.worklogs TO authenticated;
 SELECT 'Database simplified successfully' as status;
 
 
+

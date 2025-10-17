@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { chat } from '@/ai/flows/chat';
+import { attendanceChat } from '@/ai/flows/attendance-chat';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,19 +36,52 @@ export async function sendChatMessage(args: SendChatArgs) {
       .insert({ conversation_id: convId, user_id: userId, role: 'user', content: prompt });
     if (insUserMsgErr) throw insUserMsgErr;
 
-    const aiRes = await chat({ prompt, userId });
+    // Phân tích prompt để xác định có phải attendance query không
+    const isAttendanceQuery = isAttendanceRelated(prompt);
+    console.log('Chat prompt analysis:', { prompt, isAttendanceQuery });
+    
+    let aiRes;
+    if (isAttendanceQuery) {
+      console.log('Using attendance chat...');
+      aiRes = await attendanceChat({ prompt, userId });
+      console.log('Attendance chat result:', aiRes);
+    } else {
+      console.log('Using regular chat...');
+      aiRes = await chat({ prompt, userId });
+      console.log('Regular chat result:', aiRes);
+    }
+
     const reply = aiRes.reply;
+    const hasData = aiRes.hasData || false;
 
     const { error: insAssistantErr } = await supabaseAdmin
       .from('chat_messages')
       .insert({ conversation_id: convId, user_id: userId, role: 'assistant', content: reply });
     if (insAssistantErr) throw insAssistantErr;
 
-    return { conversationId: convId, reply };
+    return { conversationId: convId, reply, hasData };
   } catch (e: any) {
     console.error('sendChatMessage error:', e);
     return { error: e.message || 'Không thể gửi tin nhắn' };
   }
+}
+
+/**
+ * Kiểm tra xem prompt có liên quan đến attendance không
+ */
+function isAttendanceRelated(prompt: string): boolean {
+  const lowerPrompt = prompt.toLowerCase();
+  const attendanceKeywords = [
+    'chấm công', 'attendance', 'điểm danh', 'checkin', 'check in',
+    'giờ làm', 'thời gian làm việc', 'trạng thái chấm công',
+    'vắng mặt', 'đi muộn', 'về sớm', 'nghỉ phép', 'làm thêm giờ',
+    'đơn vị', 'bộ phận', 'phòng ban', 'office', 'department',
+    'nhân viên', 'employee', 'staff', 'worker',
+    'thống kê chấm công', 'báo cáo chấm công', 'số liệu chấm công',
+    'lịch sử chấm công', 'dữ liệu chấm công'
+  ];
+  
+  return attendanceKeywords.some(keyword => lowerPrompt.includes(keyword));
 }
 
 export async function getConversationMessages(conversationId: number, userId: string) {

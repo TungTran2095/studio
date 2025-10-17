@@ -14,7 +14,14 @@ type Point = {
   status?: string
 }
 
-export function LeafletMap({ center, points }: { center: LatLng; points: Point[] }) {
+type LeafletMapProps = {
+  center: LatLng
+  points: Point[]
+  onPointClick?: (point: Point) => void
+  selectedPointId?: string | number
+}
+
+export function LeafletMap({ center, points, onPointClick, selectedPointId }: LeafletMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<any | null>(null)
   const markersRef = useRef<any[]>([])
@@ -60,16 +67,32 @@ export function LeafletMap({ center, points }: { center: LatLng; points: Point[]
     markersRef.current = []
 
     // Thêm markers mới
-    const icon = L.divIcon({
-      className: 'custom-marker',
-      html: '<div style="background:#2563eb;width:12px;height:12px;border-radius:9999px;border:2px solid white;box-shadow:0 0 0 2px rgba(37,99,235,0.3)"></div>',
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
-    })
     points.forEach(p => {
+      const isSelected = selectedPointId === p.id
+      const icon = L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="background:${isSelected ? '#dc2626' : '#2563eb'};width:${isSelected ? '16' : '12'}px;height:${isSelected ? '16' : '12'}px;border-radius:9999px;border:2px solid white;box-shadow:0 0 0 2px rgba(${isSelected ? '220,38,38' : '37,99,235'},0.3)"></div>`,
+        iconSize: [isSelected ? 16 : 12, isSelected ? 16 : 12],
+        iconAnchor: [isSelected ? 8 : 6, isSelected ? 8 : 6],
+      })
+      
       const m = L.marker([p.pos.lat, p.pos.lng], { icon }).addTo(map)
-      const popup = `<div class=\"text-sm space-y-1\">\n        <div><strong>Tên:</strong> ${p.fullName ?? ''}</div>\n        <div><strong>Đơn vị:</strong> ${p.officeName ?? ''}</div>\n        <div><strong>Địa chỉ:</strong> ${p.address ?? ''}</div>\n        <div><strong>Trạng thái:</strong> ${p.status ?? ''}</div>\n        ${p.when ? `<div><strong>Ngày:</strong> ${new Date(p.when).toLocaleString()}</div>` : ''}\n        <div><strong>Vị trí:</strong> ${p.pos.lat.toFixed(6)}, ${p.pos.lng.toFixed(6)}</div>\n      </div>`
+      
+      // Thêm click event thay vì popup
+      m.on('click', () => {
+        if (onPointClick) {
+          onPointClick(p)
+        }
+      })
+      
+      // Vẫn giữ popup đơn giản cho hover
+      const popup = `<div class="text-xs">
+        <div><strong>${p.fullName ?? 'N/A'}</strong></div>
+        <div>${p.status ?? 'N/A'}</div>
+        <div class="text-gray-500">Click để xem chi tiết</div>
+      </div>`
       m.bindPopup(popup)
+      
       markersRef.current.push(m)
     })
 

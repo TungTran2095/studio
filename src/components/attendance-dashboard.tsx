@@ -83,6 +83,15 @@ export function AttendanceDashboard({ userId }: { userId: string }) {
   const [filterName, setFilterName] = useState<string>('')
   const [filterUserCode, setFilterUserCode] = useState<string>('')
   const [filterOffice, setFilterOffice] = useState<string>('')
+  const [selectedPoint, setSelectedPoint] = useState<{
+    id: string | number
+    when?: string
+    pos: LatLng
+    fullName?: string
+    officeName?: string
+    address?: string
+    status?: string
+  } | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -170,6 +179,18 @@ export function AttendanceDashboard({ userId }: { userId: string }) {
     return { lat: 16.047, lng: 108.206 }
   }, [points])
 
+  const handlePointClick = (point: {
+    id: string | number
+    when?: string
+    pos: LatLng
+    fullName?: string
+    officeName?: string
+    address?: string
+    status?: string
+  }) => {
+    setSelectedPoint(point)
+  }
+
   // Bảng tổng hợp đã được gỡ bỏ theo yêu cầu
 
   return (
@@ -219,10 +240,60 @@ export function AttendanceDashboard({ userId }: { userId: string }) {
         </div>
         <div className="relative z-0" style={{ height: 'calc(100% - 120px)' }}>
           {mounted ? (
-            <LeafletMap center={center} points={points} />
+            <LeafletMap 
+              center={center} 
+              points={points} 
+              onPointClick={handlePointClick}
+              selectedPointId={selectedPoint?.id}
+            />
           ) : null}
         </div>
       </div>
+      
+      {/* Thông tin chi tiết điểm được chọn */}
+      {selectedPoint && (
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-blue-900">Thông tin chi tiết điểm chấm công</h3>
+            <button
+              onClick={() => setSelectedPoint(null)}
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              ✕ Đóng
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="bg-white p-3 rounded border">
+              <div className="text-sm text-gray-600">Họ và tên</div>
+              <div className="font-semibold">{selectedPoint.fullName || 'N/A'}</div>
+            </div>
+            <div className="bg-white p-3 rounded border">
+              <div className="text-sm text-gray-600">Đơn vị</div>
+              <div className="font-semibold">{selectedPoint.officeName || 'N/A'}</div>
+            </div>
+            <div className="bg-white p-3 rounded border">
+              <div className="text-sm text-gray-600">Trạng thái</div>
+              <div className="font-semibold text-blue-600">{selectedPoint.status || 'N/A'}</div>
+            </div>
+            <div className="bg-white p-3 rounded border">
+              <div className="text-sm text-gray-600">Ngày giờ</div>
+              <div className="font-semibold">
+                {selectedPoint.when ? new Date(selectedPoint.when).toLocaleString('vi-VN') : 'N/A'}
+              </div>
+            </div>
+            <div className="bg-white p-3 rounded border">
+              <div className="text-sm text-gray-600">Địa chỉ</div>
+              <div className="font-semibold">{selectedPoint.address || 'N/A'}</div>
+            </div>
+            <div className="bg-white p-3 rounded border">
+              <div className="text-sm text-gray-600">Tọa độ</div>
+              <div className="font-mono text-sm">
+                {selectedPoint.pos.lat.toFixed(6)}, {selectedPoint.pos.lng.toFixed(6)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Pivot Table dưới map */}
       <div className="mt-6">

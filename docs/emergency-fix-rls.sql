@@ -25,3 +25,4 @@ WHERE tablename = 'worklogs' AND schemaname = 'public';
 -- This should now work without 403 errors
 
 
+

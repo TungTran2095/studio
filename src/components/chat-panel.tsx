@@ -38,7 +38,12 @@ export function ChatPanel({ conversationId: externalConvId }: ChatPanelProps) {
     "Thống kê công việc tuần này",
     "Công việc gần đây nhất của tôi",
     "Tìm kiếm công việc về 'thiết kế'",
-    "Báo cáo tổng quan tháng này"
+    "Báo cáo tổng quan tháng này",
+    "Thống kê chấm công hôm nay",
+    "Báo cáo chấm công theo đơn vị",
+    "Tìm nhân viên 'Nguyễn Văn A'",
+    "Danh sách các trạng thái chấm công",
+    "Số liệu chấm công tháng này"
   ];
 
   useEffect(() => {

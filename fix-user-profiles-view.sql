@@ -37,3 +37,4 @@ GRANT SELECT ON public.user_profiles_with_admin TO anon;
 SELECT * FROM public.user_profiles_with_admin LIMIT 1;
 
 
+

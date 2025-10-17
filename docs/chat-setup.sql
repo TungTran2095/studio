@@ -106,3 +106,4 @@ create index if not exists idx_chat_messages_user_id on public.chat_messages(use
 create index if not exists idx_chat_messages_created_at on public.chat_messages(created_at);
 
 
+
