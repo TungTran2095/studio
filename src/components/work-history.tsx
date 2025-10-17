@@ -42,6 +42,10 @@ export function WorkHistory({ entries, loading }: WorkHistoryProps) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<WorkLogEntry | null>(null);
 
+  // Debug logging
+  console.log("WorkHistory props:", { entriesCount: entries.length, loading });
+  console.log("WorkHistory entries:", entries);
+
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
       const isTitleMatch = entry.title

@@ -66,3 +66,16 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Đảm bảo Leaflet map luôn ở layer dưới */
+.leaflet-container {
+  z-index: 0 !important;
+}
+
+.leaflet-control-container {
+  z-index: 1 !important;
+}
+
+.leaflet-popup-pane {
+  z-index: 2 !important;
+}

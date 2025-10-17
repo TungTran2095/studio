@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { UserProfile } from '@/lib/types';
-import { AdminNavigation } from './admin-navigation';
 import { UserNavigation } from './user-navigation';
 
 const supabase = createClient(
@@ -13,7 +12,6 @@ const supabase = createClient(
 
 export function MainNavigation() {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,14 +19,13 @@ export function MainNavigation() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
-          .from('profiles')
+          .from('user_profiles')
           .select('*')
           .eq('id', user.id)
           .single();
         
         if (profile) {
           setUser(profile);
-          setIsAdmin(profile.is_admin);
         }
       }
       setLoading(false);
@@ -40,7 +37,6 @@ export function MainNavigation() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
-        setIsAdmin(false);
       } else if (session?.user) {
         getUser();
       }
@@ -66,6 +62,6 @@ export function MainNavigation() {
     return null; // Don't show navigation if user is not logged in
   }
 
-  // Show admin navigation for admin users, user navigation for regular users
-  return isAdmin ? <AdminNavigation /> : <UserNavigation />;
+  // Show user navigation for all users
+  return <UserNavigation />;
 }

@@ -36,7 +36,7 @@ export function UserNavigation() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
-          .from('profiles')
+          .from('user_profiles_with_admin')
           .select('*')
           .eq('id', user.id)
           .single();

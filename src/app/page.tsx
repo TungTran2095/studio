@@ -21,7 +21,7 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { ClipboardPenLine, CalendarDays } from 'lucide-react';
+import { ClipboardPenLine, CalendarDays, MapPin } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FloatingChat } from '@/components/floating-chat';
 import {
@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ChangePasswordDialog } from '@/components/change-password-dialog';
+import { AttendanceDashboard } from '@/components/attendance-dashboard';
 
 export default function Home() {
   const [entries, setEntries] = useState<WorkLogEntry[]>([]);
@@ -41,21 +42,29 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(true);
-  const [activeView, setActiveView] = useState<'report' | 'calendar'>('report');
+  const [activeView, setActiveView] = useState<'report' | 'calendar' | 'attendance'>('report');
   const [openChangePassword, setOpenChangePassword] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      
-      if (currentUser) {
-        await fetchEntries(currentUser.id);
-      } else {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUser = session?.user ?? null;
+        console.log("Current user:", currentUser?.email, currentUser?.id);
+        setUser(currentUser);
+        
+        if (currentUser) {
+          await fetchEntries(currentUser.id);
+        } else {
+          console.log("No user found, redirecting to login");
+          router.push('/login');
+        }
+      } catch (error) {
+        console.error("Error in checkUser:", error);
         router.push('/login');
+      } finally {
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     };
 
     checkUser();
@@ -81,22 +90,32 @@ export default function Home() {
   async function fetchEntries(userId: string) {
     setLoadingEntries(true);
     try {
+      console.log("Fetching worklogs for user:", userId);
+      
       const { data: worklogs, error } = await supabase
         .from('worklogs')
         .select('*')
         .eq('user_id', userId)
         .order('timestamp', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
+      
+      console.log("Raw worklogs data:", worklogs);
       
       const fetchedEntries: WorkLogEntry[] = worklogs.map(log => ({
         ...log,
         timestamp: new Date(log.timestamp),
       })) as WorkLogEntry[];
       
+      console.log("Processed entries:", fetchedEntries.length, "records");
       setEntries(fetchedEntries);
     } catch (error) {
       console.error("Error fetching work logs:", error);
+      // Set empty array on error to prevent undefined state
+      setEntries([]);
     } finally {
       setLoadingEntries(false);
     }
@@ -166,6 +185,16 @@ export default function Home() {
                     <span>Lịch làm việc</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeView === 'attendance'}
+                    onClick={() => setActiveView('attendance')}
+                    tooltip="Dashboard chấm công"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    <span>Dashboard chấm công</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 
               </SidebarMenu>
             </SidebarGroup>
@@ -214,8 +243,10 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : activeView === 'calendar' ? (
               <WorkCalendar entries={entries} />
+            ) : (
+              <AttendanceDashboard userId={user.id} />
             )}
           </div>
           <FloatingChat />

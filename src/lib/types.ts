@@ -16,7 +16,6 @@ export type UserProfile = {
   email: string;
   full_name: string | null;
   employee_id: string | null;
-  is_admin: boolean;
   created_at: string;
   updated_at: string;
 };

@@ -121,7 +121,7 @@ export default function LoginPage() {
       } else if (data.user) {
         // Check if user is admin
         const { data: profile } = await supabase
-          .from('profiles')
+          .from('user_profiles_with_admin')
           .select('is_admin, full_name')
           .eq('id', data.user.id)
           .single();

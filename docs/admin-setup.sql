@@ -1,17 +1,17 @@
 -- Admin system setup for worklog application
 -- Run this script in Supabase SQL Editor
 
--- 1) Add is_admin column to profiles table
-alter table public.profiles 
+-- 1) Add is_admin column to auth_users_extended table
+alter table public.auth_users_extended 
 add column if not exists is_admin boolean default false;
 
--- 2) Update RLS policies to allow admins to read all profiles
-drop policy if exists "Admins can read all profiles" on public.profiles;
-create policy "Admins can read all profiles" on public.profiles
+-- 2) Update RLS policies to allow admins to read all user profiles
+drop policy if exists "Admins can read all profiles" on public.auth_users_extended;
+create policy "Admins can read all profiles" on public.auth_users_extended
 for select to authenticated
 using (
   exists (
-    select 1 from public.profiles 
+    select 1 from public.auth_users_extended 
     where id = auth.uid() and is_admin = true
   )
 );
@@ -22,7 +22,7 @@ create policy "Admins can read all worklogs" on public.worklogs
 for select to authenticated
 using (
   exists (
-    select 1 from public.profiles 
+    select 1 from public.auth_users_extended 
     where id = auth.uid() and is_admin = true
   )
 );
@@ -33,7 +33,7 @@ create policy "Admins can read all conversations" on public.chat_conversations
 for select to authenticated
 using (
   exists (
-    select 1 from public.profiles 
+    select 1 from public.auth_users_extended 
     where id = auth.uid() and is_admin = true
   )
 );
@@ -44,7 +44,7 @@ create policy "Admins can read all messages" on public.chat_messages
 for select to authenticated
 using (
   exists (
-    select 1 from public.profiles 
+    select 1 from public.auth_users_extended 
     where id = auth.uid() and is_admin = true
   )
 );
@@ -54,7 +54,7 @@ create or replace function public.is_admin(user_id uuid default auth.uid())
 returns boolean as $$
 begin
   return exists (
-    select 1 from public.profiles 
+    select 1 from public.auth_users_extended 
     where id = user_id and is_admin = true
   );
 end;
@@ -64,6 +64,6 @@ $$ language plpgsql security definer;
 grant execute on function public.is_admin(uuid) to authenticated;
 
 -- 8) Optional: Set a specific user as admin (replace with actual user email)
--- update public.profiles 
+-- update public.auth_users_extended 
 -- set is_admin = true 
 -- where email = 'admin@yourcompany.com';
