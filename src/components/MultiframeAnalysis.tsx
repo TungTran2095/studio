@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { MultiframeBacktestEngine } from '@/lib/multiframe-backtest-engine';
+// import { MultiframeBacktestEngine } from '@/lib/multiframe-backtest-engine'; // Temporarily disabled
 import { 
   BarChart3, 
   Play, 
@@ -165,12 +165,13 @@ export default function MultiframeAnalysis({ className = "" }: MultiframeAnalysi
     setResults([]);
 
     try {
-      const engine = new MultiframeBacktestEngine(config);
+      // Temporarily use mock data instead of real engine
+      // const engine = new MultiframeBacktestEngine(config);
       const totalTests = config.timeframes.length * config.symbols.length;
       let completedTests = 0;
 
-      // Chạy backtest thực tế cho từng combination
-      const realResults = await engine.runMultiframeAnalysis(config);
+      // Use mock results for now
+      const realResults = mockResults; // await engine.runMultiframeAnalysis(config);
       
       // Cập nhật progress
       for (const symbol of config.symbols) {
