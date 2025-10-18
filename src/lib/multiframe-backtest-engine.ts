@@ -234,12 +234,12 @@ export class MultiframeBacktestEngine {
       
       const high = currentPrice * (1 + Math.random() * 0.01);
       const low = currentPrice * (1 - Math.random() * 0.01);
-      const open = i === 0 ? currentPrice : data[i - 1].close;
+      const openPrice = i === 0 ? currentPrice : data[i - 1].close;
       const close = currentPrice;
       
       data.push({
         timestamp,
-        open,
+        open: openPrice,
         high,
         low,
         close,
