@@ -251,7 +251,8 @@ function calculateIchimokuFromCandles(candles: any[], symbol: string, isRealData
   const senkouSpanB = (Math.max(...highsForSenkou) + Math.min(...lowsForSenkou)) / 2;
   
   // Calculate Chikou Span (Lagging Span, current close projected back 26 periods)
-  const chikouSpan = currentPrice;
+  const displacement = 26;
+  const chikouSpan = closePrices.length > displacement ? closePrices[closePrices.length - 1 - displacement] : currentPrice;
   
   // Analyze Ichimoku signal
   const { signal, strength, analysis } = analyzeIchimokuSignal(
@@ -400,7 +401,8 @@ function calculateSenkouSpanB(highPrices: number[], lowPrices: number[]): number
  * Tính Chikou Span (Lagging Span) - giá đóng cửa hiện tại dịch chuyển về phía sau 26 nến
  */
 function calculateChikouSpan(closePrices: number[]): number {
-  return closePrices[closePrices.length - 1];
+  const displacement = 26;
+  return closePrices.length > displacement ? closePrices[closePrices.length - 1 - displacement] : closePrices[closePrices.length - 1];
 }
 
 /**
@@ -459,6 +461,19 @@ function analyzeIchimokuSignal(
   } else if (senkouSpanA < senkouSpanB) {
     bearishPoints += 1;
     analysis += 'Senkou Span A nằm dưới Senkou Span B (mây giảm giá). ';
+  }
+  
+  // 5. Chikou Span confirmation - so sánh với giá 26 kỳ trước
+  const displacement = 26;
+  if (closePrices.length > displacement) {
+    const price26PeriodsAgo = closePrices[closePrices.length - 1 - displacement];
+    if (chikouSpan > price26PeriodsAgo) {
+      bullishPoints += 2;
+      analysis += 'Chikou Span nằm trên giá 26 kỳ trước (xác nhận xu hướng tăng). ';
+    } else if (chikouSpan < price26PeriodsAgo) {
+      bearishPoints += 2;
+      analysis += 'Chikou Span nằm dưới giá 26 kỳ trước (xác nhận xu hướng giảm). ';
+    }
   }
   
   // Xác định tín hiệu cuối cùng

@@ -37,14 +37,14 @@ buy_condition = (
     (data['close'] > senkou_span_b) &           # Giá trên Senkou Span B
     (tenkan > kijun) &                          # Tenkan trên Kijun
     (tenkan.shift(1) <= kijun.shift(1)) &      # Tenkan vừa cắt lên Kijun
-    (chikou > data['close'])                    # Chikou xác nhận tăng giá
+    (chikou > data['close'].shift(26))          # Chikou xác nhận tăng giá - SỬA LỖI
 )
 ```
 
 **Giải thích**:
 1. **Giá trên đám mây**: Giá đóng cửa phải nằm trên cả Senkou Span A và B
 2. **Crossover Tenkan-Kijun**: Tenkan-sen phải cắt lên trên Kijun-sen
-3. **Xác nhận Chikou**: Chikou Span phải cao hơn giá hiện tại (tín hiệu tăng giá)
+3. **Xác nhận Chikou**: Chikou Span phải cao hơn giá của 26 kỳ trước (tín hiệu tăng giá) ✅ **ĐÃ SỬA**
 
 ### Điều Kiện BÁN (Signal = -1)
 ```python
@@ -53,14 +53,14 @@ sell_condition = (
     (data['close'] < senkou_span_b) &           # Giá dưới Senkou Span B
     (tenkan < kijun) &                          # Tenkan dưới Kijun
     (tenkan.shift(1) >= kijun.shift(1)) &      # Tenkan vừa cắt xuống Kijun
-    (chikou < data['close'])                    # Chikou xác nhận giảm giá
+    (chikou < data['close'].shift(26))          # Chikou xác nhận giảm giá - SỬA LỖI
 )
 ```
 
 **Giải thích**:
 1. **Giá dưới đám mây**: Giá đóng cửa phải nằm dưới cả Senkou Span A và B
 2. **Crossover Tenkan-Kijun**: Tenkan-sen phải cắt xuống dưới Kijun-sen
-3. **Xác nhận Chikou**: Chikou Span phải thấp hơn giá hiện tại (tín hiệu giảm giá)
+3. **Xác nhận Chikou**: Chikou Span phải thấp hơn giá của 26 kỳ trước (tín hiệu giảm giá) ✅ **ĐÃ SỬA**
 
 ## Tham Số Mặc Định
 - **Tenkan Period**: 9
@@ -70,50 +70,56 @@ sell_condition = (
 
 ## So Sánh Implementation Bot vs Backtest
 
-### Bot Implementation (TypeScript)
+### Bot Implementation (TypeScript) - ĐÃ SỬA LỖI
 ```typescript
-// Logic MUA trong bot
+// Logic MUA trong bot - ĐÃ SỬA
 const buyCondition = (
   priceAboveCloud &&           // Giá trên đám mây
   tenkanCrossAboveKijun &&     // Tenkan cắt lên Kijun
-  chikouConfirmsBullish        // Chikou xác nhận tăng
+  chikouConfirmsBullish        // Chikou xác nhận tăng (so sánh với giá 26 kỳ trước) ✅
 );
 
-// Logic BÁN trong bot
+// Logic BÁN trong bot - ĐÃ SỬA
 const sellCondition = (
   priceBelowCloud &&           // Giá dưới đám mây
   tenkanCrossBelowKijun &&     // Tenkan cắt xuống Kijun
-  chikouConfirmsBearish        // Chikou xác nhận giảm
+  chikouConfirmsBearish        // Chikou xác nhận giảm (so sánh với giá 26 kỳ trước) ✅
 );
+
+// Chi tiết logic Chikou - ĐÃ SỬA
+const price26PeriodsAgo = closes[closes.length - 1 - displacement];
+const chikouConfirmsBullish = chikouSpan > price26PeriodsAgo;  // ✅ ĐÚNG
+const chikouConfirmsBearish = chikouSpan < price26PeriodsAgo;   // ✅ ĐÚNG
 ```
 
-### Backtest Implementation (Python)
+### Backtest Implementation (Python) - ĐÃ SỬA LỖI
 ```python
-# Logic MUA trong backtest
+# Logic MUA trong backtest - ĐÃ SỬA
 buy_condition = (
     (data['close'] > senkou_span_a) & 
     (data['close'] > senkou_span_b) & 
     (tenkan > kijun) & 
     (tenkan.shift(1) <= kijun.shift(1)) & 
-    (chikou > data['close'])
+    (chikou > data['close'].shift(26))  # ✅ ĐÚNG - so sánh với giá 26 kỳ trước
 )
 
-# Logic BÁN trong backtest
+# Logic BÁN trong backtest - ĐÃ SỬA
 sell_condition = (
     (data['close'] < senkou_span_a) & 
     (data['close'] < senkou_span_b) & 
     (tenkan < kijun) & 
     (tenkan.shift(1) >= kijun.shift(1)) & 
-    (chikou < data['close'])
+    (chikou < data['close'].shift(26))  # ✅ ĐÚNG - so sánh với giá 26 kỳ trước
 )
 ```
 
 ## Kết Luận
 
-### ✅ Bot Implementation ĐÚNG với Backtest Strategy
+### ✅ Bot Implementation ĐÃ ĐƯỢC SỬA LỖI - HOÀN TOÀN ĐÚNG với Backtest Strategy
 1. **Logic tín hiệu giống hệt nhau**: Cả bot và backtest đều sử dụng cùng 3 điều kiện chính
 2. **Tham số mặc định nhất quán**: Cùng sử dụng 9, 26, 52 periods
 3. **Cách tính toán các thành phần**: Bot sử dụng cùng công thức như backtest
+4. **✅ CHIKOU SPAN LOGIC ĐÃ ĐƯỢC SỬA**: Cả bot và backtest đều so sánh Chikou với giá 26 kỳ trước
 
 ### Điểm Khác Biệt Nhỏ
 - **Ngôn ngữ**: Bot dùng TypeScript, Backtest dùng Python
@@ -121,7 +127,7 @@ sell_condition = (
 - **Cách tính Senkou Span**: Bot tính real-time, Backtest tính cho toàn bộ dataset
 
 ### Khuyến Nghị
-1. **Bot đã implement đúng strategy**: Không cần thay đổi logic
+1. **✅ Bot đã implement đúng strategy**: Logic Chikou Span đã được sửa
 2. **Có thể tối ưu tham số**: Test với các giá trị khác nhau của tenkan_period, kijun_period
 3. **Thêm risk management**: Stop loss, take profit dựa trên Ichimoku levels
 4. **Monitor performance**: So sánh kết quả bot với backtest để đảm bảo consistency

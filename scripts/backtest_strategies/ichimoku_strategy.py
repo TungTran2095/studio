@@ -61,7 +61,7 @@ class IchimokuStrategy(BaseStrategy):
             (data['close'] > senkou_span_b) & 
             (tenkan > kijun) & 
             (tenkan.shift(1) <= kijun.shift(1)) & 
-            (chikou > data['close'])
+            (chikou > data['close'].shift(self.displacement))  # Chikou so sánh với giá 26 kỳ trước
         )
         signals.loc[buy_condition, 'signal'] = 1
         
@@ -72,7 +72,7 @@ class IchimokuStrategy(BaseStrategy):
             (data['close'] < senkou_span_b) & 
             (tenkan < kijun) & 
             (tenkan.shift(1) >= kijun.shift(1)) & 
-            (chikou < data['close'])
+            (chikou < data['close'].shift(self.displacement))  # Chikou so sánh với giá 26 kỳ trước
         )
         signals.loc[sell_condition, 'signal'] = -1
         

@@ -931,9 +931,10 @@ export class BotExecutor {
       const priceAboveCloud = currentPrice > Math.max(senkouSpanA, currentSenkouB);
       const priceBelowCloud = currentPrice < Math.min(senkouSpanA, currentSenkouB);
       
-      // 3. Kiểm tra Chikou confirmation
-      const chikouConfirmsBullish = chikouSpan > currentPrice;
-      const chikouConfirmsBearish = chikouSpan < currentPrice;
+      // 3. Kiểm tra Chikou confirmation - so sánh với giá 26 kỳ trước
+      const price26PeriodsAgo = closes[closes.length - 1 - displacement];
+      const chikouConfirmsBullish = chikouSpan > price26PeriodsAgo;
+      const chikouConfirmsBearish = chikouSpan < price26PeriodsAgo;
       
       // 4. LOGIC MUA - giống hệt backtest
       const buyCondition = (
