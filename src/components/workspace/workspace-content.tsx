@@ -13,6 +13,7 @@ import { DataQualityDashboard } from './modules/data-quality-dashboard';
 import { ResearchDevelopmentContent } from "@/components/research/research-development-content";
 import MonteCarloAnalysis from '@/components/MonteCarloAnalysis';
 import WalkForwardAnalysis from '@/components/WalkForwardAnalysis';
+import MultiframeAnalysis from '@/components/MultiframeAnalysis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +46,7 @@ import {
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { TotalAssetsCard } from "@/components/trading/total-assets-card";
+import { TotalProfitCard } from "@/components/trading/total-profit-card";
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase-client';
 import TradingBotDetailModal from '@/components/trading/trading-bot-detail-modal';
@@ -520,12 +522,7 @@ function DashboardModule() {
           <TotalAssetsCard />
         </div>
         <div className="w-1/5 min-w-[160px]">
-          <Card className="p-2 flex flex-col items-start justify-center shadow-sm border border-primary/30">
-            <CardContent className="p-2 flex flex-col gap-1">
-              <div className="text-xs font-semibold text-muted-foreground mb-1">Lợi nhuận</div>
-              <div className="text-sm font-bold text-muted">--</div>
-            </CardContent>
-          </Card>
+          <TotalProfitCard />
         </div>
         <div className="w-1/5 min-w-[160px]">
           <Card className="p-2 flex flex-col items-start justify-center shadow-sm border border-primary/30">
@@ -604,9 +601,10 @@ function AlgorithmOptimizationModule() {
       </div>
 
       <Tabs defaultValue="monte-carlo" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="monte-carlo">Monte Carlo</TabsTrigger>
           <TabsTrigger value="walk-forward">Walk Forward</TabsTrigger>
+          <TabsTrigger value="multiframe">Multiframe Analysis</TabsTrigger>
         </TabsList>
         <TabsContent value="monte-carlo">
           <Card>
@@ -637,6 +635,22 @@ function AlgorithmOptimizationModule() {
             </CardHeader>
             <CardContent>
               <WalkForwardAnalysis key="workspace-walk-forward" />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="multiframe">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Multiframe Analysis
+              </CardTitle>
+              <CardDescription>
+                Phân tích hiệu suất strategy trên nhiều timeframe và symbol khác nhau
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <MultiframeAnalysis key="workspace-multiframe" />
             </CardContent>
           </Card>
         </TabsContent>
